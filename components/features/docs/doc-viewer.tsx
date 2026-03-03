@@ -504,13 +504,12 @@ function ToolActivity({ messages }: { messages: UIMessage[] }) {
   for (const msg of messages) {
     if (msg.role !== 'assistant') continue
     for (const part of msg.parts || []) {
-      if (part.type === 'tool-invocation') {
-        const inv = part as unknown as { type: 'tool-invocation'; toolInvocation: { toolName: string; args?: Record<string, unknown>; state: string } }
-        const args = inv.toolInvocation.args || {}
+      if (part.type === 'dynamic-tool') {
+        const input = (part.input as Record<string, unknown> | undefined) ?? {}
         toolCalls.push({
-          name: inv.toolInvocation.toolName,
-          path: (args.path as string) || (args.query as string) || undefined,
-          state: inv.toolInvocation.state,
+          name: part.toolName,
+          path: (input.path as string) || (input.query as string) || undefined,
+          state: part.state,
         })
       }
     }

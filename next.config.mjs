@@ -15,7 +15,10 @@ const nextConfig = {
             key: "Content-Security-Policy",
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+              // 'unsafe-inline' is required for Next.js inline scripts and Mermaid's
+              // style injection. 'unsafe-eval' was removed — Mermaid v11 uses a
+              // Langium-based parser and does not require eval().
+              "script-src 'self' 'unsafe-inline'",
               "connect-src 'self' data: blob: https://api.github.com https://raw.githubusercontent.com",
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: blob: https:",
