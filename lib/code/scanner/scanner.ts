@@ -133,11 +133,11 @@ export function scanIssues(codeIndex: CodeIndex, analysis: FullAnalysis | null):
   const infoCount = issues.filter(i => i.severity === 'info').length
   const penalty = (critCount * 30) + (warnCount * 8) + (infoCount * 2)
   let healthScore = Math.max(0, Math.min(100, 100 - penalty))
-  // Hard cap: any critical issue means max score is 35 (grade D)
+  // Hard cap: any critical issue means max score is 35 (grade F)
   if (critCount > 0) healthScore = Math.min(healthScore, 35)
-  // Any security warning caps at B
+  // Any security warning caps at B (prevents A grade)
   const securityWarnings = issues.filter(i => i.severity === 'warning' && i.category === 'security').length
-  if (securityWarnings > 0) healthScore = Math.min(healthScore, 74)
+  if (securityWarnings > 0) healthScore = Math.min(healthScore, 89)
   healthScore = Math.round(healthScore)
   const healthGrade: HealthGrade =
     healthScore >= 90 ? 'A' :

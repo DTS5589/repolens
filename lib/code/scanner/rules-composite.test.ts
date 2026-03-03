@@ -71,4 +71,82 @@ describe('scanCompositeRules', () => {
     const issues = scanCompositeRules(index)
     expect(issues).toHaveLength(0)
   })
+
+  it('detects Python os.system with formatted string', () => {
+    let index = createEmptyIndex()
+    const code = [
+      `import os`,
+      `cmd = f"ls {user_dir}"`,
+      `os.system(cmd)`,
+    ].join('\n')
+    index = indexFile(index, 'src/runner.py', code, 'python')
+
+    const issues = scanCompositeRules(index)
+    const osCmdIssues = issues.filter(i => i.ruleId === 'composite-python-os-cmd')
+    expect(osCmdIssues.length).toBeGreaterThanOrEqual(1)
+    expect(osCmdIssues[0].severity).toBe('critical')
+  })
+
+  it('does not flag Python os.system when shlex.quote mitigation is present', () => {
+    let index = createEmptyIndex()
+    const code = [
+      `import os, shlex`,
+      `safe = shlex.quote(user_input)`,
+      `cmd = f"ls {safe}"`,
+      `os.system(cmd)`,
+    ].join('\n')
+    index = indexFile(index, 'src/safe_runner.py', code, 'python')
+
+    const issues = scanCompositeRules(index)
+    const osCmdIssues = issues.filter(i => i.ruleId === 'composite-python-os-cmd')
+    expect(osCmdIssues).toHaveLength(0)
+  })
+
+  it('detects path traversal with request params and file ops', () => {
+    let index = createEmptyIndex()
+    const code = [
+      `const filePath = req.params.filename`,
+      `const data = readFileSync(filePath)`,
+    ].join('\n')
+    index = indexFile(index, 'src/handler.ts', code, 'typescript')
+
+    const issues = scanCompositeRules(index)
+    const pathTraversal = issues.filter(i => i.ruleId === 'composite-path-traversal-req')
+    expect(pathTraversal.length).toBeGreaterThanOrEqual(1)
+    expect(pathTraversal[0].severity).toBe('critical')
+  })
+
+  it('detects SSRF with request params and fetch', () => {
+    let index = createEmptyIndex()
+    const code = [
+      `const url = req.query.url`,
+      `const response = await fetch(url)`,
+    ].join('\n')
+    index = indexFile(index, 'src/proxy.ts', code, 'typescript')
+
+    const issues = scanCompositeRules(index)
+    const ssrf = issues.filter(i => i.ruleId === 'composite-ssrf')
+    expect(ssrf.length).toBeGreaterThanOrEqual(1)
+    expect(ssrf[0].severity).toBe('critical')
+  })
+
+  it('does not flag SSRF when URL allowlist mitigation is present', () => {
+    let index = createEmptyIndex()
+    const code = [
+      `const url = req.query.url`,
+      `if (!isValidUrl(url)) throw new Error("blocked")`,
+      `const response = await fetch(url)`,
+    ].join('\n')
+    index = indexFile(index, 'src/safe-proxy.ts', code, 'typescript')
+
+    const issues = scanCompositeRules(index)
+    const ssrf = issues.filter(i => i.ruleId === 'composite-ssrf')
+    expect(ssrf).toHaveLength(0)
+  })
+
+  it('returns empty array for empty code index', () => {
+    const index = createEmptyIndex()
+    const issues = scanCompositeRules(index)
+    expect(issues).toHaveLength(0)
+  })
 })

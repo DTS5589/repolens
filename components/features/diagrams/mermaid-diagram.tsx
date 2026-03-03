@@ -55,7 +55,11 @@ export const MermaidDiagram = forwardRef<MermaidDiagramHandle, MermaidDiagramPro
 
     useEffect(() => {
       const renderDiagram = async () => {
-        if (!containerRef.current || !chart.trim()) return
+        if (!containerRef.current || !chart.trim()) {
+          setSvgContent('')
+          setError(null)
+          return
+        }
         renderIdRef.current++
         const currentRender = renderIdRef.current
 

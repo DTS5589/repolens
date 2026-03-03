@@ -74,4 +74,26 @@ describe('generateDiagram dispatcher', () => {
     const result = generateDiagram('topology', emptyIndex, [])
     expect(result.type).toBe('topology')
   })
+
+  it('routes "focus" with default empty target when focusTarget is omitted', () => {
+    const result = generateDiagram('focus', codeIndex, files, analysis)
+    expect(result.type).toBe('focus')
+    // Should not crash even without focusTarget/focusHops
+  })
+
+  it('routes all diagram types without crashing on empty analysis', () => {
+    const emptyIndex: CodeIndex = {
+      files: new Map(),
+      totalFiles: 0,
+      totalLines: 0,
+      isIndexing: false,
+    }
+    const types: Array<'summary' | 'topology' | 'imports' | 'classes' | 'entrypoints' | 'modules' | 'treemap' | 'externals'> = [
+      'summary', 'topology', 'imports', 'classes', 'entrypoints', 'modules', 'treemap', 'externals',
+    ]
+    for (const type of types) {
+      const result = generateDiagram(type, emptyIndex, [])
+      expect(result.type).toBe(type)
+    }
+  })
 })

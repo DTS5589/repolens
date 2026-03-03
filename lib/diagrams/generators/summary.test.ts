@@ -1,5 +1,5 @@
 import { generateProjectSummary } from '@/lib/diagrams/generators/summary'
-import { createRealisticAnalysis, createMinimalAnalysis, createMockCodeIndex } from '@/lib/diagrams/__fixtures__/mock-analysis'
+import { createRealisticAnalysis, createMinimalAnalysis, createEmptyAnalysis, createMockCodeIndex } from '@/lib/diagrams/__fixtures__/mock-analysis'
 import { createEmptyIndex } from '@/lib/code/code-index'
 
 describe('generateProjectSummary', () => {
@@ -79,5 +79,20 @@ describe('generateProjectSummary', () => {
     expect(result.data.totalFiles).toBe(1)
     expect(result.data.totalLines).toBe(0)
     expect(result.stats.totalNodes).toBe(1)
+  })
+
+  it('handles completely empty analysis (no files)', () => {
+    const analysis = createEmptyAnalysis()
+    const codeIndex = createEmptyIndex()
+    const result = generateProjectSummary(analysis, codeIndex)
+
+    expect(result.type).toBe('summary')
+    expect(result.data.totalFiles).toBe(0)
+    expect(result.data.totalLines).toBe(0)
+    expect(result.data.languages).toHaveLength(0)
+    expect(result.data.circularDeps).toHaveLength(0)
+    expect(result.data.orphanFiles).toHaveLength(0)
+    expect(result.data.topHubs).toHaveLength(0)
+    expect(result.data.externalDeps).toHaveLength(0)
   })
 })

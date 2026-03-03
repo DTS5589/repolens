@@ -59,7 +59,7 @@ export function generateImportGraph(analysis: FullAnalysis): MermaidDiagramResul
     byDir.get(dir)!.push(path)
   }
   for (const [dir, paths] of byDir) {
-    chart += `  subgraph ${sanitizeId(dir)}["${dir}/"]\n`
+    chart += `  subgraph sg_${sanitizeId(dir)}["${dir}/"]\n`
     for (const path of paths) {
       const id = sanitizeId(path)
       chart += `    ${id}["${path.split('/').pop() || path}"]\n`

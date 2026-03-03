@@ -268,6 +268,7 @@ export function IssuesPanel({ codeIndex, onNavigateToFile }: IssuesPanelProps) {
                   {/* File header */}
                   <button
                     onClick={() => toggleGroup(file)}
+                    aria-expanded={isExpanded}
                     className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-foreground/[0.02] transition-colors text-left"
                   >
                     {isExpanded
@@ -291,9 +292,13 @@ export function IssuesPanel({ codeIndex, onNavigateToFile }: IssuesPanelProps) {
 
                         return (
                           <div key={issue.id} className={cn('rounded-md border', sev.borderColor, sev.bgColor)}>
-                            <button
+                            <div
+                              role="button"
+                              tabIndex={0}
                               onClick={() => toggleIssue(issue.id)}
-                              className="w-full flex items-center gap-2 px-3 py-2 text-left"
+                              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleIssue(issue.id) } }}
+                              aria-expanded={isIssueExpanded}
+                              className="w-full flex items-center gap-2 px-3 py-2 text-left cursor-pointer"
                             >
                               <SevIcon className={cn('h-3 w-3 shrink-0', sev.color)} />
                               <span className="text-xs text-text-primary flex-1 truncate">{issue.title}</span>
@@ -315,7 +320,7 @@ export function IssuesPanel({ codeIndex, onNavigateToFile }: IssuesPanelProps) {
                                   L{issue.line}
                                 </button>
                               )}
-                            </button>
+                            </div>
 
                             {isIssueExpanded && (
                               <div className="px-3 pb-3 flex flex-col gap-2.5 ml-5">

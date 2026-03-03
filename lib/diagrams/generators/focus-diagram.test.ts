@@ -1,5 +1,5 @@
 import { generateFocusDiagram } from '@/lib/diagrams/generators/focus-diagram'
-import { createRealisticAnalysis, createMinimalAnalysis } from '@/lib/diagrams/__fixtures__/mock-analysis'
+import { createRealisticAnalysis, createMinimalAnalysis, createEmptyAnalysis } from '@/lib/diagrams/__fixtures__/mock-analysis'
 
 describe('generateFocusDiagram', () => {
   it('shows immediate neighbors with 1-hop focus', () => {
@@ -52,5 +52,23 @@ describe('generateFocusDiagram', () => {
     for (const path of result.nodePathMap.values()) {
       expect(path).toBeTruthy()
     }
+  })
+
+  it('handles completely empty analysis without crashing', () => {
+    const analysis = createEmptyAnalysis()
+    const result = generateFocusDiagram(analysis, 'any-file.ts', 1)
+
+    expect(result.type).toBe('focus')
+    expect(result.chart).toContain('No connections found')
+    expect(result.stats.totalNodes).toBe(1)
+  })
+
+  it('handles empty string as focusTarget', () => {
+    const analysis = createRealisticAnalysis()
+    const result = generateFocusDiagram(analysis, '', 1)
+
+    expect(result.type).toBe('focus')
+    // Empty target should not crash
+    expect(result.stats.totalNodes).toBeGreaterThanOrEqual(1)
   })
 })

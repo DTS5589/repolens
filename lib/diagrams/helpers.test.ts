@@ -21,6 +21,10 @@ describe('sanitizeId', () => {
   it('preserves already-clean identifiers', () => {
     expect(sanitizeId('myComponent123')).toBe('myComponent123')
   })
+
+  it('handles paths with special regex characters', () => {
+    expect(sanitizeId('file[0].test(1)+2')).toBe('file_0_test_1_2')
+  })
 })
 
 describe('shortenPath', () => {
@@ -38,6 +42,10 @@ describe('shortenPath', () => {
 
   it('handles exactly 3 segments', () => {
     expect(shortenPath('a/b/c')).toBe('a/.../c')
+  })
+
+  it('handles empty string', () => {
+    expect(shortenPath('')).toBe('')
   })
 })
 
@@ -141,5 +149,43 @@ describe('getAvailableDiagrams', () => {
     const diagrams = getAvailableDiagrams(analysis)
     const modules = diagrams.find(d => d.id === 'modules')
     expect(modules?.label).toBe('Components')
+  })
+
+  it('returns all diagrams unavailable/minimal for empty analysis', () => {
+    const analysis = createEmptyAnalysis()
+    const diagrams = getAvailableDiagrams(analysis)
+
+    const topology = diagrams.find(d => d.id === 'topology')
+    expect(topology?.available).toBe(false)
+
+    const imports = diagrams.find(d => d.id === 'imports')
+    expect(imports?.available).toBe(false)
+
+    const classes = diagrams.find(d => d.id === 'classes')
+    expect(classes?.available).toBe(false)
+
+    const externals = diagrams.find(d => d.id === 'externals')
+    expect(externals?.available).toBe(false)
+
+    const modules = diagrams.find(d => d.id === 'modules')
+    expect(modules?.available).toBe(false)
+
+    // These are always available
+    const entrypoints = diagrams.find(d => d.id === 'entrypoints')
+    expect(entrypoints?.available).toBe(true)
+
+    const treemap = diagrams.find(d => d.id === 'treemap')
+    expect(treemap?.available).toBe(true)
+  })
+
+  it('computeCommonStats handles minimal analysis (1 file, no deps)', () => {
+    const analysis = createMinimalAnalysis()
+    const stats = computeCommonStats(analysis)
+
+    expect(stats.totalEdges).toBe(0)
+    expect(stats.avgDepsPerFile).toBe(0)
+    expect(stats.circularDeps).toBeUndefined()
+    expect(stats.mostImported).toBeUndefined()
+    expect(stats.mostDependent).toBeUndefined()
   })
 })

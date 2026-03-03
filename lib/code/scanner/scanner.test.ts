@@ -117,4 +117,81 @@ describe('scanIssues', () => {
     expect(result.healthScore).toBe(100)
     expect(result.healthGrade).toBe('A')
   })
+
+  it('handles file with empty string content', () => {
+    let index = createEmptyIndex()
+    index = indexFile(index, 'src/empty.ts', '', 'typescript')
+
+    const result = scanIssues(index, null)
+    expect(result.scannedFiles).toBe(1)
+    expect(result.healthScore).toBeGreaterThanOrEqual(90)
+  })
+
+  it('handles non-JS/TS files without false positives', () => {
+    let index = createEmptyIndex()
+    index = indexFile(index, 'styles/app.css', 'body { color: red; }', 'css')
+    index = indexFile(index, 'data/config.json', '{ "key": "value" }', 'json')
+
+    const result = scanIssues(index, null)
+    // CSS/JSON should not trigger JS-specific rules like eval-usage or console-log
+    const jsRules = result.issues.filter(i =>
+      i.ruleId === 'eval-usage' || i.ruleId === 'console-log' || i.ruleId === 'any-type'
+    )
+    expect(jsRules).toHaveLength(0)
+  })
+
+  it('caps health score at 89 (grade B) for security warnings', () => {
+    let index = createEmptyIndex()
+    // innerHTML is a security warning
+    index = indexFile(index, 'src/render.ts', 'el.innerHTML = userContent', 'typescript')
+
+    const result = scanIssues(index, null)
+    const securityWarnings = result.issues.filter(
+      i => i.severity === 'warning' && i.category === 'security'
+    )
+    if (securityWarnings.length > 0) {
+      expect(result.healthScore).toBeLessThanOrEqual(89)
+      expect(result.healthGrade).not.toBe('A')
+    }
+  })
+
+  it('maps health grades correctly at boundaries', () => {
+    // Grade A: 90+, B: 75-89, C: 60-74, D: 40-59, F: 0-39
+    let index = createEmptyIndex()
+    // Clean code → A
+    index = indexFile(index, 'src/clean.ts', 'export const x = 1', 'typescript')
+    const cleanResult = scanIssues(index, null)
+    expect(cleanResult.healthGrade).toBe('A')
+
+    // Critical issue → F (score capped at 35 then -30 per critical)
+    let critIndex = createEmptyIndex()
+    critIndex = indexFile(critIndex, 'src/bad.ts', 'eval(x)\neval(y)', 'typescript')
+    const critResult = scanIssues(critIndex, null)
+    expect(critResult.healthGrade).toMatch(/^[D-F]$/)
+  })
+
+  it('scans multiple files and aggregates issues', () => {
+    let index = createEmptyIndex()
+    index = indexFile(index, 'src/a.ts', 'console.log("a")', 'typescript')
+    index = indexFile(index, 'src/b.ts', 'console.log("b")', 'typescript')
+    index = indexFile(index, 'src/c.ts', 'const x = 1', 'typescript')
+
+    const result = scanIssues(index, null)
+    expect(result.scannedFiles).toBe(3)
+    const consoleLogs = result.issues.filter(i => i.ruleId === 'console-log')
+    expect(consoleLogs.length).toBeGreaterThanOrEqual(2)
+    // Issues should come from different files
+    const files = new Set(consoleLogs.map(i => i.file))
+    expect(files.size).toBeGreaterThanOrEqual(2)
+  })
+
+  it('skips vendored paths (node_modules)', () => {
+    let index = createEmptyIndex()
+    index = indexFile(index, 'node_modules/pkg/index.js', 'eval(x)', 'javascript')
+    index = indexFile(index, 'src/app.ts', 'const x = 1', 'typescript')
+
+    const result = scanIssues(index, null)
+    const vendoredIssues = result.issues.filter(i => i.file.includes('node_modules'))
+    expect(vendoredIssues).toHaveLength(0)
+  })
 })

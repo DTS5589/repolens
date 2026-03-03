@@ -352,7 +352,12 @@ export function DiagramViewer({ files, codeIndex, className, onNavigateToFile }:
   const diagram = useMemo((): AnyDiagramResult | null => {
     if (!files || files.length === 0 || codeIndex.totalFiles === 0) return null
     if (!analysis && activeDiagramType !== 'treemap') return null
-    return generateDiagram(activeDiagramType, codeIndex, files, analysis || undefined, focusTarget || undefined, focusHops)
+    try {
+      return generateDiagram(activeDiagramType, codeIndex, files, analysis || undefined, focusTarget || undefined, focusHops)
+    } catch (err) {
+      console.error(`Diagram generation failed for type "${activeDiagramType}":`, err)
+      return null
+    }
   }, [files, codeIndex, activeDiagramType, analysis, focusTarget, focusHops])
 
   // Reset pan/zoom on change
