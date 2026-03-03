@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import { Button } from "@/components/ui/button"
 import { Code2, GitCompareArrows, GitFork, Github, Settings } from "lucide-react"
@@ -11,6 +11,8 @@ import { AuthButton } from "@/components/features/auth/auth-button"
 import { UserMenu } from "@/components/features/auth/user-menu"
 import { ExportMenu } from "@/components/features/export/export-menu"
 import { useAPIKeys } from "@/providers"
+
+const SHOW_AUTH = process.env.NEXT_PUBLIC_AUTH_ENABLED === "true"
 
 interface HeaderProps {
   className?: string
@@ -23,6 +25,12 @@ export function Header({ className }: HeaderProps) {
   
   const validProviders = getValidProviders()
   const hasValidKey = validProviders.length > 0
+
+  useEffect(() => {
+    const handleOpenSettings = () => setSettingsOpen(true)
+    window.addEventListener("open-settings", handleOpenSettings)
+    return () => window.removeEventListener("open-settings", handleOpenSettings)
+  }, [])
 
   return (
     <>
@@ -38,7 +46,7 @@ export function Header({ className }: HeaderProps) {
           </Link>
         </div>
         <div className="flex items-center gap-1">
-          {session ? <UserMenu /> : <AuthButton />}
+          {SHOW_AUTH && (session ? <UserMenu /> : <AuthButton />)}
           <ExportMenu />
           <ThemeToggle />
           <Button

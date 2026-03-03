@@ -59,17 +59,21 @@ export function ModelSelector({ className, onOpenSettings }: ModelSelectorProps)
         {!hasModels ? (
           <div className="p-3 text-center">
             <p className="text-sm text-text-secondary mb-2">No API keys configured</p>
-            {onOpenSettings && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onOpenSettings}
-                className="text-text-muted hover:text-text-primary"
-              >
-                <Settings className="h-4 w-4 mr-1" />
-                Add API key
-              </Button>
-            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                if (onOpenSettings) {
+                  onOpenSettings()
+                } else {
+                  window.dispatchEvent(new CustomEvent("open-settings"))
+                }
+              }}
+              className="text-text-muted hover:text-text-primary"
+            >
+              <Settings className="h-4 w-4 mr-1" />
+              Set up API keys &rarr;
+            </Button>
           </div>
         ) : (
           validProviders.map((provider, index) => {
