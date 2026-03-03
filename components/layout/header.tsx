@@ -1,10 +1,13 @@
 "use client"
 
 import { useState } from "react"
+import { useSession } from "next-auth/react"
 import { Button } from "@/components/ui/button"
 import { Code2, GitFork, Github, Settings } from "lucide-react"
 import { SettingsModal } from "@/components/features/settings/settings-modal"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { AuthButton } from "@/components/features/auth/auth-button"
+import { UserMenu } from "@/components/features/auth/user-menu"
 import { useAPIKeys } from "@/providers"
 
 interface HeaderProps {
@@ -14,6 +17,7 @@ interface HeaderProps {
 export function Header({ className }: HeaderProps) {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const { getValidProviders } = useAPIKeys()
+  const { data: session } = useSession()
   
   const validProviders = getValidProviders()
   const hasValidKey = validProviders.length > 0
@@ -25,6 +29,7 @@ export function Header({ className }: HeaderProps) {
           <Code2 className="h-5 w-5 text-text-primary" />
         </div>
         <div className="flex items-center gap-1">
+          {session ? <UserMenu /> : <AuthButton />}
           <ThemeToggle />
           <Button
             variant="ghost"
