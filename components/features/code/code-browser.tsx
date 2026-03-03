@@ -280,7 +280,7 @@ export function CodeBrowser({ navigateToFile, onNavigateComplete }: CodeBrowserP
 
   if (!repo) {
     return (
-      <div className="flex h-full items-center justify-center bg-[#0a0a0a]">
+      <div className="flex h-full items-center justify-center bg-background">
         <div className="text-center text-text-secondary">
           <Code2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
           <p>Connect a repository to browse code</p>
@@ -290,16 +290,16 @@ export function CodeBrowser({ navigateToFile, onNavigateComplete }: CodeBrowserP
   }
   
   return (
-    <div className="flex h-full bg-[#0a0a0a]">
+    <div className="flex h-full bg-background">
       {/* Activity Bar */}
-      <div className="w-12 shrink-0 bg-[#0a0a0a] border-r border-white/[0.06] flex flex-col items-center py-2 gap-2">
+      <div className="w-12 shrink-0 bg-background border-r border-foreground/[0.06] flex flex-col items-center py-2 gap-2">
         <Button
           variant="ghost"
           size="icon"
           className={cn(
             "h-10 w-10",
             sidebarMode === 'explorer' 
-              ? "text-text-primary bg-white/10" 
+              ? "text-text-primary bg-foreground/10" 
               : "text-text-muted hover:text-text-primary"
           )}
           onClick={() => setSidebarMode('explorer')}
@@ -313,7 +313,7 @@ export function CodeBrowser({ navigateToFile, onNavigateComplete }: CodeBrowserP
           className={cn(
             "h-10 w-10",
             sidebarMode === 'search' 
-              ? "text-text-primary bg-white/10" 
+              ? "text-text-primary bg-foreground/10" 
               : "text-text-muted hover:text-text-primary"
           )}
           onClick={() => setSidebarMode('search')}
@@ -324,7 +324,7 @@ export function CodeBrowser({ navigateToFile, onNavigateComplete }: CodeBrowserP
       </div>
       
       {/* Sidebar */}
-      <div className="w-60 shrink-0 bg-[#0a0a0a] border-r border-white/[0.06] flex flex-col">
+      <div className="w-60 shrink-0 bg-background border-r border-foreground/[0.06] flex flex-col">
         {sidebarMode === 'explorer' ? (
           <>
             {/* Explorer Header */}
@@ -336,7 +336,7 @@ export function CodeBrowser({ navigateToFile, onNavigateComplete }: CodeBrowserP
                     <button
                       onClick={downloadFullProject}
                       disabled={files.length === 0}
-                      className="p-1 rounded text-text-muted hover:text-text-primary hover:bg-white/10 transition-colors disabled:opacity-30 disabled:pointer-events-none"
+                      className="p-1 rounded text-text-muted hover:text-text-primary hover:bg-foreground/10 transition-colors disabled:opacity-30 disabled:pointer-events-none"
                     >
                       <FolderDown className="h-3.5 w-3.5" />
                     </button>
@@ -366,7 +366,7 @@ export function CodeBrowser({ navigateToFile, onNavigateComplete }: CodeBrowserP
             
             {/* Modified Files Section */}
             {modifiedTabs.length > 0 && (
-              <div className="border-t border-white/[0.06] p-2">
+              <div className="border-t border-foreground/[0.06] p-2">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-medium text-text-muted uppercase">
                     Modified ({modifiedTabs.length})
@@ -386,7 +386,7 @@ export function CodeBrowser({ navigateToFile, onNavigateComplete }: CodeBrowserP
                   {modifiedTabs.map((tab) => (
                     <div
                       key={tab.path}
-                      className="flex items-center gap-2 px-2 py-1 rounded hover:bg-white/5 group"
+                      className="flex items-center gap-2 px-2 py-1 rounded hover:bg-foreground/5 group"
                     >
                       <File className="h-3.5 w-3.5 text-text-muted shrink-0" />
                       <span className="text-xs text-text-secondary truncate flex-1">{tab.name}</span>
@@ -448,18 +448,18 @@ export function CodeBrowser({ navigateToFile, onNavigateComplete }: CodeBrowserP
       </div>
       
       {/* Editor Area */}
-      <div className="flex-1 min-w-0 flex flex-col bg-[#0a0a0a]">
+      <div className="flex-1 min-w-0 flex flex-col bg-background">
         {/* Tab Bar */}
         {openTabs.length > 0 && (
-          <div className="h-9 flex items-end bg-[#111111] border-b border-white/[0.06] overflow-x-auto">
+          <div className="h-9 flex items-end bg-muted border-b border-foreground/[0.06] overflow-x-auto">
             {openTabs.map((tab) => (
               <div
                 key={tab.path}
                 className={cn(
-                  "h-full flex items-center gap-2 px-3 border-r border-white/[0.06] cursor-pointer group",
+                  "h-full flex items-center gap-2 px-3 border-r border-foreground/[0.06] cursor-pointer group",
                   tab.path === activeTabPath 
-                    ? "bg-[#0a0a0a] text-text-primary" 
-                    : "bg-[#181818] text-text-secondary hover:bg-[#1a1a1a]"
+                    ? "bg-background text-text-primary" 
+                    : "bg-surface-secondary text-text-secondary hover:bg-surface"
                 )}
                 onClick={() => setActiveTabPath(tab.path)}
               >
@@ -468,7 +468,7 @@ export function CodeBrowser({ navigateToFile, onNavigateComplete }: CodeBrowserP
                 {/* Revert button on modified tabs */}
                 {tab.isModified && (
                   <button
-                    className="h-4 w-4 flex items-center justify-center rounded hover:bg-white/10 opacity-0 group-hover:opacity-100"
+                    className="h-4 w-4 flex items-center justify-center rounded hover:bg-foreground/10 opacity-0 group-hover:opacity-100"
                     onClick={(e) => {
                       e.stopPropagation()
                       revertFile(tab.path)
@@ -479,7 +479,7 @@ export function CodeBrowser({ navigateToFile, onNavigateComplete }: CodeBrowserP
                   </button>
                 )}
                 <button
-                  className="h-4 w-4 flex items-center justify-center rounded hover:bg-white/10 opacity-0 group-hover:opacity-100"
+                  className="h-4 w-4 flex items-center justify-center rounded hover:bg-foreground/10 opacity-0 group-hover:opacity-100"
                   onClick={(e) => closeTab(tab.path, e)}
                 >
                   <X className="h-3 w-3" />
@@ -491,7 +491,7 @@ export function CodeBrowser({ navigateToFile, onNavigateComplete }: CodeBrowserP
         
         {/* Breadcrumb */}
         {activeTab && (
-          <div className="h-6 flex items-center px-4 bg-[#0a0a0a] border-b border-white/[0.06]">
+          <div className="h-6 flex items-center px-4 bg-background border-b border-foreground/[0.06]">
             <div className="flex items-center gap-1 text-xs text-text-muted">
               {activeTab.path.split('/').map((part, i, arr) => (
                 <span key={i} className="flex items-center gap-1">

@@ -257,7 +257,7 @@ function TreemapChart({ data, width, height, onNodeClick }: { data: TreemapNode[
 
 function StatsBar({ stats, topology }: { stats: DiagramStats; topology?: { clusters: number; maxDepth: number; orphans: number; connectors: number } }) {
   return (
-    <div className="flex items-center gap-4 px-4 py-2 border-t border-white/[0.06] text-xs text-text-muted bg-[rgba(15,15,15,1)]">
+    <div className="flex items-center gap-4 px-4 py-2 border-t border-foreground/[0.06] text-xs text-text-muted bg-card">
       <span><span className="text-text-secondary font-medium">{stats.totalNodes}</span> nodes</span>
       {stats.totalEdges > 0 && <span><span className="text-text-secondary font-medium">{stats.totalEdges}</span> edges</span>}
       {stats.avgDepsPerFile !== undefined && <span><span className="text-text-secondary font-medium">{stats.avgDepsPerFile}</span> avg deps/file</span>}
@@ -269,7 +269,7 @@ function StatsBar({ stats, topology }: { stats: DiagramStats; topology?: { clust
       )}
       {topology && (
         <>
-          <span className="border-l border-white/[0.06] pl-4"><span className="text-text-secondary font-medium">{topology.clusters}</span> clusters</span>
+          <span className="border-l border-foreground/[0.06] pl-4"><span className="text-text-secondary font-medium">{topology.clusters}</span> clusters</span>
           <span>depth <span className="text-text-secondary font-medium">{topology.maxDepth}</span></span>
           {topology.orphans > 0 && <span className="text-gray-500">{topology.orphans} orphans</span>}
           {topology.connectors > 0 && <span className="text-purple-400">{topology.connectors} connectors</span>}
@@ -454,7 +454,7 @@ export function DiagramViewer({ files, codeIndex, className, onNavigateToFile }:
   return (
     <div className={cn('flex h-full flex-col', className)}>
       {/* Toolbar: diagram tabs + focus search */}
-      <div className="flex items-center justify-between border-b border-white/[0.06] px-3 py-1.5 bg-[rgba(15,15,15,1)]">
+      <div className="flex items-center justify-between border-b border-foreground/[0.06] px-3 py-1.5 bg-card">
         <div className="flex items-center gap-0.5 overflow-x-auto">
           {availableDiagrams.filter(d => d.available).map((d) => {
             const Icon = ICON_MAP[d.id] || Network
@@ -467,7 +467,7 @@ export function DiagramViewer({ files, codeIndex, className, onNavigateToFile }:
                 onClick={() => { setSelectedType(d.id); setFocusTarget(null); setFocusQuery('') }}
                 className={cn(
                   'gap-1.5 h-7 text-xs shrink-0',
-                  isActive ? 'bg-white/10 text-text-primary' : 'text-text-secondary hover:text-text-primary'
+                  isActive ? 'bg-foreground/10 text-text-primary' : 'text-text-secondary hover:text-text-primary'
                 )}
               >
                 <Icon className="h-3.5 w-3.5" />
@@ -516,7 +516,7 @@ export function DiagramViewer({ files, codeIndex, className, onNavigateToFile }:
 
       {/* Title bar */}
       {diagram && (
-        <div className="px-4 py-1.5 border-b border-white/[0.06] bg-[rgba(12,12,12,1)]">
+        <div className="px-4 py-1.5 border-b border-foreground/[0.06] bg-background">
           <h3 className="text-xs font-medium text-text-secondary">{diagram.title}</h3>
         </div>
       )}
@@ -562,7 +562,7 @@ export function DiagramViewer({ files, codeIndex, className, onNavigateToFile }:
             {/* Focus on file search */}
             {analysis && (
               <div className="relative">
-                <div className="flex items-center gap-0.5 rounded-lg border border-white/10 bg-[rgba(15,15,15,0.9)] backdrop-blur-sm shadow-lg">
+                <div className="flex items-center gap-0.5 rounded-lg border border-foreground/10 bg-card/90 backdrop-blur-sm shadow-lg">
                   {!focusOpen && !focusTarget ? (
                     <Button
                       variant="ghost"
@@ -613,12 +613,12 @@ export function DiagramViewer({ files, codeIndex, className, onNavigateToFile }:
                 </div>
                 {/* Suggestions dropdown -- opens upward */}
                 {focusOpen && focusQuery && !focusTarget && focusSuggestions.length > 0 && (
-                  <div className="absolute bottom-full right-0 mb-1 w-64 bg-[rgba(20,20,20,1)] border border-white/10 rounded-md shadow-lg z-50 overflow-hidden">
+                  <div className="absolute bottom-full right-0 mb-1 w-64 bg-popover border border-foreground/10 rounded-md shadow-lg z-50 overflow-hidden">
                     {focusSuggestions.map(p => (
                       <button
                         key={p}
                         onClick={() => handleFocusSelect(p)}
-                        className="w-full text-left text-xs px-3 py-1.5 text-text-secondary hover:bg-white/5 hover:text-text-primary truncate"
+                        className="w-full text-left text-xs px-3 py-1.5 text-text-secondary hover:bg-foreground/5 hover:text-text-primary truncate"
                       >
                         {p}
                       </button>
@@ -629,7 +629,7 @@ export function DiagramViewer({ files, codeIndex, className, onNavigateToFile }:
             )}
 
             {/* Zoom controls */}
-            <div className="flex items-center gap-0.5 rounded-lg border border-white/10 bg-[rgba(15,15,15,0.9)] backdrop-blur-sm shadow-lg">
+            <div className="flex items-center gap-0.5 rounded-lg border border-foreground/10 bg-card/90 backdrop-blur-sm shadow-lg">
               <Button variant="ghost" size="icon" className="h-7 w-7 text-text-secondary hover:text-text-primary" onClick={() => setZoom(z => Math.max(0.2, z - 0.15))}>
                 <ZoomOut className="h-3.5 w-3.5" />
               </Button>
@@ -637,7 +637,7 @@ export function DiagramViewer({ files, codeIndex, className, onNavigateToFile }:
               <Button variant="ghost" size="icon" className="h-7 w-7 text-text-secondary hover:text-text-primary" onClick={() => setZoom(z => Math.min(4, z + 0.15))}>
                 <ZoomIn className="h-3.5 w-3.5" />
               </Button>
-              <div className="w-px h-4 bg-white/10" />
+              <div className="w-px h-4 bg-foreground/10" />
               <Button variant="ghost" size="icon" className="h-7 w-7 text-text-secondary hover:text-text-primary" onClick={resetView} title="Reset view">
                 <RotateCcw className="h-3.5 w-3.5" />
               </Button>

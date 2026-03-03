@@ -58,12 +58,12 @@ export function FileViewer({ file, owner, repo, branch, onClose, className }: Fi
   return (
     <div className={cn("flex h-full flex-col", className)}>
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-2">
+      <div className="flex items-center justify-between border-b border-foreground/[0.06] px-4 py-2">
         <div className="flex items-center gap-2 min-w-0">
           <File className="h-4 w-4 text-text-muted shrink-0" />
           <span className="text-sm text-text-primary truncate">{file.path}</span>
           {file.language && (
-            <span className="text-xs text-text-muted bg-white/5 px-1.5 py-0.5 rounded">
+            <span className="text-xs text-text-muted bg-foreground/5 px-1.5 py-0.5 rounded">
               {file.language}
             </span>
           )}
@@ -110,7 +110,7 @@ export function FileViewer({ file, owner, repo, branch, onClose, className }: Fi
         ) : content ? (
           <div className="flex text-sm font-mono">
             {/* Line numbers */}
-            <div className="flex flex-col items-end px-3 py-4 bg-white/[0.02] border-r border-white/[0.06] select-none">
+            <div className="flex flex-col items-end px-3 py-4 bg-foreground/[0.02] border-r border-foreground/[0.06] select-none">
               {content.split('\n').map((_, i) => (
                 <span key={i} className="text-text-muted leading-relaxed px-1">
                   {i + 1}

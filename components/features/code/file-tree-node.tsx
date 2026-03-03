@@ -38,7 +38,7 @@ export function FileTreeNode({
             <div
               className={cn(
                 "flex items-center gap-1 py-0.5 px-1 rounded cursor-pointer group/tree-item",
-                isActive ? "bg-[#264f78]" : "hover:bg-white/5"
+                isActive ? "bg-code-selection" : "hover:bg-foreground/5"
               )}
               style={{ paddingLeft: `${depth * 12 + 4}px` }}
               onClick={() => node.type === 'directory' ? onToggleFolder(node.path) : onFileSelect(node)}
@@ -64,7 +64,7 @@ export function FileTreeNode({
               )}
               <span className="text-sm text-text-primary truncate flex-1">{node.name}</span>
               <button
-                className="p-0.5 rounded opacity-0 group-hover/tree-item:opacity-100 text-text-muted hover:text-text-primary hover:bg-white/10 transition-opacity shrink-0"
+                className="p-0.5 rounded opacity-0 group-hover/tree-item:opacity-100 text-text-muted hover:text-text-primary hover:bg-foreground/10 transition-opacity shrink-0"
                 title={node.type === 'directory' ? `Download ${node.name} as ZIP` : `Download ${node.name}`}
                 onClick={(e) => {
                   e.stopPropagation()

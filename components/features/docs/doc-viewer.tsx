@@ -282,8 +282,8 @@ export function DocViewer({ className }: DocViewerProps) {
   return (
     <div className={cn('flex h-full', className)}>
       {/* Sidebar -- generated docs list */}
-      <div className="w-56 border-r border-white/[0.06] flex flex-col shrink-0">
-        <div className="flex items-center justify-between px-3 h-10 border-b border-white/[0.06] shrink-0">
+      <div className="w-56 border-r border-foreground/[0.06] flex flex-col shrink-0">
+        <div className="flex items-center justify-between px-3 h-10 border-b border-foreground/[0.06] shrink-0">
           <span className="text-xs font-medium text-text-secondary">Generated Docs</span>
           <Button
             variant="ghost"
@@ -306,8 +306,8 @@ export function DocViewer({ className }: DocViewerProps) {
                 key={doc.id}
                 onClick={() => { setActiveDocId(doc.id); setShowNewDoc(false) }}
                 className={cn(
-                  'w-full flex items-start gap-2 px-3 py-2 text-left hover:bg-white/5 transition-colors group',
-                  activeDocId === doc.id && 'bg-white/[0.07]'
+                  'w-full flex items-start gap-2 px-3 py-2 text-left hover:bg-foreground/5 transition-colors group',
+                  activeDocId === doc.id && 'bg-foreground/[0.07]'
                 )}
               >
                 <span className="text-text-muted shrink-0 mt-0.5">{preset?.icon || <FileText className="h-4 w-4" />}</span>
@@ -365,10 +365,10 @@ export function DocViewer({ className }: DocViewerProps) {
                           disabled={isGenerating}
                           className={cn(
                             'w-full flex items-center gap-3 p-3 rounded-lg border transition-all text-left',
-                            'hover:bg-white/[0.03] hover:border-white/15',
+                            'hover:bg-foreground/[0.03] hover:border-foreground/15',
                             selectedPreset === preset.id
-                              ? 'border-white/20 bg-white/[0.04]'
-                              : 'border-white/[0.06] bg-white/[0.01]',
+                              ? 'border-foreground/20 bg-foreground/[0.04]'
+                              : 'border-foreground/[0.06] bg-foreground/[0.01]',
                             isGenerating && 'opacity-50 pointer-events-none'
                           )}
                         >
@@ -395,8 +395,8 @@ export function DocViewer({ className }: DocViewerProps) {
                               </div>
                             ) : null}
                             {showFileSearch && (
-                              <div className="rounded-lg border border-white/10 bg-[rgba(18,18,18,1)] overflow-hidden">
-                                <div className="flex items-center gap-2 px-2 border-b border-white/[0.06]">
+                              <div className="rounded-lg border border-foreground/10 bg-card overflow-hidden">
+                                <div className="flex items-center gap-2 px-2 border-b border-foreground/[0.06]">
                                   <Search className="h-3.5 w-3.5 text-text-muted shrink-0" />
                                   <Input
                                     autoFocus
@@ -411,7 +411,7 @@ export function DocViewer({ className }: DocViewerProps) {
                                     <button
                                       key={f.path}
                                       onClick={() => handleFileSelect(f.path)}
-                                      className="w-full flex items-center gap-2 px-3 py-1.5 text-left hover:bg-white/5 text-xs text-text-secondary hover:text-text-primary"
+                                      className="w-full flex items-center gap-2 px-3 py-1.5 text-left hover:bg-foreground/5 text-xs text-text-secondary hover:text-text-primary"
                                     >
                                       <FileCode className="h-3 w-3 text-text-muted shrink-0" />
                                       <span className="truncate">{f.path}</span>
@@ -444,7 +444,7 @@ export function DocViewer({ className }: DocViewerProps) {
                               value={customPrompt}
                               onChange={e => setCustomPrompt(e.target.value)}
                               placeholder="e.g. 'Explain the auth flow', 'Document the database schema', 'Write a deployment guide'..."
-                              className="w-full h-20 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 text-xs text-text-primary placeholder:text-text-muted resize-none focus:outline-none focus:border-white/20"
+                              className="w-full h-20 rounded-lg border border-foreground/10 bg-foreground/[0.02] px-3 py-2 text-xs text-text-primary placeholder:text-text-muted resize-none focus:outline-none focus:border-foreground/20"
                               onKeyDown={e => {
                                 if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && customPrompt.trim()) {
                                   handleGenerate(preset)
@@ -475,11 +475,11 @@ export function DocViewer({ className }: DocViewerProps) {
           // Viewing a generated doc
           <div ref={contentRef} className="flex-1 overflow-y-auto p-6">
             <div className="max-w-3xl">
-              <div className="flex items-center gap-2 mb-4 pb-3 border-b border-white/[0.06]">
+              <div className="flex items-center gap-2 mb-4 pb-3 border-b border-foreground/[0.06]">
                 {DOC_PRESETS.find(p => p.id === activeDoc.type)?.icon}
                 <h1 className="text-lg font-semibold text-text-primary">{activeDoc.title}</h1>
                 {activeDoc.targetFile && (
-                  <code className="text-[10px] text-text-muted bg-white/[0.04] px-1.5 py-0.5 rounded ml-auto">{activeDoc.targetFile}</code>
+                  <code className="text-[10px] text-text-muted bg-foreground/[0.04] px-1.5 py-0.5 rounded ml-auto">{activeDoc.targetFile}</code>
                 )}
               </div>
               <div className="prose prose-invert max-w-none">
@@ -551,7 +551,7 @@ function ToolActivity({ messages }: { messages: UIMessage[] }) {
             </span>
           )}
           {readFiles.slice(-5).map((t, i) => (
-            <span key={i} className="text-[10px] font-mono text-text-muted px-1.5 py-0.5 rounded bg-white/[0.03] border border-white/[0.06]">
+            <span key={i} className="text-[10px] font-mono text-text-muted px-1.5 py-0.5 rounded bg-foreground/[0.03] border border-foreground/[0.06]">
               {t.path?.split('/').slice(-2).join('/') || t.path}
             </span>
           ))}
@@ -572,8 +572,8 @@ function MarkdownContent({ messages }: { messages: UIMessage[] }) {
 
   // Basic markdown -> HTML (reusing the pattern from the project)
   const html = text
-    .replace(/```(\w+)?\n([\s\S]*?)```/g, '<pre class="bg-white/5 rounded-lg p-4 my-3 overflow-x-auto text-xs leading-relaxed"><code>$2</code></pre>')
-    .replace(/`([^`]+)`/g, '<code class="bg-white/5 px-1.5 py-0.5 rounded text-xs">$1</code>')
+    .replace(/```(\w+)?\n([\s\S]*?)```/g, '<pre class="bg-foreground/5 rounded-lg p-4 my-3 overflow-x-auto text-xs leading-relaxed"><code>$2</code></pre>')
+    .replace(/`([^`]+)`/g, '<code class="bg-foreground/5 px-1.5 py-0.5 rounded text-xs">$1</code>')
     .replace(/^### (.+)$/gm, '<h3 class="text-base font-semibold text-text-primary mt-6 mb-2">$1</h3>')
     .replace(/^## (.+)$/gm, '<h2 class="text-lg font-semibold text-text-primary mt-8 mb-3">$1</h2>')
     .replace(/^# (.+)$/gm, '<h1 class="text-xl font-bold text-text-primary mt-8 mb-4">$1</h1>')

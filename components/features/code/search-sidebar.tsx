@@ -100,7 +100,7 @@ export function SearchSidebar({
             placeholder="Search (Ctrl+Shift+F)"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="h-7 pl-8 pr-2 text-sm bg-[#3c3c3c] border-transparent focus:border-[#007fd4]"
+            className="h-7 pl-8 pr-2 text-sm bg-muted border-transparent focus:border-ring"
             onKeyDown={(e) => {
               if (e.key === 'Enter' && searchResults.length > 0) {
                 const firstResult = searchResults[0]
@@ -121,7 +121,7 @@ export function SearchSidebar({
               placeholder="Replace"
               value={replaceQuery}
               onChange={(e) => setReplaceQuery(e.target.value)}
-              className="h-7 pl-8 pr-2 text-sm bg-[#3c3c3c] border-transparent focus:border-[#007fd4]"
+              className="h-7 pl-8 pr-2 text-sm bg-muted border-transparent focus:border-ring"
             />
             {searchOptions.regex && (
               <TooltipProvider delayDuration={200}>
@@ -131,7 +131,7 @@ export function SearchSidebar({
                       <HelpCircle className="h-3 w-3 text-text-muted hover:text-text-primary" />
                     </button>
                   </TooltipTrigger>
-                  <TooltipContent side="bottom" className="max-w-[220px] bg-[#252526] border-white/10 text-xs text-text-secondary">
+                  <TooltipContent side="bottom" className="max-w-[220px] bg-popover border-foreground/10 text-xs text-text-secondary">
                     <p className="font-medium text-text-primary mb-1">Regex Replace</p>
                     <p>{'Use $1, $2, etc. for capture group backreferences.'}</p>
                     <p className="mt-1 text-text-muted">{'Example: (.+) -> $1_suffix'}</p>
@@ -147,7 +147,7 @@ export function SearchSidebar({
           <Button
             variant="ghost"
             size="icon"
-            className={cn("h-6 w-6", searchOptions.caseSensitive ? "bg-white/20 text-text-primary" : "text-text-muted")}
+            className={cn("h-6 w-6", searchOptions.caseSensitive ? "bg-foreground/20 text-text-primary" : "text-text-muted")}
             onClick={() => setSearchOptions(p => ({ ...p, caseSensitive: !p.caseSensitive }))}
             title="Match Case"
           >
@@ -156,7 +156,7 @@ export function SearchSidebar({
           <Button
             variant="ghost"
             size="icon"
-            className={cn("h-6 w-6", searchOptions.wholeWord ? "bg-white/20 text-text-primary" : "text-text-muted")}
+            className={cn("h-6 w-6", searchOptions.wholeWord ? "bg-foreground/20 text-text-primary" : "text-text-muted")}
             onClick={() => setSearchOptions(p => ({ ...p, wholeWord: !p.wholeWord }))}
             title="Match Whole Word"
           >
@@ -165,17 +165,17 @@ export function SearchSidebar({
           <Button
             variant="ghost"
             size="icon"
-            className={cn("h-6 w-6", searchOptions.regex ? "bg-white/20 text-text-primary" : "text-text-muted")}
+            className={cn("h-6 w-6", searchOptions.regex ? "bg-foreground/20 text-text-primary" : "text-text-muted")}
             onClick={() => setSearchOptions(p => ({ ...p, regex: !p.regex }))}
             title="Use Regular Expression"
           >
             <Regex className="h-3.5 w-3.5" />
           </Button>
-          <div className="w-px h-4 bg-white/10 mx-1" />
+          <div className="w-px h-4 bg-foreground/10 mx-1" />
           <Button
             variant="ghost"
             size="icon"
-            className={cn("h-6 w-6", showReplace ? "bg-white/20 text-text-primary" : "text-text-muted")}
+            className={cn("h-6 w-6", showReplace ? "bg-foreground/20 text-text-primary" : "text-text-muted")}
             onClick={() => setShowReplace(!showReplace)}
             title="Toggle Replace (Ctrl+H)"
           >
@@ -186,13 +186,13 @@ export function SearchSidebar({
               <Button
                 variant="ghost"
                 size="icon"
-                className={cn("h-6 w-6", fileFilter ? "bg-white/20 text-text-primary" : "text-text-muted")}
+                className={cn("h-6 w-6", fileFilter ? "bg-foreground/20 text-text-primary" : "text-text-muted")}
                 title="Filter Files"
               >
                 <Filter className="h-3.5 w-3.5" />
               </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-56 p-2 bg-[#252526] border-white/10" align="start">
+            <PopoverContent className="w-56 p-2 bg-popover border-foreground/10" align="start">
               <div className="space-y-2">
                 <p className="text-xs text-text-muted">Files to include</p>
                 <Input
@@ -200,7 +200,7 @@ export function SearchSidebar({
                   placeholder="*.tsx, src/*"
                   value={fileFilter}
                   onChange={(e) => setFileFilter(e.target.value)}
-                  className="h-7 text-xs bg-[#3c3c3c] border-transparent focus:border-[#007fd4]"
+                  className="h-7 text-xs bg-muted border-transparent focus:border-ring"
                 />
                 <p className="text-[10px] text-text-muted">
                   Comma separated. Examples: *.tsx, src/*, components
@@ -248,13 +248,13 @@ export function SearchSidebar({
               <div className="flex items-center gap-1">
                 {showReplace && (
                   confirmReplaceAll ? (
-                    <div className="flex items-center gap-1 bg-[#3c3c3c] rounded px-1.5 py-0.5">
+                    <div className="flex items-center gap-1 bg-muted rounded px-1.5 py-0.5">
                       <AlertTriangle className="h-3 w-3 text-amber-400" />
                       <span className="text-[10px] text-text-secondary">Replace all?</span>
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-4 px-1 text-[10px] text-status-success hover:bg-white/10"
+                        className="h-4 px-1 text-[10px] text-status-success hover:bg-foreground/10"
                         onClick={replaceAllInAllFiles}
                       >
                         Yes
@@ -262,7 +262,7 @@ export function SearchSidebar({
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-4 px-1 text-[10px] text-text-muted hover:bg-white/10"
+                        className="h-4 px-1 text-[10px] text-text-muted hover:bg-foreground/10"
                         onClick={() => setConfirmReplaceAll(false)}
                       >
                         No

@@ -26,7 +26,7 @@ export function ChatMessage({ message, className }: ChatMessageProps) {
   return (
     <div className={cn('flex gap-3', isUser ? 'justify-end' : 'justify-start', className)}>
       {isAssistant && (
-        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/10">
+        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-foreground/10">
           <Bot className="h-4 w-4 text-text-primary" />
         </div>
       )}
@@ -34,14 +34,14 @@ export function ChatMessage({ message, className }: ChatMessageProps) {
         className={cn(
           'max-w-[85%] rounded-lg px-3 py-2',
           isUser 
-            ? 'bg-white/10 text-text-primary' 
+            ? 'bg-foreground/10 text-text-primary' 
             : 'bg-transparent text-text-primary'
         )}
       >
         <p className="whitespace-pre-wrap text-sm leading-relaxed">{text}</p>
       </div>
       {isUser && (
-        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/10">
+        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-foreground/10">
           <User className="h-4 w-4 text-text-primary" />
         </div>
       )}

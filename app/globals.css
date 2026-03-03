@@ -45,6 +45,28 @@
     --sidebar-accent-foreground: 240 5.9% 10%;
     --sidebar-border: 220 13% 91%;
     --sidebar-ring: 217.2 91.2% 59.8%;
+
+    /* App semantic tokens — light */
+    --primary-background: 0 0% 100%;
+    --surface: 0 0% 97%;
+    --surface-elevated: 0 0% 100%;
+    --surface-secondary: 0 0% 98%;
+    --text-primary: 0 0% 3.9%;
+    --text-secondary: 0 0% 32%;
+    --text-muted: 0 0% 45%;
+    --text-accent: 160 84% 29%;
+    --interactive-primary: 0 0% 9%;
+    --interactive-secondary: 0 0% 45%;
+    --interactive-hover: 0 0% 93%;
+    --interactive-active: 0 0% 88%;
+    --interactive-border: 0 0% 85%;
+    --status-success: 142 71% 45%;
+    --status-warning: 45 93% 47%;
+    --status-error: 0 72% 51%;
+    --status-info: 217 91% 60%;
+    --code-selection: 213 93% 82%;
+    --code-highlight-bg: 46 97% 90%;
+    --code-highlight-text: 26 90% 37%;
   }
   .dark {
     --background: 0 0% 3.9%;
@@ -79,6 +101,28 @@
     --sidebar-accent-foreground: 240 4.8% 95.9%;
     --sidebar-border: 240 3.7% 15.9%;
     --sidebar-ring: 217.2 91.2% 59.8%;
+
+    /* App semantic tokens — dark */
+    --primary-background: 0 0% 3.9%;
+    --surface: 0 0% 10.2%;
+    --surface-elevated: 0 0% 16.5%;
+    --surface-secondary: 0 0% 9.4%;
+    --text-primary: 0 0% 100%;
+    --text-secondary: 0 0% 62.7%;
+    --text-muted: 0 0% 40%;
+    --text-accent: 152 100% 50%;
+    --interactive-primary: 0 0% 100%;
+    --interactive-secondary: 0 0% 40%;
+    --interactive-hover: 0 0% 20%;
+    --interactive-active: 0 0% 26.7%;
+    --interactive-border: 0 0% 20%;
+    --status-success: 152 100% 50%;
+    --status-warning: 40 100% 50%;
+    --status-error: 0 100% 63.3%;
+    --status-info: 212 100% 50%;
+    --code-selection: 211 69% 42%;
+    --code-highlight-bg: 24 79% 14%;
+    --code-highlight-text: 43 89% 56%;
   }
 }
 
@@ -89,4 +133,13 @@
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* Theme transition — applied after initial load to prevent flash */
+html.theme-transition,
+html.theme-transition *,
+html.theme-transition *::before,
+html.theme-transition *::after {
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.15s ease !important;
+  transition-delay: 0s !important;
 }

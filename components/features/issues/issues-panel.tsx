@@ -109,7 +109,7 @@ export function IssuesPanel({ codeIndex, onNavigateToFile }: IssuesPanelProps) {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="px-4 py-3 border-b border-white/[0.06]">
+      <div className="px-4 py-3 border-b border-foreground/[0.06]">
         {/* Top row: title + grade */}
         <div className="flex items-center gap-2 mb-3">
           <Bug className="h-4 w-4 text-text-secondary" />
@@ -186,8 +186,8 @@ export function IssuesPanel({ codeIndex, onNavigateToFile }: IssuesPanelProps) {
             className={cn(
               'text-[10px] px-2 py-0.5 rounded-full border transition-colors',
               filter === 'all'
-                ? 'bg-white/10 border-white/20 text-text-primary'
-                : 'border-white/[0.06] text-text-muted hover:text-text-secondary hover:bg-white/5'
+                ? 'bg-foreground/10 border-foreground/20 text-text-primary'
+                : 'border-foreground/[0.06] text-text-muted hover:text-text-secondary hover:bg-foreground/5'
             )}
           >
             All ({summary.total})
@@ -203,8 +203,8 @@ export function IssuesPanel({ codeIndex, onNavigateToFile }: IssuesPanelProps) {
                 className={cn(
                   'text-[10px] px-2 py-0.5 rounded-full border transition-colors flex items-center gap-1',
                   filter === cat
-                    ? 'bg-white/10 border-white/20 text-text-primary'
-                    : 'border-white/[0.06] text-text-muted hover:text-text-secondary hover:bg-white/5'
+                    ? 'bg-foreground/10 border-foreground/20 text-text-primary'
+                    : 'border-foreground/[0.06] text-text-muted hover:text-text-secondary hover:bg-foreground/5'
                 )}
               >
                 <cfg.icon className="h-2.5 w-2.5" />
@@ -241,7 +241,7 @@ export function IssuesPanel({ codeIndex, onNavigateToFile }: IssuesPanelProps) {
           <div className="flex flex-col">
             {/* Overflow notice */}
             {results.ruleOverflow.size > 0 && (
-              <div className="px-4 py-2.5 bg-white/[0.02] border-b border-white/[0.06]">
+              <div className="px-4 py-2.5 bg-foreground/[0.02] border-b border-foreground/[0.06]">
                 <p className="text-[11px] text-text-muted">
                   {'Showing top 15 per rule. Additional matches: '}
                   {Array.from(results.ruleOverflow.entries()).map(([ruleId, count], i) => (
@@ -264,11 +264,11 @@ export function IssuesPanel({ codeIndex, onNavigateToFile }: IssuesPanelProps) {
               const sevCfg = SEVERITY_CONFIG[worstSeverity]
 
               return (
-                <div key={file} className="border-b border-white/[0.04]">
+                <div key={file} className="border-b border-foreground/[0.04]">
                   {/* File header */}
                   <button
                     onClick={() => toggleGroup(file)}
-                    className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-white/[0.02] transition-colors text-left"
+                    className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-foreground/[0.02] transition-colors text-left"
                   >
                     {isExpanded
                       ? <ChevronDown className="h-3 w-3 text-text-muted shrink-0" />
@@ -299,7 +299,7 @@ export function IssuesPanel({ codeIndex, onNavigateToFile }: IssuesPanelProps) {
                               <span className="text-xs text-text-primary flex-1 truncate">{issue.title}</span>
                               {/* CWE badge inline */}
                               {issue.cwe && (
-                                <span className="text-[9px] px-1 py-px rounded bg-white/[0.04] border border-white/[0.06] text-text-muted font-mono shrink-0">
+                                <span className="text-[9px] px-1 py-px rounded bg-foreground/[0.04] border border-foreground/[0.06] text-text-muted font-mono shrink-0">
                                   {issue.cwe}
                                 </span>
                               )}
@@ -323,7 +323,7 @@ export function IssuesPanel({ codeIndex, onNavigateToFile }: IssuesPanelProps) {
                                 <p className="text-[11px] text-text-muted leading-relaxed">{issue.description}</p>
 
                                 {/* Code snippet */}
-                                <div className="rounded bg-black/30 border border-white/[0.04] px-2.5 py-1.5 overflow-x-auto">
+                                <div className="rounded bg-foreground/5 border border-foreground/[0.04] px-2.5 py-1.5 overflow-x-auto">
                                   <code className="text-[10px] font-mono text-text-secondary whitespace-pre">{issue.snippet}</code>
                                 </div>
 

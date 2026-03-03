@@ -25,18 +25,18 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px] bg-[rgba(20,20,21,1)] border-white/10">
+      <DialogContent className="sm:max-w-[500px] bg-popover border-foreground/10">
         <DialogHeader>
           <DialogTitle className="text-text-primary">API Settings</DialogTitle>
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as AIProvider)}>
-          <TabsList className="grid w-full grid-cols-4 bg-white/5">
+          <TabsList className="grid w-full grid-cols-4 bg-foreground/5">
             {providers.map((provider) => (
               <TabsTrigger
                 key={provider.id}
                 value={provider.id}
-                className="relative data-[state=active]:bg-white/10 text-xs"
+                className="relative data-[state=active]:bg-foreground/10 text-xs"
               >
                 {provider.name}
                 {apiKeys[provider.id].isValid === true && (

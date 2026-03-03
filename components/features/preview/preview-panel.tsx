@@ -20,10 +20,10 @@ interface PreviewPanelProps {
 }
 
 const DefaultContent = () => (
-  <div className="flex h-full items-center justify-center p-8 text-center bg-[rgba(10,10,10,1)]">
+  <div className="flex h-full items-center justify-center p-8 text-center bg-background">
     <div className="flex flex-col items-center gap-4">
-      <Code2 className="h-10 w-10 text-gray-300" />
-      <h2 className="text-xl font-medium text-gray-500">Preview</h2>
+      <Code2 className="h-10 w-10 text-muted-foreground" />
+      <h2 className="text-xl font-medium text-muted-foreground">Preview</h2>
     </div>
   </div>
 )
@@ -41,8 +41,8 @@ const ErrorContent = ({ error }: { error: string }) => (
           />
         </svg>
       </div>
-      <h2 className="text-xl font-semibold text-gray-900">Error Generating Component</h2>
-      <p className="text-gray-600 max-w-md">{error}</p>
+      <h2 className="text-xl font-semibold text-foreground">Error Generating Component</h2>
+      <p className="text-muted-foreground max-w-md">{error}</p>
       <Button variant="outline" onClick={() => window.location.reload()} className="mt-4">
         Retry
       </Button>
@@ -54,7 +54,7 @@ const LoadingWithStatus = () => (
   <div className="flex h-full w-full items-center justify-center bg-primary-background">
     <div className="w-full max-w-xl space-y-4 p-4">
       <div className="flex items-center space-x-3 font-medium text-text-secondary">
-        <div className="h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600"></div>
+        <div className="h-5 w-5 animate-spin rounded-full border-2 border-muted-foreground border-t-blue-600"></div>
         <span>Generating component...</span>
       </div>
       <p className="text-sm text-text-muted">
@@ -151,7 +151,7 @@ export function PreviewPanel({ className }: { className?: string }) {
 
   return (
     <div className={cn("relative flex h-full flex-col", className)}>
-      <div className="flex h-11 items-center justify-between border-b border-white/[0.06] px-4 bg-[rgba(15,15,15,1)]">
+      <div className="flex h-11 items-center justify-between border-b border-foreground/[0.06] px-4 bg-card">
         <div className="flex items-center h-full gap-0.5">
           {tabs.map((tab) => {
             const Icon = tab.icon
@@ -163,7 +163,7 @@ export function PreviewPanel({ className }: { className?: string }) {
                 className={cn(
                   "relative flex items-center gap-1.5 h-full px-3 text-xs font-medium transition-colors",
                   isActive
-                    ? "text-text-primary after:absolute after:bottom-0 after:inset-x-3 after:h-px after:bg-white"
+                    ? "text-text-primary after:absolute after:bottom-0 after:inset-x-3 after:h-px after:bg-foreground"
                     : "text-text-secondary hover:text-text-primary"
                 )}
               >
@@ -179,12 +179,12 @@ export function PreviewPanel({ className }: { className?: string }) {
           {repo && allFlatFiles.length > 0 && (
             <button
               onClick={() => setShowGlobalSearch(true)}
-              className="flex items-center gap-2 h-7 px-2.5 rounded-md text-xs text-text-muted hover:text-text-secondary bg-white/[0.03] border border-white/[0.06] hover:border-white/10 transition-colors"
+              className="flex items-center gap-2 h-7 px-2.5 rounded-md text-xs text-text-muted hover:text-text-secondary bg-foreground/[0.03] border border-foreground/[0.06] hover:border-foreground/10 transition-colors"
               title="Search files (Ctrl+K)"
             >
               <Search className="h-3 w-3" />
               <span className="hidden sm:inline">Search files</span>
-              <kbd className="hidden sm:inline text-[10px] text-text-muted/60 bg-white/[0.04] px-1 py-0.5 rounded font-mono leading-none">{'⌘K'}</kbd>
+              <kbd className="hidden sm:inline text-[10px] text-text-muted/60 bg-foreground/[0.04] px-1 py-0.5 rounded font-mono leading-none">{'⌘K'}</kbd>
             </button>
           )}
           {localPreviewUrl && (
@@ -192,7 +192,7 @@ export function PreviewPanel({ className }: { className?: string }) {
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-7 w-7 text-text-secondary hover:text-text-primary hover:bg-white/5"
+                className="h-7 w-7 text-text-secondary hover:text-text-primary hover:bg-foreground/5"
                 onClick={() => window.open(localPreviewUrl, "_blank")}
                 title="Open in new tab"
               >
@@ -201,7 +201,7 @@ export function PreviewPanel({ className }: { className?: string }) {
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-7 w-7 text-text-secondary hover:text-text-primary hover:bg-white/5"
+                className="h-7 w-7 text-text-secondary hover:text-text-primary hover:bg-foreground/5"
                 title="Fullscreen"
               >
                 <Maximize2 className="h-3.5 w-3.5" />
@@ -211,15 +211,15 @@ export function PreviewPanel({ className }: { className?: string }) {
         </div>
       </div>
 
-      <div className="flex-1 bg-[rgba(10,10,10,1)] overflow-hidden">
+      <div className="flex-1 bg-background overflow-hidden">
         {activeTab === "repo" ? (
           repo ? (
             // Connected repository view
             <div className="flex h-full flex-col">
               {/* Repo header */}
-              <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-3">
+              <div className="flex items-center justify-between border-b border-foreground/[0.06] px-4 py-3">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-md bg-white/5">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-md bg-foreground/5">
                     <Github className="h-4 w-4 text-text-secondary" />
                   </div>
                   <div>
@@ -270,7 +270,7 @@ export function PreviewPanel({ className }: { className?: string }) {
             <div className="flex h-full flex-col items-center justify-center p-8">
               <div className="flex flex-col items-center gap-6 w-full max-w-md">
                 <div className="flex flex-col items-center gap-3">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/5 border border-white/10">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-foreground/5 border border-foreground/10">
                     <Github className="h-6 w-6 text-text-secondary" />
                   </div>
                   <h2 className="text-lg font-medium text-text-primary">Connect a Repository</h2>
@@ -282,14 +282,14 @@ export function PreviewPanel({ className }: { className?: string }) {
                     value={repoUrl}
                     onChange={(e) => setRepoUrl(e.target.value)}
                     placeholder="https://github.com/username/repo"
-                    className="h-10 bg-white/5 border-white/10 text-text-primary placeholder:text-text-muted focus:border-white/20"
+                    className="h-10 bg-foreground/5 border-foreground/10 text-text-primary placeholder:text-text-muted focus:border-foreground/20"
                     onKeyDown={(e) => e.key === 'Enter' && handleConnect()}
                   />
                   {repoError && (
                     <p className="text-sm text-status-error">{repoError}</p>
                   )}
                   <Button 
-                    className="w-full h-10 bg-white text-black hover:bg-gray-200 font-medium"
+                    className="w-full h-10 bg-primary text-primary-foreground hover:bg-primary/90 font-medium"
                     disabled={!repoUrl.trim() || isConnecting}
                     onClick={handleConnect}
                   >
@@ -333,10 +333,10 @@ export function PreviewPanel({ className }: { className?: string }) {
         <div className="absolute inset-0 z-50 flex items-start justify-center pt-[15%]" onClick={() => { setShowGlobalSearch(false); setGlobalSearchQuery("") }}>
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
           <div
-            className="relative w-full max-w-md bg-[rgba(20,20,20,1)] border border-white/10 rounded-lg shadow-2xl overflow-hidden"
+            className="relative w-full max-w-md bg-popover border border-foreground/10 rounded-lg shadow-2xl overflow-hidden"
             onClick={e => e.stopPropagation()}
           >
-            <div className="flex items-center gap-2 px-3 border-b border-white/[0.06]">
+            <div className="flex items-center gap-2 px-3 border-b border-foreground/[0.06]">
               <Search className="h-4 w-4 text-text-muted shrink-0" />
               <input
                 ref={globalSearchRef}
@@ -349,7 +349,7 @@ export function PreviewPanel({ className }: { className?: string }) {
                   if (e.key === 'Enter' && globalSearchResults.length > 0) handleGlobalSearchSelect(globalSearchResults[0].path)
                 }}
               />
-              <kbd className="text-[10px] text-text-muted/50 bg-white/[0.04] px-1.5 py-0.5 rounded font-mono">ESC</kbd>
+              <kbd className="text-[10px] text-text-muted/50 bg-foreground/[0.04] px-1.5 py-0.5 rounded font-mono">ESC</kbd>
             </div>
             {globalSearchQuery.trim() && (
               <div className="max-h-72 overflow-y-auto py-1">
@@ -358,7 +358,7 @@ export function PreviewPanel({ className }: { className?: string }) {
                     <button
                       key={f.path}
                       onClick={() => handleGlobalSearchSelect(f.path)}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-white/5 transition-colors group"
+                      className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-foreground/5 transition-colors group"
                     >
                       <Code2 className="h-3.5 w-3.5 text-text-muted shrink-0" />
                       <div className="flex flex-col min-w-0">

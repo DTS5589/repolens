@@ -40,7 +40,7 @@ export function ModelSelector({ className, onOpenSettings }: ModelSelectorProps)
           variant="ghost"
           size="sm"
           className={cn(
-            'flex items-center gap-1 text-sm text-text-secondary hover:bg-white/5',
+            'flex items-center gap-1 text-sm text-text-secondary hover:bg-foreground/5',
             className
           )}
         >
@@ -54,7 +54,7 @@ export function ModelSelector({ className, onOpenSettings }: ModelSelectorProps)
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="start"
-        className="w-64 bg-[rgba(20,20,21,1)] max-h-80 overflow-y-auto"
+        className="w-64 bg-popover max-h-80 overflow-y-auto"
       >
         {!hasModels ? (
           <div className="p-3 text-center">

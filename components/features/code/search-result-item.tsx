@@ -44,7 +44,7 @@ export function SearchResultItem({
   return (
     <div className="mb-1">
       <div
-        className="flex items-center gap-1 py-1 px-2 rounded hover:bg-white/5 cursor-pointer group"
+        className="flex items-center gap-1 py-1 px-2 rounded hover:bg-foreground/5 cursor-pointer group"
         onClick={() => setExpanded(!expanded)}
       >
         {expanded ? (
@@ -70,7 +70,7 @@ export function SearchResultItem({
           </Button>
         )}
         <span className={cn(
-          "text-xs text-text-muted bg-white/10 px-1.5 rounded",
+          "text-xs text-text-muted bg-foreground/10 px-1.5 rounded",
           showReplace ? "" : "ml-auto"
         )}>
           {result.matches.length}
@@ -82,7 +82,7 @@ export function SearchResultItem({
           {matchesToShow.map((match, i) => (
             <div
               key={`${match.line}-${i}`}
-              className="flex flex-col py-0.5 px-2 rounded hover:bg-white/5 cursor-pointer text-xs group"
+              className="flex flex-col py-0.5 px-2 rounded hover:bg-foreground/5 cursor-pointer text-xs group"
               onClick={() => onGoTo(result.file, match.line)}
             >
               <div className="flex items-start gap-2">
@@ -118,7 +118,7 @@ export function SearchResultItem({
           ))}
           {!displayAllMatches && remainingMatches > 0 && (
             <button
-              className="text-xs text-text-muted hover:text-text-secondary px-2 py-1 hover:bg-white/5 rounded w-full text-left"
+              className="text-xs text-text-muted hover:text-text-secondary px-2 py-1 hover:bg-foreground/5 rounded w-full text-left"
               onClick={(e) => {
                 e.stopPropagation()
                 setShowAllMatches(true)
@@ -129,7 +129,7 @@ export function SearchResultItem({
           )}
           {displayAllMatches && remainingMatches > 0 && !expandAllMatches && (
             <button
-              className="text-xs text-text-muted hover:text-text-secondary px-2 py-1 hover:bg-white/5 rounded w-full text-left"
+              className="text-xs text-text-muted hover:text-text-secondary px-2 py-1 hover:bg-foreground/5 rounded w-full text-left"
               onClick={(e) => {
                 e.stopPropagation()
                 setShowAllMatches(false)

@@ -21,7 +21,7 @@ export function HighlightedText({ text, query, searchOptions }: HighlightedTextP
       {parts.map((part, i) => {
         searchPattern.lastIndex = 0
         return searchPattern.test(part) ? (
-          <span key={i} className="bg-[#613214] text-[#f8c555]">{part}</span>
+          <span key={i} className="bg-code-highlight-bg text-code-highlight-text">{part}</span>
         ) : (
           <span key={i}>{part}</span>
         )

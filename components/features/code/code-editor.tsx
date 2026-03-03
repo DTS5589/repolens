@@ -86,7 +86,7 @@ const CodeEditor = React.forwardRef<HTMLDivElement, CodeEditorProps>(
       return parts.map((part, i) => {
         searchPattern.lastIndex = 0
         if (searchPattern.test(part)) {
-          return <span key={i} className="bg-[#613214] text-[#f8c555]">{part}</span>
+          return <span key={i} className="bg-code-highlight-bg text-code-highlight-text">{part}</span>
         }
         return <span key={i}>{part}</span>
       })
@@ -98,7 +98,7 @@ const CodeEditor = React.forwardRef<HTMLDivElement, CodeEditorProps>(
         <Button
           variant="ghost"
           size="icon"
-          className="absolute top-2 right-4 h-7 w-7 z-10 bg-[#1a1a1a] hover:bg-[#252525]"
+          className="absolute top-2 right-4 h-7 w-7 z-10 bg-surface hover:bg-surface-elevated"
           onClick={handleCopy}
         >
           {copied ? <Check className="h-3.5 w-3.5 text-status-success" /> : <Copy className="h-3.5 w-3.5" />}
@@ -118,13 +118,13 @@ const CodeEditor = React.forwardRef<HTMLDivElement, CodeEditorProps>(
                     ref={isHighlighted ? highlightedRowRef : undefined}
                     className={cn(
                       "h-5 leading-5",
-                      isHighlighted && "bg-[#264f78] animate-pulse"
+                      isHighlighted && "bg-code-selection animate-pulse"
                     )}
                   >
                     {/* Line Number + Gutter match indicator */}
                     <td className={cn(
-                      "sticky left-0 text-text-muted text-right px-3 select-none border-r border-white/[0.06] align-top w-[1%]",
-                      isHighlighted ? "bg-[#264f78]" : "bg-[#0a0a0a]"
+                      "sticky left-0 text-text-muted text-right px-3 select-none border-r border-foreground/[0.06] align-top w-[1%]",
+                      isHighlighted ? "bg-code-selection" : "bg-background"
                     )}>
                       <span className="relative inline-flex items-center">
                         {matchCount && (

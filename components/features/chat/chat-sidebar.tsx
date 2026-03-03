@@ -74,9 +74,9 @@ export function ChatSidebar({ className }: { className?: string }) {
   }
 
   return (
-    <aside className={cn("flex h-full flex-col overflow-hidden rounded-lg bg-[rgba(15,15,15,1)]", className)}>
+    <aside className={cn("flex h-full flex-col overflow-hidden rounded-lg bg-card", className)}>
       {/* Header */}
-      <div className="flex h-11 items-center justify-between border-b border-white/[0.06] px-4">
+      <div className="flex h-11 items-center justify-between border-b border-foreground/[0.06] px-4">
         <span className="text-sm font-medium text-text-primary">Chat</span>
         {repo && (
           <span className="text-xs text-text-muted truncate max-w-[150px]" title={repo.fullName}>

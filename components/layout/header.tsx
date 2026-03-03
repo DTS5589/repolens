@@ -4,6 +4,7 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Code2, GitFork, Github, Settings } from "lucide-react"
 import { SettingsModal } from "@/components/features/settings/settings-modal"
+import { ThemeToggle } from "@/components/theme-toggle"
 import { useAPIKeys } from "@/providers"
 
 interface HeaderProps {
@@ -19,15 +20,16 @@ export function Header({ className }: HeaderProps) {
 
   return (
     <>
-      <header className={`flex h-11 items-center bg-primary-background border-b border-white/[0.06] px-4 justify-between ${className || ''}`}>
+      <header className={`flex h-11 items-center bg-primary-background border-b border-foreground/[0.06] px-4 justify-between ${className || ''}`}>
         <div className="flex items-center">
           <Code2 className="h-5 w-5 text-text-primary" />
         </div>
         <div className="flex items-center gap-1">
+          <ThemeToggle />
           <Button
             variant="ghost"
             size="icon"
-            className="relative h-7 w-7 text-text-secondary hover:text-text-primary hover:bg-white/5"
+            className="relative h-7 w-7 text-text-secondary hover:text-text-primary hover:bg-foreground/5"
             onClick={() => setSettingsOpen(true)}
           >
             <Settings className="h-3.5 w-3.5" />
@@ -38,7 +40,7 @@ export function Header({ className }: HeaderProps) {
           <Button
             variant="ghost"
             size="icon"
-            className="h-7 w-7 text-text-secondary hover:text-text-primary hover:bg-white/5"
+            className="h-7 w-7 text-text-secondary hover:text-text-primary hover:bg-foreground/5"
             asChild
           >
             <a href="https://github.com/zebbern" target="_blank" rel="noopener noreferrer">
@@ -48,7 +50,7 @@ export function Header({ className }: HeaderProps) {
           <Button
             variant="ghost"
             size="icon"
-            className="h-7 w-7 text-text-secondary hover:text-text-primary hover:bg-white/5"
+            className="h-7 w-7 text-text-secondary hover:text-text-primary hover:bg-foreground/5"
             asChild
           >
             <a href="https://github.com/zebbern" target="_blank" rel="noopener noreferrer">

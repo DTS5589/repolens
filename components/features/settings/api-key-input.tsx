@@ -65,7 +65,7 @@ export function APIKeyInput({ provider }: APIKeyInputProps) {
               value={config.key}
               onChange={(e) => setAPIKey(provider, e.target.value)}
               placeholder={`Enter your ${providerInfo.name} API key`}
-              className="pr-10 bg-white/5 border-white/10 text-text-primary placeholder:text-text-muted"
+              className="pr-10 bg-foreground/5 border-foreground/10 text-text-primary placeholder:text-text-muted"
             />
             <Button
               type="button"
@@ -81,7 +81,7 @@ export function APIKeyInput({ provider }: APIKeyInputProps) {
           <Button
             onClick={handleValidate}
             disabled={!config.key || isValidating}
-            className="bg-white text-black hover:bg-gray-200"
+            className="bg-primary text-primary-foreground hover:bg-primary/90"
           >
             {isValidating ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -122,7 +122,7 @@ export function APIKeyInput({ provider }: APIKeyInputProps) {
       {config.isValid && providerModels.length > 0 && (
         <div className="space-y-2">
           <Label className="text-text-secondary">Available Models</Label>
-          <div className="max-h-40 overflow-y-auto rounded-md border border-white/10 bg-white/5 p-2">
+          <div className="max-h-40 overflow-y-auto rounded-md border border-foreground/10 bg-foreground/5 p-2">
             <div className="space-y-1">
               {providerModels.map((model) => (
                 <div
