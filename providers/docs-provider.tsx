@@ -202,28 +202,56 @@ export function DocsProvider({ children }: { children: ReactNode }) {
   }, [codeIndex])
 
   // --- Transport ---
-  const transport = useMemo(() => {
-    if (!selectedModel || !hasValidKey || !repoContext) return undefined
-    return new DefaultChatTransport({
-      api: '/api/docs/generate',
-      prepareSendMessagesRequest: ({ messages }) => {
-        const ctx = genContextRef.current
-        return {
-          body: {
-            messages,
-            provider: selectedModel.provider,
-            model: selectedModel.id,
-            apiKey: apiKeys[selectedModel.provider].key,
-            docType: ctx.docType,
-            repoContext,
-            fileContents: fileContentsMap,
-            targetFile: ctx.targetFile,
-          },
-        }
-      },
-    })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedModel, hasValidKey, apiKeys, repoContext, fileContentsMap])
+  // IMPORTANT: The ai-sdk Chat instance is created once in useRef and only
+  // recreated when the `id` changes — NOT when `transport` changes. If we
+  // pass `undefined` on the first render (e.g. before selectedModel is set),
+  // the Chat permanently uses DefaultChatTransport → /api/chat.
+  //
+  // Fix: use refs for all dynamic values so a single stable transport
+  // always reads the latest state at request time.
+  const selectedModelRef = useRef(selectedModel)
+  const hasValidKeyRef = useRef(hasValidKey)
+  const apiKeysRef = useRef(apiKeys)
+  const repoContextRef = useRef(repoContext)
+  const fileContentsMapRef = useRef(fileContentsMap)
+
+  useEffect(() => { selectedModelRef.current = selectedModel }, [selectedModel])
+  useEffect(() => { hasValidKeyRef.current = hasValidKey }, [hasValidKey])
+  useEffect(() => { apiKeysRef.current = apiKeys }, [apiKeys])
+  useEffect(() => { repoContextRef.current = repoContext }, [repoContext])
+  useEffect(() => { fileContentsMapRef.current = fileContentsMap }, [fileContentsMap])
+
+  // Stable transport — never undefined, reads from refs at request time
+  const transport = useMemo(
+    () =>
+      new DefaultChatTransport({
+        api: '/api/docs/generate',
+        prepareSendMessagesRequest: ({ messages }) => {
+          const model = selectedModelRef.current
+          const keys = apiKeysRef.current
+          const repoCtx = repoContextRef.current
+          const ctx = genContextRef.current
+
+          if (!model || !repoCtx) {
+            throw new Error('Model or repository not ready for doc generation')
+          }
+
+          return {
+            body: {
+              messages,
+              provider: model.provider,
+              model: model.id,
+              apiKey: keys[model.provider].key,
+              docType: ctx.docType,
+              repoContext: repoCtx,
+              fileContents: fileContentsMapRef.current,
+              targetFile: ctx.targetFile,
+            },
+          }
+        },
+      }),
+    [], // Stable — never recreated; reads current values from refs
+  )
 
   // --- useChat (lives in provider so state survives unmount) ---
   const { messages, sendMessage, status, setMessages, stop, error } = useChat({
