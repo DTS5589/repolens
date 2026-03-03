@@ -80,20 +80,7 @@ describe('ModelSelector', () => {
     expect(mockSetSelectedModel).toHaveBeenCalledWith(mockModels[0])
   })
 
-  it('displays selected model name on the trigger button', () => {
-    // Override the mock to have a selected model
-    vi.doMock('@/providers', () => ({
-      useAPIKeys: () => ({
-        models: mockModels,
-        selectedModel: mockModels[0],
-        setSelectedModel: mockSetSelectedModel,
-        getValidProviders: mockGetValidProviders,
-      }),
-    }))
-
-    // The trigger button shows "Select model" when no model is selected (covered in the first test)
-    // When a model IS selected, the button text changes — but since vi.doMock
-    // doesn't affect already-imported modules, we verify the initial trigger text instead.
+  it('displays default "Select model" text when no model is selected', () => {
     render(<ModelSelector />)
     expect(screen.getByRole('button', { name: /select model/i })).toBeInTheDocument()
   })

@@ -38,11 +38,10 @@ export default defineConfig({
         'lib/utils.ts',
       ],
       thresholds: {
-        // TODO: Raise thresholds as test coverage increases
-        statements: 0,
-        branches: 0,
-        functions: 0,
-        lines: 0,
+        statements: 35,
+        branches: 20,
+        functions: 20,
+        lines: 35,
       },
     },
   },

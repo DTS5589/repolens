@@ -63,14 +63,13 @@ describe('scanIssues', () => {
     index = indexFile(index, 'src/mixed.ts', code, 'typescript')
 
     const result = scanIssues(index, null)
-    if (result.issues.length >= 2) {
-      const severities = result.issues.map(i => i.severity)
-      const critIdx = severities.indexOf('critical')
-      const warnIdx = severities.indexOf('warning')
-      const infoIdx = severities.indexOf('info')
-      if (critIdx >= 0 && warnIdx >= 0) expect(critIdx).toBeLessThan(warnIdx)
-      if (warnIdx >= 0 && infoIdx >= 0) expect(warnIdx).toBeLessThan(infoIdx)
-    }
+    expect(result.issues.length).toBeGreaterThanOrEqual(2)
+    const severities = result.issues.map(i => i.severity)
+    const critIdx = severities.indexOf('critical')
+    const warnIdx = severities.indexOf('warning')
+    const infoIdx = severities.indexOf('info')
+    if (critIdx >= 0 && warnIdx >= 0) expect(critIdx).toBeLessThan(warnIdx)
+    if (warnIdx >= 0 && infoIdx >= 0) expect(warnIdx).toBeLessThan(infoIdx)
   })
 
   it('reports correct summary counts', () => {
