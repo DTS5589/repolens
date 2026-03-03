@@ -1,0 +1,145 @@
+import { sanitizeId, shortenPath, getTopDir, computeCommonStats, getAvailableDiagrams } from '@/lib/diagrams/helpers'
+import { createRealisticAnalysis, createEmptyAnalysis, createMinimalAnalysis } from '@/lib/diagrams/__fixtures__/mock-analysis'
+
+describe('sanitizeId', () => {
+  it('replaces non-alphanumeric characters with underscores', () => {
+    expect(sanitizeId('src/components/Button.tsx')).toBe('src_components_Button_tsx')
+  })
+
+  it('collapses multiple underscores', () => {
+    expect(sanitizeId('a--b..c')).toBe('a_b_c')
+  })
+
+  it('strips leading and trailing underscores', () => {
+    expect(sanitizeId('/path/to/')).toBe('path_to')
+  })
+
+  it('handles empty string', () => {
+    expect(sanitizeId('')).toBe('')
+  })
+
+  it('preserves already-clean identifiers', () => {
+    expect(sanitizeId('myComponent123')).toBe('myComponent123')
+  })
+})
+
+describe('shortenPath', () => {
+  it('returns path unchanged if 2 or fewer segments', () => {
+    expect(shortenPath('src/file.ts')).toBe('src/file.ts')
+  })
+
+  it('shortens long paths with ellipsis', () => {
+    expect(shortenPath('src/components/deep/Button.tsx')).toBe('src/.../Button.tsx')
+  })
+
+  it('handles single segment', () => {
+    expect(shortenPath('index.ts')).toBe('index.ts')
+  })
+
+  it('handles exactly 3 segments', () => {
+    expect(shortenPath('a/b/c')).toBe('a/.../c')
+  })
+})
+
+describe('getTopDir', () => {
+  it('returns first path segment', () => {
+    expect(getTopDir('src/components/Button.tsx')).toBe('src')
+  })
+
+  it('returns the whole path if no slashes', () => {
+    expect(getTopDir('index.ts')).toBe('index.ts')
+  })
+
+  it('handles empty string', () => {
+    expect(getTopDir('')).toBe('')
+  })
+})
+
+describe('computeCommonStats', () => {
+  it('computes stats for a realistic analysis', () => {
+    const analysis = createRealisticAnalysis()
+    const stats = computeCommonStats(analysis)
+
+    expect(stats.totalEdges).toBeGreaterThan(0)
+    expect(stats.circularDeps).toBeDefined()
+    expect(stats.circularDeps).toHaveLength(1)
+    expect(stats.mostImported).toBeDefined()
+    expect(stats.mostImported!.path).toBe('src/types.ts')
+    expect(stats.avgDepsPerFile).toBeGreaterThan(0)
+  })
+
+  it('returns zeros for an empty analysis', () => {
+    const analysis = createEmptyAnalysis()
+    const stats = computeCommonStats(analysis)
+
+    expect(stats.totalEdges).toBe(0)
+    expect(stats.avgDepsPerFile).toBe(0)
+    expect(stats.circularDeps).toBeUndefined()
+    expect(stats.mostImported).toBeUndefined()
+    expect(stats.mostDependent).toBeUndefined()
+  })
+
+  it('identifies most dependent file correctly', () => {
+    const analysis = createRealisticAnalysis()
+    const stats = computeCommonStats(analysis)
+
+    expect(stats.mostDependent).toBeDefined()
+    // src/app.tsx has 2 deps; src/services/api.ts also has 2 deps — either is valid
+    expect(stats.mostDependent!.count).toBeGreaterThanOrEqual(2)
+  })
+})
+
+describe('getAvailableDiagrams', () => {
+  it('returns correct diagram list for a realistic analysis', () => {
+    const analysis = createRealisticAnalysis()
+    const diagrams = getAvailableDiagrams(analysis)
+
+    const ids = diagrams.map(d => d.id)
+    expect(ids).toContain('topology')
+    expect(ids).toContain('imports')
+    expect(ids).toContain('classes')
+    expect(ids).toContain('entrypoints')
+    expect(ids).toContain('treemap')
+
+    // types.ts has types, so 'classes' should be available
+    const classesDiagram = diagrams.find(d => d.id === 'classes')
+    expect(classesDiagram?.available).toBe(true)
+  })
+
+  it('marks externals as available when external deps exist', () => {
+    const analysis = createRealisticAnalysis()
+    const diagrams = getAvailableDiagrams(analysis)
+    const externalsDiagram = diagrams.find(d => d.id === 'externals')
+    expect(externalsDiagram?.available).toBe(true)
+  })
+
+  it('marks externals as unavailable when no external deps', () => {
+    const analysis = createMinimalAnalysis()
+    const diagrams = getAvailableDiagrams(analysis)
+    const externalsDiagram = diagrams.find(d => d.id === 'externals')
+    expect(externalsDiagram?.available).toBe(false)
+    expect(externalsDiagram?.reason).toBeDefined()
+  })
+
+  it('marks classes as unavailable when no types/classes exist', () => {
+    const analysis = createMinimalAnalysis()
+    const diagrams = getAvailableDiagrams(analysis)
+    const classesDiagram = diagrams.find(d => d.id === 'classes')
+    expect(classesDiagram?.available).toBe(false)
+  })
+
+  it('labels entrypoints as Routes when a framework is detected', () => {
+    const analysis = createRealisticAnalysis()
+    analysis.detectedFramework = 'Next.js'
+    const diagrams = getAvailableDiagrams(analysis)
+    const ep = diagrams.find(d => d.id === 'entrypoints')
+    expect(ep?.label).toBe('Routes')
+  })
+
+  it('labels modules tab as Components when JSX components exist', () => {
+    const analysis = createRealisticAnalysis()
+    const diagrams = getAvailableDiagrams(analysis)
+    const modules = diagrams.find(d => d.id === 'modules')
+    expect(modules?.label).toBe('Components')
+  })
+})
