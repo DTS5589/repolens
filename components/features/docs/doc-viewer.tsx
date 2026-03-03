@@ -4,10 +4,18 @@ import { useState, useMemo, useRef, useEffect } from 'react'
 import {
   FileText, Code, BookOpen, Rocket, FileCode, MessageSquare,
   Loader2, AlertCircle, Trash2, ChevronDown, Search, X, Plus, Download,
+  Square, RefreshCw, Sparkles, ClipboardCopy, Check, Menu,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader,
+  AlertDialogTitle, AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
+import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { useIsMobile } from '@/hooks/use-mobile'
 import { useAPIKeys, useRepository } from '@/providers'
 import { useChat } from '@ai-sdk/react'
 import { DefaultChatTransport } from 'ai'
@@ -74,6 +82,23 @@ interface GeneratedDoc {
   messages: UIMessage[]
   createdAt: Date
   targetFile?: string
+  customPrompt?: string
+}
+
+/** Extracts all assistant text from chat messages. */
+function getAssistantText(messages: UIMessage[]): string {
+  return messages
+    .filter(m => m.role === 'assistant')
+    .flatMap(m => m.parts?.filter((p): p is { type: 'text'; text: string } => p.type === 'text').map(p => p.text) || [])
+    .join('')
+}
+
+function buildDocPrompt(preset: DocPreset, targetFile: string | null, customPrompt: string): string {
+  if (preset.id === 'file-explanation' && targetFile) {
+    return `Explain this file in detail: \`${targetFile}\`. Cover its purpose, how it fits in the architecture, key functions/classes, and walk through the main logic.`
+  }
+  if (preset.id === 'custom') return customPrompt
+  return preset.prompt
 }
 
 interface DocViewerProps {
@@ -97,16 +122,21 @@ export function DocViewer({ className }: DocViewerProps) {
   const [targetFile, setTargetFile] = useState<string | null>(null)
   const [fileSearchQuery, setFileSearchQuery] = useState('')
   const [showFileSearch, setShowFileSearch] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+
+  const isMobile = useIsMobile()
 
   const activeDoc = generatedDocs.find(d => d.id === activeDocId)
   const contentRef = useRef<HTMLDivElement>(null)
 
   // Flatten files for file picker
   const allFiles = useMemo(() => files.length > 0 ? flattenFiles(files) : [], [files])
+  const FILE_LIMIT = 50
   const filteredFiles = useMemo(() => {
-    if (!fileSearchQuery.trim()) return allFiles.slice(0, 20)
+    if (!fileSearchQuery.trim()) return allFiles.slice(0, FILE_LIMIT)
     const q = fileSearchQuery.toLowerCase()
-    return allFiles.filter(f => f.path.toLowerCase().includes(q) || f.name.toLowerCase().includes(q)).slice(0, 15)
+    return allFiles.filter(f => f.path.toLowerCase().includes(q) || f.name.toLowerCase().includes(q)).slice(0, FILE_LIMIT)
   }, [allFiles, fileSearchQuery])
 
   // Repo context for AI -- includes file tree for orientation
@@ -136,6 +166,8 @@ export function DocViewer({ className }: DocViewerProps) {
     targetFile: string | null
     customPrompt: string
   }>({ docType: 'architecture', targetFile: null, customPrompt: '' })
+  const isSubmittingRef = useRef(false)
+  const sendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Transport for the active generation -- sends file contents for tool access
   const transport = useMemo(() => {
@@ -161,17 +193,24 @@ export function DocViewer({ className }: DocViewerProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedModel, hasValidKey, apiKeys, repoContext, fileContentsMap])
 
-  const { messages, sendMessage, status, setMessages } = useChat({
+  const { messages, sendMessage, status, setMessages, stop, error } = useChat({
     transport: transport ?? undefined,
     id: 'docs-generator',
   })
 
   const isGenerating = status === 'streaming' || status === 'submitted'
 
+  useEffect(() => {
+    return () => {
+      if (sendTimerRef.current) clearTimeout(sendTimerRef.current)
+    }
+  }, [])
+
   // When generation completes, save the doc
   const prevStatus = useRef(status)
   useEffect(() => {
-    if (prevStatus.current === 'streaming' && status === 'ready' && messages.length > 0) {
+    if ((prevStatus.current === 'streaming' || prevStatus.current === 'submitted') && status === 'ready' && messages.length > 0) {
+      isSubmittingRef.current = false
       const ctx = genContextRef.current
       const preset = DOC_PRESETS.find(p => p.id === ctx.docType)
       const docId = `doc-${Date.now()}`
@@ -188,6 +227,7 @@ export function DocViewer({ className }: DocViewerProps) {
         messages: [...messages],
         createdAt: new Date(),
         targetFile: ctx.targetFile || undefined,
+        customPrompt: ctx.customPrompt || undefined,
       }
 
       setGeneratedDocs(prev => [newDoc, ...prev])
@@ -200,15 +240,20 @@ export function DocViewer({ className }: DocViewerProps) {
     prevStatus.current = status
   }, [status, messages])
 
-  // Auto-scroll during streaming
+  // Auto-scroll during streaming — only when user is near the bottom
   useEffect(() => {
     if (isGenerating && contentRef.current) {
-      contentRef.current.scrollTop = contentRef.current.scrollHeight
+      const el = contentRef.current
+      const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 100
+      if (isNearBottom) {
+        el.scrollTop = el.scrollHeight
+      }
     }
   }, [messages, isGenerating])
 
   const handleGenerate = (preset: DocPreset) => {
     if (!hasValidKey || !repoContext || !transport) return
+    if (isGenerating || isSubmittingRef.current) return
 
     if (preset.id === 'file-explanation' && !targetFile) {
       setSelectedPreset('file-explanation')
@@ -231,14 +276,14 @@ export function DocViewer({ className }: DocViewerProps) {
     setSelectedPreset(preset.id)
     setMessages([])
 
-    const prompt = preset.id === 'file-explanation' && targetFile
-      ? `Explain this file in detail: \`${targetFile}\`. Cover its purpose, how it fits in the architecture, key functions/classes, and walk through the main logic.`
-      : preset.id === 'custom'
-        ? customPrompt
-        : preset.prompt
+    const prompt = buildDocPrompt(preset, targetFile, customPrompt)
 
     // Let React flush setMessages([]) before sending
-    setTimeout(() => sendMessage({ text: prompt }), 50)
+    isSubmittingRef.current = true
+    sendTimerRef.current = setTimeout(() => {
+      sendMessage({ text: prompt })
+      isSubmittingRef.current = false
+    }, 50)
   }
 
   const handleFileSelect = (path: string) => {
@@ -253,6 +298,34 @@ export function DocViewer({ className }: DocViewerProps) {
       setActiveDocId(null)
       setShowNewDoc(true)
     }
+  }
+
+  const handleRegenerate = (doc: GeneratedDoc) => {
+    const preset = DOC_PRESETS.find(p => p.id === doc.type)
+    if (!preset) return
+
+    // Restore context for regeneration
+    setTargetFile(doc.targetFile || null)
+    setCustomPrompt(doc.customPrompt || '')
+    setSelectedPreset(doc.type)
+    setShowNewDoc(true)
+    setActiveDocId(null)
+
+    genContextRef.current = {
+      docType: doc.type,
+      targetFile: doc.targetFile || null,
+      customPrompt: doc.customPrompt || '',
+    }
+
+    setMessages([])
+
+    const prompt = buildDocPrompt(preset, doc.targetFile || null, doc.customPrompt || '')
+
+    isSubmittingRef.current = true
+    sendTimerRef.current = setTimeout(() => {
+      sendMessage({ text: prompt })
+      isSubmittingRef.current = false
+    }, 50)
   }
 
   // --- Render ---
@@ -282,66 +355,158 @@ export function DocViewer({ className }: DocViewerProps) {
     )
   }
 
+  const handleDocClick = (docId: string) => {
+    if (isGenerating) return
+    setActiveDocId(docId)
+    setShowNewDoc(false)
+    if (isMobile) setSidebarOpen(false)
+  }
+
+  const handleNewDocClick = () => {
+    setShowNewDoc(true)
+    setActiveDocId(null)
+    setSelectedPreset(null)
+    if (isMobile) setSidebarOpen(false)
+  }
+
+  const handleCopyToClipboard = () => {
+    if (!activeDoc) return
+    const text = getAssistantText(activeDoc.messages)
+    navigator.clipboard.writeText(text)
+      .then(() => {
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+      })
+      .catch(() => {
+        console.warn('Failed to copy to clipboard')
+      })
+  }
+
+  const sidebarContent = (
+    <>
+      <div className="flex items-center justify-between px-3 h-10 border-b border-foreground/[0.06] shrink-0">
+        <span className="text-xs font-medium text-text-secondary">Generated Docs</span>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6 gap-1 text-text-muted hover:text-text-primary px-1.5"
+          onClick={handleNewDocClick}
+          disabled={isGenerating}
+          title="New document"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          <span className="text-[10px]">New</span>
+        </Button>
+      </div>
+      <div className="flex-1 overflow-y-auto py-1">
+        {generatedDocs.length === 0 && (
+          <p className="text-[10px] text-text-muted px-3 py-4 text-center">No docs generated yet. Pick a template to get started.</p>
+        )}
+        {generatedDocs.map(doc => {
+          const preset = DOC_PRESETS.find(p => p.id === doc.type)
+          return (
+            <div
+              key={doc.id}
+              role="button"
+              tabIndex={isGenerating ? -1 : 0}
+              aria-disabled={isGenerating || undefined}
+              onClick={() => handleDocClick(doc.id)}
+              onKeyDown={(e) => { if (isGenerating) return; if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleDocClick(doc.id) } }}
+              className={cn(
+                'w-full flex items-start gap-2 px-3 py-2 text-left hover:bg-foreground/5 transition-colors group cursor-pointer',
+                activeDocId === doc.id && 'bg-foreground/[0.07]',
+                isGenerating && 'pointer-events-none opacity-50'
+              )}
+            >
+              <span className="text-text-muted shrink-0 mt-0.5">{preset?.icon || <FileText className="h-4 w-4" />}</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-text-secondary truncate group-hover:text-text-primary">{doc.title}</p>
+                <p className="text-[10px] text-text-muted">{doc.createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+              </div>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <button
+                    onClick={(e) => e.stopPropagation()}
+                    aria-label="Delete document"
+                    className="opacity-0 group-hover:opacity-100 focus:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:rounded shrink-0 text-text-muted hover:text-red-400 transition-all"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete this document?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will permanently remove this generated document.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={() => handleDeleteDoc(doc.id)}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    >
+                      Delete
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
+          )
+        })}
+      </div>
+    </>
+  )
+
   return (
     <div className={cn('flex h-full', className)}>
-      {/* Sidebar -- generated docs list */}
-      <div className="w-56 border-r border-foreground/[0.06] flex flex-col shrink-0">
-        <div className="flex items-center justify-between px-3 h-10 border-b border-foreground/[0.06] shrink-0">
-          <span className="text-xs font-medium text-text-secondary">Generated Docs</span>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6 text-text-muted hover:text-text-primary"
-            onClick={() => { setShowNewDoc(true); setActiveDocId(null); setSelectedPreset(null) }}
-            title="New document"
-          >
-            <Plus className="h-3.5 w-3.5" />
-          </Button>
+      {/* Sidebar -- desktop */}
+      {!isMobile && (
+        <div className="w-56 border-r border-foreground/[0.06] flex flex-col shrink-0">
+          {sidebarContent}
         </div>
-        <div className="flex-1 overflow-y-auto py-1">
-          {generatedDocs.length === 0 && (
-            <p className="text-[10px] text-text-muted px-3 py-4 text-center">No docs generated yet. Pick a template to get started.</p>
-          )}
-          {generatedDocs.map(doc => {
-            const preset = DOC_PRESETS.find(p => p.id === doc.type)
-            return (
-              <div
-                key={doc.id}
-                role="button"
-                tabIndex={0}
-                onClick={() => { setActiveDocId(doc.id); setShowNewDoc(false) }}
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setActiveDocId(doc.id); setShowNewDoc(false) } }}
-                className={cn(
-                  'w-full flex items-start gap-2 px-3 py-2 text-left hover:bg-foreground/5 transition-colors group cursor-pointer',
-                  activeDocId === doc.id && 'bg-foreground/[0.07]'
-                )}
-              >
-                <span className="text-text-muted shrink-0 mt-0.5">{preset?.icon || <FileText className="h-4 w-4" />}</span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs text-text-secondary truncate group-hover:text-text-primary">{doc.title}</p>
-                  <p className="text-[10px] text-text-muted">{doc.createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-                </div>
-                <button
-                  onClick={(e) => { e.stopPropagation(); handleDeleteDoc(doc.id) }}
-                  className="opacity-0 group-hover:opacity-100 shrink-0 text-text-muted hover:text-red-400 transition-all"
-                >
-                  <Trash2 className="h-3 w-3" />
-                </button>
-              </div>
-            )
-          })}
-        </div>
-      </div>
+      )}
 
       {/* Main content area */}
       <div className="flex-1 flex flex-col min-w-0">
         {showNewDoc || !activeDoc ? (
           // New doc generation view
           <div ref={isGenerating ? contentRef : undefined} className="flex-1 overflow-y-auto flex flex-col">
+            {/* Mobile sidebar trigger */}
+            {isMobile && (
+              <div className="flex items-center gap-2 px-4 h-10 border-b border-foreground/[0.06] shrink-0">
+                <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
+                  <SheetTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-9 w-9 text-text-muted hover:text-text-primary" aria-label="Open document sidebar">
+                      <Menu className="h-4 w-4" />
+                    </Button>
+                  </SheetTrigger>
+                  <SheetContent side="left" className="w-64 p-0 flex flex-col">
+                    <SheetHeader className="sr-only">
+                      <SheetTitle>Document Sidebar</SheetTitle>
+                    </SheetHeader>
+                    {sidebarContent}
+                  </SheetContent>
+                </Sheet>
+                <span className="text-xs text-text-secondary font-medium">Docs</span>
+              </div>
+            )}
+
             {/* Currently generating */}
             {isGenerating && messages.length > 0 ? (
               <div className="p-6 max-w-3xl">
-                <ToolActivity messages={messages} />
+                <div className="flex items-center justify-between mb-4">
+                  <ToolActivity messages={messages} />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={stop}
+                    className="h-7 text-xs gap-1.5 shrink-0 text-text-secondary hover:text-text-primary"
+                  >
+                    <Square className="h-3 w-3" />
+                    Stop
+                  </Button>
+                </div>
                 <div className="prose prose-invert max-w-none">
                   <MarkdownContent messages={messages} />
                 </div>
@@ -350,9 +515,32 @@ export function DocViewer({ className }: DocViewerProps) {
               <div className="flex-1 flex flex-col items-center justify-center p-6 min-h-0">
                 <div className="w-full max-w-xl">
                   <h2 className="text-lg font-semibold text-text-primary mb-1 text-center">Generate Documentation</h2>
+                  {selectedModel && (
+                    <p className="text-[11px] text-text-muted text-center mb-1 flex items-center justify-center gap-1">
+                      <Sparkles className="h-3 w-3" />
+                      Using {selectedModel.name}
+                    </p>
+                  )}
                   <p className="text-xs text-text-muted text-center mb-6">
                     AI reads your code and writes real documentation. Pick a template or write a custom prompt.
                   </p>
+
+                  {error && !isGenerating && (
+                    <div role="alert" className="bg-destructive/10 border border-destructive/20 rounded-lg p-3 mb-4">
+                      <div className="flex items-center gap-2">
+                        <AlertCircle className="h-4 w-4 text-destructive shrink-0" />
+                        <span className="text-sm text-destructive">{error.message || 'An unexpected error occurred. Please try again.'}</span>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleGenerate(DOC_PRESETS.find(p => p.id === selectedPreset) || DOC_PRESETS[0])}
+                        className="mt-2 h-7 text-xs"
+                      >
+                        Try Again
+                      </Button>
+                    </div>
+                  )}
 
                   <div className="flex flex-col gap-2">
                     {DOC_PRESETS.map(preset => (
@@ -395,7 +583,7 @@ export function DocViewer({ className }: DocViewerProps) {
                               <div className="flex items-center gap-2 mb-2">
                                 <FileCode className="h-3.5 w-3.5 text-text-muted" />
                                 <span className="text-xs text-text-secondary font-mono flex-1 truncate">{targetFile}</span>
-                                <button onClick={() => { setTargetFile(null); setShowFileSearch(true) }} className="text-text-muted hover:text-text-secondary">
+                                <button onClick={() => { setTargetFile(null); setShowFileSearch(true) }} className="text-text-muted hover:text-text-secondary focus-visible:ring-2 focus-visible:ring-ring focus-visible:rounded" aria-label="Clear selected file">
                                   <X className="h-3 w-3" />
                                 </button>
                               </div>
@@ -409,15 +597,26 @@ export function DocViewer({ className }: DocViewerProps) {
                                     value={fileSearchQuery}
                                     onChange={e => setFileSearchQuery(e.target.value)}
                                     placeholder="Search for a file..."
+                                    aria-label="Search files"
                                     className="h-8 border-0 bg-transparent text-xs focus-visible:ring-0 px-0"
                                   />
                                 </div>
                                 <div className="max-h-40 overflow-y-auto py-1">
+                                  {filteredFiles.length > 0 && (
+                                    <div className="px-3 py-1 flex items-center justify-between">
+                                      <span aria-live="polite" className="text-[10px] text-text-muted">
+                                        Showing {filteredFiles.length} of {allFiles.length} files
+                                      </span>
+                                      {filteredFiles.length === FILE_LIMIT && filteredFiles.length < allFiles.length && (
+                                        <span className="text-[10px] text-text-muted">Type to search for more files</span>
+                                      )}
+                                    </div>
+                                  )}
                                   {filteredFiles.map(f => (
                                     <button
                                       key={f.path}
                                       onClick={() => handleFileSelect(f.path)}
-                                      className="w-full flex items-center gap-2 px-3 py-1.5 text-left hover:bg-foreground/5 text-xs text-text-secondary hover:text-text-primary"
+                                      className="w-full flex items-center gap-2 px-3 py-1.5 text-left hover:bg-foreground/5 text-xs text-text-secondary hover:text-text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:rounded"
                                     >
                                       <FileCode className="h-3 w-3 text-text-muted shrink-0" />
                                       <span className="truncate">{f.path}</span>
@@ -450,6 +649,7 @@ export function DocViewer({ className }: DocViewerProps) {
                               value={customPrompt}
                               onChange={e => setCustomPrompt(e.target.value)}
                               placeholder="e.g. 'Explain the auth flow', 'Document the database schema', 'Write a deployment guide'..."
+                              aria-label="Custom documentation prompt"
                               className="w-full h-20 rounded-lg border border-foreground/10 bg-foreground/[0.02] px-3 py-2 text-xs text-text-primary placeholder:text-text-muted resize-none focus:outline-none focus:border-foreground/20"
                               onKeyDown={e => {
                                 if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && customPrompt.trim()) {
@@ -490,13 +690,32 @@ export function DocViewer({ className }: DocViewerProps) {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-7 w-7 text-text-muted hover:text-text-primary shrink-0"
+                  className="h-8 w-8 text-text-muted hover:text-text-primary shrink-0"
+                  title="Regenerate"
+                  aria-label="Regenerate this document"
+                  onClick={() => handleRegenerate(activeDoc)}
+                  disabled={isGenerating}
+                >
+                  <RefreshCw className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-text-muted hover:text-text-primary shrink-0"
+                  title="Copy to clipboard"
+                  aria-label={copied ? "Copied to clipboard" : "Copy to clipboard"}
+                  onClick={handleCopyToClipboard}
+                >
+                  {copied ? <Check className="h-4 w-4 text-emerald-400" /> : <ClipboardCopy className="h-4 w-4" />}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-text-muted hover:text-text-primary shrink-0"
                   title="Export as Markdown"
+                  aria-label="Export as Markdown"
                   onClick={() => {
-                    const text = activeDoc.messages
-                      .filter(m => m.role === 'assistant')
-                      .flatMap(m => m.parts?.filter((p): p is { type: 'text'; text: string } => p.type === 'text').map(p => p.text) || [])
-                      .join('')
+                    const text = getAssistantText(activeDoc.messages)
                     downloadFile({
                       content: text,
                       filename: `${activeDoc.type}-${repo?.name || 'doc'}.md`,
@@ -520,6 +739,8 @@ export function DocViewer({ className }: DocViewerProps) {
 
 /** Shows which files the AI is reading during tool-calling phase. */
 function ToolActivity({ messages }: { messages: UIMessage[] }) {
+  const [isExpanded, setIsExpanded] = useState(false)
+
   // Extract tool invocations from all messages
   const toolCalls: { name: string; path?: string; state: string }[] = []
   const hasText = messages.some(m =>
@@ -552,6 +773,9 @@ function ToolActivity({ messages }: { messages: UIMessage[] }) {
   const isStillReading = toolCalls.length > 0 && toolCalls.some(t => t.state !== 'output-available' && t.state !== 'output-error')
   const readFiles = toolCalls.filter(t => t.name === 'readFile' && t.path)
   const searches = toolCalls.filter(t => t.name === 'searchFiles')
+  const COLLAPSED_LIMIT = 5
+  const visibleFiles = isExpanded ? readFiles : readFiles.slice(-COLLAPSED_LIMIT)
+  const hasMoreFiles = readFiles.length > COLLAPSED_LIMIT
 
   return (
     <div className="mb-4">
@@ -575,11 +799,20 @@ function ToolActivity({ messages }: { messages: UIMessage[] }) {
               {searches.length} searches
             </span>
           )}
-          {readFiles.slice(-5).map((t, i) => (
+          {visibleFiles.map((t, i) => (
             <span key={i} className="text-[10px] font-mono text-text-muted px-1.5 py-0.5 rounded bg-foreground/[0.03] border border-foreground/[0.06]">
               {t.path?.split('/').slice(-2).join('/') || t.path}
             </span>
           ))}
+          {hasMoreFiles && (
+            <button
+              onClick={() => setIsExpanded(prev => !prev)}
+              aria-expanded={isExpanded}
+              className="text-[10px] text-text-muted hover:text-text-secondary px-2 py-0.5 rounded bg-foreground/[0.03] border border-foreground/[0.06] transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:rounded"
+            >
+              {isExpanded ? 'Show less' : `Show all ${readFiles.length}`}
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -588,10 +821,7 @@ function ToolActivity({ messages }: { messages: UIMessage[] }) {
 
 /** Renders the assistant text from chat messages as formatted markdown. */
 function MarkdownContent({ messages }: { messages: UIMessage[] }) {
-  const text = messages
-    .filter(m => m.role === 'assistant')
-    .flatMap(m => m.parts?.filter((p): p is { type: 'text'; text: string } => p.type === 'text').map(p => p.text) || [])
-    .join('')
+  const text = getAssistantText(messages)
 
   if (!text) return null
 
