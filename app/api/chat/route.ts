@@ -73,7 +73,23 @@ After generating documentation or making claims about code:
 - Reference files as \`path/to/file.tsx\`
 - When creating Mermaid diagrams, wrap them in \`\`\`mermaid blocks
 - For long explanations, use clear section headers
-- When writing documentation, follow the file → understand → write → verify cycle`
+- When writing documentation, follow the file → understand → write → verify cycle
+
+## Mermaid Diagram Guidelines
+Valid diagram types: flowchart, sequenceDiagram, classDiagram, erDiagram, gantt, pie, gitgraph, mindmap.
+
+Syntax rules:
+- Use \`-->\` for flowchart arrows, never \`->\`
+- Wrap labels containing special characters in quotes: \`A["Label with (parens)"]\`
+- Every \`subgraph\` must have a matching \`end\`
+- Sequence diagram arrows: \`->>\` (solid), \`-->>\` (dashed)
+- Never use empty node labels or HTML entities in labels
+- Node IDs must be alphanumeric (no spaces or punctuation)
+
+Before outputting a diagram, mentally verify:
+1. All subgraphs are closed with \`end\`
+2. Arrow syntax is consistent throughout
+3. The diagram type keyword is on the first line with no extra text`
 
     if (repoContext) {
       systemPrompt += `

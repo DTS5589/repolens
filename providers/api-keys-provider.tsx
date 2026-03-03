@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react"
+import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from "react"
 import type { AIProvider, APIKeysState, APIKeyConfig, ProviderModel, ProviderInfo, ModelResponseItem } from "@/types/types"
 
 // Provider information
@@ -33,6 +33,25 @@ export const PROVIDERS: Record<AIProvider, ProviderInfo> = {
     docsUrl: 'https://openrouter.ai/keys',
     keyPrefix: 'sk-or-',
   },
+}
+
+/** Preferred default model ID substrings per provider. Uses `.includes()` matching. */
+export const DEFAULT_MODELS: Partial<Record<AIProvider, string>> = {
+  anthropic: 'claude-sonnet-4-6',
+  google: 'gemini-2.5-pro',
+}
+
+/** Find the best default model for a provider from a list of available models. */
+export function findDefaultModel(models: ProviderModel[], provider: AIProvider): ProviderModel | null {
+  if (models.length === 0) return null
+
+  const preferredSubstring = DEFAULT_MODELS[provider]
+  if (preferredSubstring) {
+    const preferred = models.find(m => m.id.includes(preferredSubstring))
+    if (preferred) return preferred
+  }
+
+  return models[0]
 }
 
 const defaultKeyConfig: APIKeyConfig = {
@@ -71,6 +90,10 @@ export function APIKeysProvider({ children }: { children: ReactNode }) {
   const [models, setModels] = useState<ProviderModel[]>([])
   const [isLoadingModels, setIsLoadingModels] = useState(false)
   const [selectedModel, setSelectedModel] = useState<ProviderModel | null>(null)
+  const selectedModelRef = useRef<ProviderModel | null>(null)
+
+  // Keep ref in sync with state so callbacks can read current value without re-creation
+  useEffect(() => { selectedModelRef.current = selectedModel }, [selectedModel])
 
   // Load keys from localStorage on mount
   useEffect(() => {
@@ -147,6 +170,15 @@ export function APIKeysProvider({ children }: { children: ReactNode }) {
           const filtered = prev.filter(m => m.provider !== provider)
           return [...filtered, ...providerModels]
         })
+
+        // Auto-select a default model if none is currently selected
+        if (!selectedModelRef.current) {
+          const defaultModel = findDefaultModel(providerModels, provider)
+          if (defaultModel) {
+            selectedModelRef.current = defaultModel
+            setSelectedModel(defaultModel)
+          }
+        }
       }
 
       return isValid
@@ -189,6 +221,15 @@ export function APIKeysProvider({ children }: { children: ReactNode }) {
         const filtered = prev.filter(m => m.provider !== provider)
         return [...filtered, ...providerModels]
       })
+
+      // Auto-select a default model if none is currently selected
+      if (!selectedModelRef.current) {
+        const defaultModel = findDefaultModel(providerModels, provider)
+        if (defaultModel) {
+          selectedModelRef.current = defaultModel
+          setSelectedModel(defaultModel)
+        }
+      }
 
       return providerModels
     } catch {

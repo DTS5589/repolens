@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils"
 import type { BundledLanguage, BundledTheme, HighlighterGeneric } from "shiki"
 import mermaid from "mermaid"
 import { MermaidDiagram, type MermaidDiagramHandle } from "@/components/features/diagrams/mermaid-diagram"
-import { Download } from "lucide-react"
+import { Download, WrapText, Copy, Check, EyeOff } from "lucide-react"
 
 // ---------------------------------------------------------------------------
 // Singleton Shiki highlighter (mirrors pattern in use-syntax-highlighting.ts)
@@ -49,7 +49,7 @@ async function ensureLanguageLoaded(
 }
 
 // ---------------------------------------------------------------------------
-// Copy button for code blocks
+// Header bar action button for code blocks
 // ---------------------------------------------------------------------------
 
 function CopyButton({ text }: { text: string }) {
@@ -67,11 +67,78 @@ function CopyButton({ text }: { text: string }) {
             console.warn('Failed to copy to clipboard')
           })
       }}
-      className="absolute top-1.5 right-8 opacity-0 group-hover:opacity-100 transition-opacity px-1.5 py-0.5 text-[10px] text-text-muted hover:text-text-primary bg-foreground/5 hover:bg-foreground/10 rounded font-mono"
+      className="flex items-center gap-1 px-1.5 py-1 text-[10px] text-text-muted hover:text-text-primary hover:bg-foreground/10 rounded transition-colors font-mono"
       aria-label="Copy code"
     >
-      {copied ? "Copied!" : "Copy"}
+      {copied ? (
+        <>
+          <Check className="h-3 w-3" />
+          <span>Copied!</span>
+        </>
+      ) : (
+        <>
+          <Copy className="h-3 w-3" />
+          <span>Copy</span>
+        </>
+      )}
     </button>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Code block header bar
+// ---------------------------------------------------------------------------
+
+function CodeBlockHeader({
+  language,
+  text,
+  wordWrap,
+  onToggleWordWrap,
+}: {
+  language?: string
+  text: string
+  wordWrap: boolean
+  onToggleWordWrap: () => void
+}) {
+  return (
+    <div className="flex items-center justify-between px-3 py-1.5 bg-foreground/[0.08] border-b border-foreground/[0.06] rounded-t-lg">
+      <span className="text-xs font-mono text-text-muted select-none">
+        {language || "text"}
+      </span>
+      <div className="flex items-center gap-0.5">
+        <button
+          onClick={onToggleWordWrap}
+          className={cn(
+            "flex items-center px-1.5 py-1 rounded transition-colors",
+            wordWrap
+              ? "text-text-primary bg-foreground/10"
+              : "text-text-muted hover:text-text-primary hover:bg-foreground/10",
+          )}
+          aria-label="Toggle word wrap"
+          aria-pressed={wordWrap}
+        >
+          <WrapText className="h-3 w-3" />
+        </button>
+        <CopyButton text={text} />
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Line numbers gutter (only rendered for blocks with ≥5 lines)
+// ---------------------------------------------------------------------------
+
+function LineNumbers({ count }: { count: number }) {
+  return (
+    <div
+      className="select-none text-right pr-3 border-r border-foreground/[0.06] text-text-muted text-xs font-mono leading-[1.7142857] pt-4 pb-4 pl-3 shrink-0"
+      aria-hidden="true"
+    >
+      {Array.from({ length: count }, (_, i) => (
+        <div key={i}>{i + 1}</div>
+      ))}
+    </div>
   )
 }
 
@@ -88,9 +155,14 @@ function CodeBlock({
 }) {
   const { resolvedTheme } = useTheme()
   const [html, setHtml] = useState<string>("")
+  const [wordWrap, setWordWrap] = useState(false)
   const isDark = resolvedTheme === "dark"
   const lang = language || "text"
   const theme = isDark ? DARK_THEME : LIGHT_THEME
+
+  const trimmedCode = children.trim()
+  const lineCount = trimmedCode.split("\n").length
+  const showLineNumbers = lineCount >= 5
 
   useEffect(() => {
     let cancelled = false
@@ -103,7 +175,7 @@ function CodeBlock({
 
       const effectiveLang = loaded ? lang : "text"
       try {
-        const result = hl.codeToHtml(children.trim(), {
+        const result = hl.codeToHtml(trimmedCode, {
           lang: effectiveLang as BundledLanguage,
           theme,
         })
@@ -117,28 +189,56 @@ function CodeBlock({
     return () => {
       cancelled = true
     }
-  }, [children, lang, theme])
+  }, [trimmedCode, lang, theme])
 
+  const wrapClasses = wordWrap
+    ? "[&_pre]:whitespace-pre-wrap [&_pre]:break-words"
+    : "[&_pre]:overflow-x-auto [&_pre]:whitespace-pre"
+
+  // Fallback: Shiki hasn't loaded yet
   if (!html) {
     return (
-      <pre className="rounded-lg bg-surface-elevated p-4 overflow-x-auto text-sm font-mono border border-foreground/[0.06]">
-        <code>{children}</code>
-      </pre>
+      <div className="rounded-lg overflow-hidden my-3 border border-foreground/[0.06] shadow-sm">
+        <CodeBlockHeader
+          language={language}
+          text={trimmedCode}
+          wordWrap={wordWrap}
+          onToggleWordWrap={() => setWordWrap((w) => !w)}
+        />
+        <div className="flex">
+          {showLineNumbers && <LineNumbers count={lineCount} />}
+          <pre
+            className={cn(
+              "flex-1 p-4 text-sm font-mono bg-surface-elevated min-w-0",
+              wordWrap ? "whitespace-pre-wrap break-words" : "overflow-x-auto whitespace-pre",
+            )}
+          >
+            <code>{trimmedCode}</code>
+          </pre>
+        </div>
+      </div>
     )
   }
 
   return (
-    <div className="relative group rounded-lg overflow-hidden my-3 border border-foreground/[0.06]">
-      {language && (
-        <div className="absolute top-0 right-0 px-2 py-1 text-[10px] text-text-muted bg-foreground/5 rounded-bl font-mono">
-          {language}
-        </div>
-      )}
-      <CopyButton text={children.trim()} />
-      <div
-        className="[&>pre]:!rounded-lg [&>pre]:!p-4 [&>pre]:!m-0 [&>pre]:overflow-x-auto [&>pre]:text-sm"
-        dangerouslySetInnerHTML={{ __html: html }}
+    <div className="rounded-lg overflow-hidden my-3 border border-foreground/[0.06] shadow-sm">
+      <CodeBlockHeader
+        language={language}
+        text={trimmedCode}
+        wordWrap={wordWrap}
+        onToggleWordWrap={() => setWordWrap((w) => !w)}
       />
+      <div className="flex">
+        {showLineNumbers && <LineNumbers count={lineCount} />}
+        <div
+          className={cn(
+            "flex-1 min-w-0",
+            "[&>pre]:!rounded-none [&>pre]:!p-4 [&>pre]:!m-0 [&>pre]:text-sm",
+            wrapClasses,
+          )}
+          dangerouslySetInnerHTML={{ __html: html }}
+        />
+      </div>
     </div>
   )
 }
@@ -162,6 +262,7 @@ function InlineCode({ children }: { children: React.ReactNode }) {
 function MermaidDiagramBlock({ children }: { children: string }) {
   const { resolvedTheme } = useTheme()
   const mermaidRef = useRef<MermaidDiagramHandle>(null)
+  const [showRawCode, setShowRawCode] = useState(false)
 
   // Re-initialize mermaid with correct theme variables when theme changes
   useEffect(() => {
@@ -206,6 +307,9 @@ function MermaidDiagramBlock({ children }: { children: string }) {
     })
   }, [resolvedTheme])
 
+  // Reset raw code panel when chart content changes
+  useEffect(() => { setShowRawCode(false) }, [children])
+
   const handleDownloadSvg = useCallback(() => {
     const svgEl = mermaidRef.current?.getSvgElement()
     if (!svgEl) return
@@ -223,8 +327,12 @@ function MermaidDiagramBlock({ children }: { children: string }) {
     URL.revokeObjectURL(url)
   }, [])
 
+  const handleToggleRawCode = useCallback(() => {
+    setShowRawCode((prev) => !prev)
+  }, [])
+
   return (
-    <div className="relative group my-3 rounded-lg border border-foreground/[0.06] overflow-hidden">
+    <div className="relative group my-3 rounded-lg border border-foreground/[0.06] shadow-sm overflow-hidden">
       <div className="absolute top-0 right-0 flex items-center gap-1 z-10">
         <button
           onClick={handleDownloadSvg}
@@ -238,8 +346,28 @@ function MermaidDiagramBlock({ children }: { children: string }) {
         </div>
       </div>
       <div className="p-4">
-        <MermaidDiagram ref={mermaidRef} chart={children} />
+        <MermaidDiagram
+          ref={mermaidRef}
+          chart={children}
+          onShowRawCode={handleToggleRawCode}
+        />
       </div>
+      {showRawCode && (
+        <div className="border-t border-foreground/[0.06]">
+          <div className="flex items-center justify-between px-3 py-1.5 bg-foreground/[0.04]">
+            <span className="text-xs text-text-muted font-mono">Raw mermaid source</span>
+            <button
+              onClick={handleToggleRawCode}
+              className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] text-text-muted hover:text-text-primary hover:bg-foreground/10 rounded transition-colors"
+              aria-label="Hide raw code"
+            >
+              <EyeOff className="h-3 w-3" />
+              <span>Hide</span>
+            </button>
+          </div>
+          <CodeBlock language="mermaid">{children}</CodeBlock>
+        </div>
+      )}
     </div>
   )
 }
@@ -263,7 +391,7 @@ const MARKDOWN_COMPONENTS: Components = {
       )
     }
 
-    const isBlock = Boolean(match || codeClassName)
+    const isBlock = Boolean(match || codeClassName || String(children).includes('\n'))
 
     if (isBlock) {
       return (
