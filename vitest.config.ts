@@ -17,6 +17,7 @@ export default defineConfig({
       'components/**/*.test.{ts,tsx}',
       'hooks/**/*.test.ts',
       'providers/**/*.test.{ts,tsx}',
+      'types/**/*.test.ts',
     ],
     exclude: ['node_modules', '.next', 'e2e'],
     coverage: {
