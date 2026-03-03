@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, act } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 // ---------- Module mocks (must be before component import) ----------
@@ -7,14 +7,19 @@ import userEvent from '@testing-library/user-event'
 vi.mock('@/providers', () => ({
   useAPIKeys: vi.fn(),
   useRepository: vi.fn(),
+  useDocs: vi.fn(),
 }))
 
-vi.mock('@ai-sdk/react', () => ({
-  useChat: vi.fn(),
+vi.mock('@/hooks/use-docs-engine', () => ({
+  useDocsEngine: vi.fn(),
 }))
+
+vi.mock('@/providers/docs-provider', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/providers/docs-provider')>()
+  return { ...actual }
+})
 
 vi.mock('ai', () => ({
-  DefaultChatTransport: vi.fn(),
   isToolUIPart: vi.fn(() => false),
   getToolName: vi.fn(() => ''),
 }))
@@ -43,8 +48,8 @@ vi.mock('@/components/ui/markdown-renderer', () => ({
 
 // ---------- Imports ----------
 
-import { useAPIKeys, useRepository } from '@/providers'
-import { useChat } from '@ai-sdk/react'
+import { useAPIKeys, useRepository, useDocs } from '@/providers'
+import { useDocsEngine } from '@/hooks/use-docs-engine'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { flattenFiles } from '@/lib/code/code-index'
 import { isToolUIPart, getToolName } from 'ai'
@@ -125,6 +130,28 @@ const defaultRepoValue = {
   clearRepo: vi.fn(),
 }
 
+const defaultDocsValue = {
+  generatedDocs: [] as ReturnType<typeof makeAssistantMessage>[] & { id: string; type: string; title: string; messages: ReturnType<typeof makeAssistantMessage>[]; createdAt: Date }[],
+  activeDocId: null as string | null,
+  showNewDoc: true,
+  setGeneratedDocs: vi.fn(),
+  setActiveDocId: vi.fn(),
+  setShowNewDoc: vi.fn(),
+  clearDocs: vi.fn(),
+}
+
+const defaultDocsEngineValue = {
+  generatedDocs: [] as typeof defaultDocsValue.generatedDocs,
+  messages: [] as ReturnType<typeof makeAssistantMessage>[],
+  status: 'ready' as string,
+  error: null as Error | null | undefined,
+  isGenerating: false,
+  stop: vi.fn(),
+  handleGenerate: vi.fn(),
+  handleRegenerate: vi.fn(),
+  handleDeleteDoc: vi.fn(),
+}
+
 interface SetupOptions {
   selectedModel?: (typeof defaultAPIKeysValue)['selectedModel'] | null
   status?: string
@@ -135,12 +162,18 @@ interface SetupOptions {
   flatFiles?: { name: string; path: string; type: 'file' | 'directory' }[]
   repo?: (typeof defaultRepoValue)['repo'] | null
   getValidProviders?: () => string[]
+  generatedDocs?: { id: string; type: string; title: string; messages: ReturnType<typeof makeAssistantMessage>[]; createdAt: Date; targetFile?: string; customPrompt?: string }[]
+  activeDocId?: string | null
+  showNewDoc?: boolean
 }
 
 function setupMocks(overrides: SetupOptions = {}) {
   const mockStop = vi.fn()
-  const mockSendMessage = vi.fn()
-  const mockSetMessages = vi.fn()
+  const mockHandleGenerate = vi.fn()
+  const mockHandleRegenerate = vi.fn()
+  const mockHandleDeleteDoc = vi.fn()
+
+  const isGenerating = overrides.status === 'streaming' || overrides.status === 'submitted'
 
   vi.mocked(useAPIKeys).mockReturnValue({
     ...defaultAPIKeysValue,
@@ -158,14 +191,25 @@ function setupMocks(overrides: SetupOptions = {}) {
     ...(overrides.files ? { files: overrides.files } : {}),
   } as unknown as ReturnType<typeof useRepository>)
 
-  vi.mocked(useChat).mockReturnValue({
+  vi.mocked(useDocs).mockReturnValue({
+    ...defaultDocsValue,
+    generatedDocs: overrides.generatedDocs ?? [],
+    activeDocId: overrides.activeDocId ?? null,
+    showNewDoc: overrides.showNewDoc ?? true,
+  } as unknown as ReturnType<typeof useDocs>)
+
+  vi.mocked(useDocsEngine).mockReturnValue({
+    ...defaultDocsEngineValue,
+    generatedDocs: overrides.generatedDocs ?? [],
     messages: overrides.messages ?? [],
-    sendMessage: mockSendMessage,
     status: overrides.status ?? 'ready',
-    setMessages: mockSetMessages,
-    stop: mockStop,
     error: overrides.error ?? null,
-  } as unknown as ReturnType<typeof useChat>)
+    isGenerating,
+    stop: mockStop,
+    handleGenerate: mockHandleGenerate,
+    handleRegenerate: mockHandleRegenerate,
+    handleDeleteDoc: mockHandleDeleteDoc,
+  } as unknown as ReturnType<typeof useDocsEngine>)
 
   vi.mocked(useIsMobile).mockReturnValue(overrides.isMobile ?? false)
 
@@ -175,24 +219,19 @@ function setupMocks(overrides: SetupOptions = {}) {
     )
   }
 
-  return { mockStop, mockSendMessage, mockSetMessages }
+  return { mockStop, mockHandleGenerate, mockHandleRegenerate, mockHandleDeleteDoc }
 }
 
-/** Re-render helper: transition useChat from streaming→ready to save a doc */
-function transitionToReady(
-  rerender: (ui: React.ReactElement) => void,
-  assistantMsg: ReturnType<typeof makeAssistantMessage>,
-  extras: Partial<ReturnType<typeof setupMocks>> = {},
-) {
-  vi.mocked(useChat).mockReturnValue({
-    messages: [assistantMsg],
-    sendMessage: extras.mockSendMessage ?? vi.fn(),
-    status: 'ready',
-    setMessages: extras.mockSetMessages ?? vi.fn(),
-    stop: vi.fn(),
-    error: null,
-  } as unknown as ReturnType<typeof useChat>)
-  rerender(<DocViewer />)
+/** Helper: produce a saved doc for tests that need an existing document visible */
+function makeSavedDoc(overrides: Partial<{ id: string; type: string; title: string; messages: ReturnType<typeof makeAssistantMessage>[]; createdAt: Date; targetFile: string; customPrompt: string }> = {}) {
+  return {
+    id: 'doc-1',
+    type: 'architecture',
+    title: 'Architecture Overview',
+    messages: [makeAssistantMessage('# Doc Content')],
+    createdAt: new Date(),
+    ...overrides,
+  }
 }
 
 // ---------- Tests ----------
@@ -296,20 +335,20 @@ describe('DocViewer', () => {
   // 4. Delete Confirmation
   // ================================================================
   describe('Delete Confirmation', () => {
-    async function renderWithDoc() {
-      const assistantMsg = makeAssistantMessage('# Doc', 'del-msg')
+    function renderWithDoc() {
+      const doc = makeSavedDoc()
       const mocks = setupMocks({
-        status: 'streaming',
-        messages: [assistantMsg],
+        generatedDocs: [doc],
+        activeDocId: 'doc-1',
+        showNewDoc: false,
       })
-      const { rerender } = render(<DocViewer />)
-      transitionToReady(rerender, assistantMsg, mocks)
-      return { rerender, mocks }
+      render(<DocViewer />)
+      return { mocks }
     }
 
     it('opens AlertDialog when delete icon is clicked', async () => {
       const user = userEvent.setup()
-      await renderWithDoc()
+      renderWithDoc()
 
       // There should be a doc row in the sidebar with a delete trigger
       const docRow = document.querySelector('[role="button"]')
@@ -326,7 +365,7 @@ describe('DocViewer', () => {
 
     it('does NOT delete doc when Cancel is clicked', async () => {
       const user = userEvent.setup()
-      await renderWithDoc()
+      renderWithDoc()
 
       const docRow = document.querySelector('[role="button"]')
       const innerButton = docRow!.querySelector('button')
@@ -337,9 +376,9 @@ describe('DocViewer', () => {
       expect(document.querySelector('[role="button"]')).not.toBeNull()
     })
 
-    it('removes doc when Delete is confirmed', async () => {
+    it('calls handleDeleteDoc when Delete is confirmed', async () => {
       const user = userEvent.setup()
-      await renderWithDoc()
+      const { mocks } = renderWithDoc()
 
       const docRow = document.querySelector('[role="button"]')
       const innerButton = docRow!.querySelector('button')
@@ -349,8 +388,7 @@ describe('DocViewer', () => {
       const deleteBtn = screen.getByRole('button', { name: /^delete$/i })
       await user.click(deleteBtn)
 
-      // Doc row should be removed
-      expect(document.querySelector('[role="button"]')).toBeNull()
+      expect(mocks.mockHandleDeleteDoc).toHaveBeenCalledWith('doc-1')
     })
   })
 
@@ -449,10 +487,13 @@ describe('DocViewer', () => {
         configurable: true,
       })
 
-      const msg = makeAssistantMessage('# Hello World')
-      const mocks = setupMocks({ status: 'streaming', messages: [msg] })
-      const { rerender } = render(<DocViewer />)
-      transitionToReady(rerender, msg, mocks)
+      const doc = makeSavedDoc({ messages: [makeAssistantMessage('# Hello World')] })
+      setupMocks({
+        generatedDocs: [doc],
+        activeDocId: 'doc-1',
+        showNewDoc: false,
+      })
+      render(<DocViewer />)
 
       await user.click(screen.getByTitle('Copy to clipboard'))
       expect(writeTextMock).toHaveBeenCalledWith('# Hello World')
@@ -515,28 +556,28 @@ describe('DocViewer', () => {
   // ================================================================
   describe('Regenerate', () => {
     it('shows Regenerate button on completed doc view', () => {
-      const msg = makeAssistantMessage('# Done')
-      const mocks = setupMocks({ status: 'streaming', messages: [msg] })
-      const { rerender } = render(<DocViewer />)
-      transitionToReady(rerender, msg, mocks)
+      const doc = makeSavedDoc()
+      setupMocks({
+        generatedDocs: [doc],
+        activeDocId: 'doc-1',
+        showNewDoc: false,
+      })
+      render(<DocViewer />)
       expect(screen.getByTitle('Regenerate')).toBeInTheDocument()
     })
 
-    it('calls sendMessage when clicked', async () => {
-      vi.useFakeTimers({ shouldAdvanceTime: true })
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
-
-      const msg = makeAssistantMessage('# Done')
-      const mocks = setupMocks({ status: 'streaming', messages: [msg] })
-      const { rerender } = render(<DocViewer />)
-      transitionToReady(rerender, msg, mocks)
+    it('calls handleRegenerate when clicked', async () => {
+      const user = userEvent.setup()
+      const doc = makeSavedDoc()
+      const mocks = setupMocks({
+        generatedDocs: [doc],
+        activeDocId: 'doc-1',
+        showNewDoc: false,
+      })
+      render(<DocViewer />)
 
       await user.click(screen.getByTitle('Regenerate'))
-      await act(async () => {
-        vi.advanceTimersByTime(100)
-      })
-      expect(mocks.mockSendMessage).toHaveBeenCalled()
-      vi.useRealTimers()
+      expect(mocks.mockHandleRegenerate).toHaveBeenCalledWith(doc)
     })
   })
 

@@ -16,89 +16,31 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { useIsMobile } from '@/hooks/use-mobile'
-import { useAPIKeys, useRepository } from '@/providers'
-import { useChat } from '@ai-sdk/react'
-import { DefaultChatTransport } from 'ai'
+import { useAPIKeys, useRepository, useDocs } from '@/providers'
 import type { UIMessage } from 'ai'
 import { isToolUIPart, getToolName } from 'ai'
-import { buildFileTreeString } from '@/lib/github/fetcher'
 import { flattenFiles } from '@/lib/code/code-index'
 import { downloadFile } from '@/lib/export'
 import { MarkdownRenderer } from '@/components/ui/markdown-renderer'
-import type { FileNode } from '@/types/repository'
+import {
+  DOC_PRESETS,
+  getAssistantText,
+  type DocType,
+  type GeneratedDoc,
+} from '@/providers/docs-provider'
+import { useDocsEngine } from '@/hooks/use-docs-engine'
 
-type DocType = 'architecture' | 'setup' | 'api-reference' | 'file-explanation' | 'custom'
-
-interface DocPreset {
-  id: DocType
-  label: string
-  description: string
-  icon: React.ReactNode
-  prompt: string
+// Icon mapping for doc presets (kept in the UI layer)
+const DOC_PRESET_ICONS: Record<DocType, React.ReactNode> = {
+  'architecture': <BookOpen className="h-5 w-5" />,
+  'setup': <Rocket className="h-5 w-5" />,
+  'api-reference': <Code className="h-5 w-5" />,
+  'file-explanation': <FileCode className="h-5 w-5" />,
+  'custom': <MessageSquare className="h-5 w-5" />,
 }
 
-const DOC_PRESETS: DocPreset[] = [
-  {
-    id: 'architecture',
-    label: 'Architecture Overview',
-    description: 'How the project is structured, modules, data flow, and design decisions',
-    icon: <BookOpen className="h-5 w-5" />,
-    prompt: 'Generate a comprehensive architecture overview for this codebase. Cover the high-level structure, key modules, data flow, and notable design decisions.',
-  },
-  {
-    id: 'setup',
-    label: 'Setup / Getting Started',
-    description: 'Installation, configuration, and how to run the project locally',
-    icon: <Rocket className="h-5 w-5" />,
-    prompt: 'Generate a Getting Started guide for this project. Include prerequisites, installation steps, configuration (env vars, etc.), and how to run it locally.',
-  },
-  {
-    id: 'api-reference',
-    label: 'API Reference',
-    description: 'Exported functions, classes, types, and interfaces with signatures',
-    icon: <Code className="h-5 w-5" />,
-    prompt: 'Generate an API reference documenting all significant exported functions, classes, types, and interfaces. Include type signatures, parameter descriptions, and usage examples.',
-  },
-  {
-    id: 'file-explanation',
-    label: 'Explain a File',
-    description: 'Deep explanation of a specific file -- purpose, logic, and how it fits',
-    icon: <FileCode className="h-5 w-5" />,
-    prompt: '', // set dynamically based on selected file
-  },
-  {
-    id: 'custom',
-    label: 'Custom Prompt',
-    description: 'Ask the AI to generate any docs you need',
-    icon: <MessageSquare className="h-5 w-5" />,
-    prompt: '',
-  },
-]
-
-interface GeneratedDoc {
-  id: string
-  type: DocType
-  title: string
-  messages: UIMessage[]
-  createdAt: Date
-  targetFile?: string
-  customPrompt?: string
-}
-
-/** Extracts all assistant text from chat messages. */
-function getAssistantText(messages: UIMessage[]): string {
-  return messages
-    .filter(m => m.role === 'assistant')
-    .flatMap(m => m.parts?.filter((p): p is { type: 'text'; text: string } => p.type === 'text').map(p => p.text) || [])
-    .join('')
-}
-
-function buildDocPrompt(preset: DocPreset, targetFile: string | null, customPrompt: string): string {
-  if (preset.id === 'file-explanation' && targetFile) {
-    return `Explain this file in detail: \`${targetFile}\`. Cover its purpose, how it fits in the architecture, key functions/classes, and walk through the main logic.`
-  }
-  if (preset.id === 'custom') return customPrompt
-  return preset.prompt
+function getPresetIcon(id: DocType): React.ReactNode {
+  return DOC_PRESET_ICONS[id] ?? <FileText className="h-5 w-5" />
 }
 
 interface DocViewerProps {
@@ -106,17 +48,23 @@ interface DocViewerProps {
 }
 
 export function DocViewer({ className }: DocViewerProps) {
-  const { selectedModel, apiKeys, getValidProviders } = useAPIKeys()
-  const { repo, files, codeIndex } = useRepository()
+  const { selectedModel, getValidProviders } = useAPIKeys()
+  const { repo, files } = useRepository()
+  const { activeDocId, setActiveDocId, showNewDoc, setShowNewDoc, generatedDocs } = useDocs()
+  const {
+    messages,
+    status,
+    error,
+    isGenerating,
+    stop,
+    handleGenerate,
+    handleRegenerate,
+    handleDeleteDoc,
+  } = useDocsEngine()
 
   const hasValidKey = getValidProviders().length > 0 && selectedModel
 
-  // All generated docs
-  const [generatedDocs, setGeneratedDocs] = useState<GeneratedDoc[]>([])
-  const [activeDocId, setActiveDocId] = useState<string | null>(null)
-
-  // New doc generation state
-  const [showNewDoc, setShowNewDoc] = useState(true)
+  // --- Local UI state (does NOT need persistence) ---
   const [selectedPreset, setSelectedPreset] = useState<DocType | null>(null)
   const [customPrompt, setCustomPrompt] = useState('')
   const [targetFile, setTargetFile] = useState<string | null>(null)
@@ -139,107 +87,6 @@ export function DocViewer({ className }: DocViewerProps) {
     return allFiles.filter(f => f.path.toLowerCase().includes(q) || f.name.toLowerCase().includes(q)).slice(0, FILE_LIMIT)
   }, [allFiles, fileSearchQuery])
 
-  // Repo context for AI -- includes file tree for orientation
-  const repoContext = useMemo(() => {
-    if (!repo || files.length === 0) return undefined
-    return {
-      name: repo.fullName,
-      description: repo.description || 'No description',
-      structure: buildFileTreeString(files),
-    }
-  }, [repo, files])
-
-  // Build a map of all indexed file contents for the AI to browse via tools
-  const fileContentsMap = useMemo(() => {
-    const map: Record<string, string> = {}
-    if (codeIndex?.files) {
-      for (const [path, file] of codeIndex.files) {
-        if (file.content) map[path] = file.content
-      }
-    }
-    return map
-  }, [codeIndex])
-
-  // Use refs to capture current generation context -- avoids stale closures in transport
-  const genContextRef = useRef<{
-    docType: DocType
-    targetFile: string | null
-    customPrompt: string
-  }>({ docType: 'architecture', targetFile: null, customPrompt: '' })
-  const isSubmittingRef = useRef(false)
-  const sendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  // Transport for the active generation -- sends file contents for tool access
-  const transport = useMemo(() => {
-    if (!selectedModel || !hasValidKey || !repoContext) return undefined
-    return new DefaultChatTransport({
-      api: '/api/docs/generate',
-      prepareSendMessagesRequest: ({ messages }) => {
-        const ctx = genContextRef.current
-        return {
-          body: {
-            messages,
-            provider: selectedModel.provider,
-            model: selectedModel.id,
-            apiKey: apiKeys[selectedModel.provider].key,
-            docType: ctx.docType,
-            repoContext,
-            fileContents: fileContentsMap,
-            targetFile: ctx.targetFile,
-          },
-        }
-      },
-    })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedModel, hasValidKey, apiKeys, repoContext, fileContentsMap])
-
-  const { messages, sendMessage, status, setMessages, stop, error } = useChat({
-    transport: transport ?? undefined,
-    id: 'docs-generator',
-  })
-
-  const isGenerating = status === 'streaming' || status === 'submitted'
-
-  useEffect(() => {
-    return () => {
-      if (sendTimerRef.current) clearTimeout(sendTimerRef.current)
-    }
-  }, [])
-
-  // When generation completes, save the doc
-  const prevStatus = useRef(status)
-  useEffect(() => {
-    if ((prevStatus.current === 'streaming' || prevStatus.current === 'submitted') && status === 'ready' && messages.length > 0) {
-      isSubmittingRef.current = false
-      const ctx = genContextRef.current
-      const preset = DOC_PRESETS.find(p => p.id === ctx.docType)
-      const docId = `doc-${Date.now()}`
-      const title = ctx.docType === 'file-explanation' && ctx.targetFile
-        ? `${ctx.targetFile.split('/').pop()} Explained`
-        : ctx.docType === 'custom'
-          ? ctx.customPrompt.slice(0, 50) + (ctx.customPrompt.length > 50 ? '...' : '')
-          : preset?.label || 'Documentation'
-
-      const newDoc: GeneratedDoc = {
-        id: docId,
-        type: ctx.docType,
-        title,
-        messages: [...messages],
-        createdAt: new Date(),
-        targetFile: ctx.targetFile || undefined,
-        customPrompt: ctx.customPrompt || undefined,
-      }
-
-      setGeneratedDocs(prev => [newDoc, ...prev])
-      setActiveDocId(docId)
-      setShowNewDoc(false)
-      setSelectedPreset(null)
-      setCustomPrompt('')
-      setTargetFile(null)
-    }
-    prevStatus.current = status
-  }, [status, messages])
-
   // Auto-scroll during streaming — only when user is near the bottom
   useEffect(() => {
     if (isGenerating && contentRef.current) {
@@ -251,9 +98,10 @@ export function DocViewer({ className }: DocViewerProps) {
     }
   }, [messages, isGenerating])
 
-  const handleGenerate = (preset: DocPreset) => {
-    if (!hasValidKey || !repoContext || !transport) return
-    if (isGenerating || isSubmittingRef.current) return
+  // --- Local handlers (bridge local UI state → engine) ---
+
+  const onGenerate = (preset: (typeof DOC_PRESETS)[number]) => {
+    if (!hasValidKey) return
 
     if (preset.id === 'file-explanation' && !targetFile) {
       setSelectedPreset('file-explanation')
@@ -266,66 +114,21 @@ export function DocViewer({ className }: DocViewerProps) {
       return
     }
 
-    // Snapshot context into ref before sending -- no stale closure issues
-    genContextRef.current = {
-      docType: preset.id,
-      targetFile,
-      customPrompt,
-    }
-
     setSelectedPreset(preset.id)
-    setMessages([])
+    handleGenerate(preset, targetFile, customPrompt)
+  }
 
-    const prompt = buildDocPrompt(preset, targetFile, customPrompt)
-
-    // Let React flush setMessages([]) before sending
-    isSubmittingRef.current = true
-    sendTimerRef.current = setTimeout(() => {
-      sendMessage({ text: prompt })
-      isSubmittingRef.current = false
-    }, 50)
+  const onRegenerate = (doc: GeneratedDoc) => {
+    setTargetFile(doc.targetFile || null)
+    setCustomPrompt(doc.customPrompt || '')
+    setSelectedPreset(doc.type)
+    handleRegenerate(doc)
   }
 
   const handleFileSelect = (path: string) => {
     setTargetFile(path)
     setShowFileSearch(false)
     setFileSearchQuery('')
-  }
-
-  const handleDeleteDoc = (id: string) => {
-    setGeneratedDocs(prev => prev.filter(d => d.id !== id))
-    if (activeDocId === id) {
-      setActiveDocId(null)
-      setShowNewDoc(true)
-    }
-  }
-
-  const handleRegenerate = (doc: GeneratedDoc) => {
-    const preset = DOC_PRESETS.find(p => p.id === doc.type)
-    if (!preset) return
-
-    // Restore context for regeneration
-    setTargetFile(doc.targetFile || null)
-    setCustomPrompt(doc.customPrompt || '')
-    setSelectedPreset(doc.type)
-    setShowNewDoc(true)
-    setActiveDocId(null)
-
-    genContextRef.current = {
-      docType: doc.type,
-      targetFile: doc.targetFile || null,
-      customPrompt: doc.customPrompt || '',
-    }
-
-    setMessages([])
-
-    const prompt = buildDocPrompt(preset, doc.targetFile || null, doc.customPrompt || '')
-
-    isSubmittingRef.current = true
-    sendTimerRef.current = setTimeout(() => {
-      sendMessage({ text: prompt })
-      isSubmittingRef.current = false
-    }, 50)
   }
 
   // --- Render ---
@@ -402,9 +205,7 @@ export function DocViewer({ className }: DocViewerProps) {
         {generatedDocs.length === 0 && (
           <p className="text-[10px] text-text-muted px-3 py-4 text-center">No docs generated yet. Pick a template to get started.</p>
         )}
-        {generatedDocs.map(doc => {
-          const preset = DOC_PRESETS.find(p => p.id === doc.type)
-          return (
+        {generatedDocs.map(doc => (
             <div
               key={doc.id}
               role="button"
@@ -418,7 +219,7 @@ export function DocViewer({ className }: DocViewerProps) {
                 isGenerating && 'pointer-events-none opacity-50'
               )}
             >
-              <span className="text-text-muted shrink-0 mt-0.5">{preset?.icon || <FileText className="h-4 w-4" />}</span>
+              <span className="text-text-muted shrink-0 mt-0.5">{getPresetIcon(doc.type)}</span>
               <div className="flex-1 min-w-0">
                 <p className="text-xs text-text-secondary truncate group-hover:text-text-primary">{doc.title}</p>
                 <p className="text-[10px] text-text-muted">{doc.createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
@@ -452,8 +253,7 @@ export function DocViewer({ className }: DocViewerProps) {
                 </AlertDialogContent>
               </AlertDialog>
             </div>
-          )
-        })}
+          ))}
       </div>
     </>
   )
@@ -534,7 +334,7 @@ export function DocViewer({ className }: DocViewerProps) {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleGenerate(DOC_PRESETS.find(p => p.id === selectedPreset) || DOC_PRESETS[0])}
+                        onClick={() => onGenerate(DOC_PRESETS.find(p => p.id === selectedPreset) || DOC_PRESETS[0])}
                         className="mt-2 h-7 text-xs"
                       >
                         Try Again
@@ -553,7 +353,7 @@ export function DocViewer({ className }: DocViewerProps) {
                               setSelectedPreset('file-explanation')
                               setShowFileSearch(true)
                             } else {
-                              handleGenerate(preset)
+                              onGenerate(preset)
                             }
                           }}
                           disabled={isGenerating}
@@ -566,7 +366,7 @@ export function DocViewer({ className }: DocViewerProps) {
                             isGenerating && 'opacity-50 pointer-events-none'
                           )}
                         >
-                          <span className="text-text-muted shrink-0">{preset.icon}</span>
+                          <span className="text-text-muted shrink-0">{getPresetIcon(preset.id)}</span>
                           <div className="flex-1 min-w-0">
                             <p className="text-sm text-text-primary font-medium">{preset.label}</p>
                             <p className="text-[11px] text-text-muted leading-tight">{preset.description}</p>
@@ -631,7 +431,7 @@ export function DocViewer({ className }: DocViewerProps) {
                             {targetFile && (
                               <Button
                                 size="sm"
-                                onClick={() => handleGenerate(preset)}
+                                onClick={() => onGenerate(preset)}
                                 disabled={isGenerating}
                                 className="mt-2 h-7 text-xs"
                               >
@@ -653,7 +453,7 @@ export function DocViewer({ className }: DocViewerProps) {
                               className="w-full h-20 rounded-lg border border-foreground/10 bg-foreground/[0.02] px-3 py-2 text-xs text-text-primary placeholder:text-text-muted resize-none focus:outline-none focus:border-foreground/20"
                               onKeyDown={e => {
                                 if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && customPrompt.trim()) {
-                                  handleGenerate(preset)
+                                  onGenerate(preset)
                                 }
                               }}
                             />
@@ -661,7 +461,7 @@ export function DocViewer({ className }: DocViewerProps) {
                               <span className="text-[10px] text-text-muted">Ctrl+Enter to generate</span>
                               <Button
                                 size="sm"
-                                onClick={() => handleGenerate(preset)}
+                                onClick={() => onGenerate(preset)}
                                 disabled={isGenerating || !customPrompt.trim()}
                                 className="h-7 text-xs"
                               >
@@ -682,7 +482,7 @@ export function DocViewer({ className }: DocViewerProps) {
           <div ref={contentRef} className="flex-1 overflow-y-auto p-6">
             <div className="max-w-3xl">
               <div className="flex items-center gap-2 mb-4 pb-3 border-b border-foreground/[0.06]">
-                {DOC_PRESETS.find(p => p.id === activeDoc.type)?.icon}
+                {getPresetIcon(activeDoc.type)}
                 <h1 className="text-lg font-semibold text-text-primary flex-1">{activeDoc.title}</h1>
                 {activeDoc.targetFile && (
                   <code className="text-[10px] text-text-muted bg-foreground/[0.04] px-1.5 py-0.5 rounded">{activeDoc.targetFile}</code>
@@ -693,7 +493,7 @@ export function DocViewer({ className }: DocViewerProps) {
                   className="h-8 w-8 text-text-muted hover:text-text-primary shrink-0"
                   title="Regenerate"
                   aria-label="Regenerate this document"
-                  onClick={() => handleRegenerate(activeDoc)}
+                  onClick={() => onRegenerate(activeDoc)}
                   disabled={isGenerating}
                 >
                   <RefreshCw className="h-4 w-4" />

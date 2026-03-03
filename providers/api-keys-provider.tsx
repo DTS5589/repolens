@@ -86,27 +86,30 @@ const APIKeysContext = createContext<APIKeysContextType | null>(null)
 const STORAGE_KEY = 'codedoc-api-keys'
 
 export function APIKeysProvider({ children }: { children: ReactNode }) {
-  const [apiKeys, setAPIKeys] = useState<APIKeysState>(defaultAPIKeysState)
+  const [apiKeys, setAPIKeys] = useState<APIKeysState>(() => {
+    if (typeof window === 'undefined') return defaultAPIKeysState
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY)
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        return parsed
+      }
+    } catch {
+      // Invalid stored data, use defaults
+    }
+    return defaultAPIKeysState
+  })
   const [models, setModels] = useState<ProviderModel[]>([])
   const [isLoadingModels, setIsLoadingModels] = useState(false)
   const [selectedModel, setSelectedModel] = useState<ProviderModel | null>(null)
   const selectedModelRef = useRef<ProviderModel | null>(null)
 
+  // Ref to always have current apiKeys for internal use
+  const apiKeysRef = useRef(apiKeys)
+  useEffect(() => { apiKeysRef.current = apiKeys }, [apiKeys])
+
   // Keep ref in sync with state so callbacks can read current value without re-creation
   useEffect(() => { selectedModelRef.current = selectedModel }, [selectedModel])
-
-  // Load keys from localStorage on mount
-  useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored)
-        setAPIKeys(parsed)
-      } catch {
-        // Invalid stored data, use defaults
-      }
-    }
-  }, [])
 
   // Save keys to localStorage when changed
   useEffect(() => {
@@ -134,7 +137,7 @@ export function APIKeysProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const validateAPIKey = useCallback(async (provider: AIProvider): Promise<boolean> => {
-    const key = apiKeys[provider].key
+    const key = apiKeysRef.current[provider].key
     if (!key) return false
 
     try {
@@ -193,13 +196,12 @@ export function APIKeysProvider({ children }: { children: ReactNode }) {
       }))
       return false
     }
-  }, [apiKeys])
+  }, [])
 
-  const fetchModels = useCallback(async (provider: AIProvider): Promise<ProviderModel[]> => {
-    const key = apiKeys[provider].key
+  const fetchModelsInternal = useCallback(async (provider: AIProvider): Promise<ProviderModel[]> => {
+    const key = apiKeysRef.current[provider].key
     if (!key) return []
 
-    setIsLoadingModels(true)
     try {
       const response = await fetch(`/api/models/${provider}`, {
         method: 'POST',
@@ -207,7 +209,18 @@ export function APIKeysProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({ apiKey: key }),
       })
 
-      if (!response.ok) return []
+      if (!response.ok) {
+        // Mark invalid on failure
+        setAPIKeys(prev => ({
+          ...prev,
+          [provider]: {
+            ...prev[provider],
+            isValid: false,
+            lastValidated: new Date(),
+          },
+        }))
+        return []
+      }
 
       const data = await response.json()
       const providerModels: ProviderModel[] = (data.models || []).map((m: ModelResponseItem) => ({
@@ -222,6 +235,16 @@ export function APIKeysProvider({ children }: { children: ReactNode }) {
         return [...filtered, ...providerModels]
       })
 
+      // Mark valid
+      setAPIKeys(prev => ({
+        ...prev,
+        [provider]: {
+          ...prev[provider],
+          isValid: true,
+          lastValidated: new Date(),
+        },
+      }))
+
       // Auto-select a default model if none is currently selected
       if (!selectedModelRef.current) {
         const defaultModel = findDefaultModel(providerModels, provider)
@@ -233,11 +256,54 @@ export function APIKeysProvider({ children }: { children: ReactNode }) {
 
       return providerModels
     } catch {
+      // Mark invalid on failure
+      setAPIKeys(prev => ({
+        ...prev,
+        [provider]: {
+          ...prev[provider],
+          isValid: false,
+          lastValidated: new Date(),
+        },
+      }))
       return []
+    }
+  }, []) // No dependencies — reads from refs
+
+  const fetchModels = useCallback(async (provider: AIProvider): Promise<ProviderModel[]> => {
+    setIsLoadingModels(true)
+    try {
+      return await fetchModelsInternal(provider)
     } finally {
       setIsLoadingModels(false)
     }
-  }, [apiKeys])
+  }, [fetchModelsInternal])
+
+  // Auto-fetch models on mount for providers with stored keys
+  const hasAutoFetched = useRef(false)
+
+  useEffect(() => {
+    if (hasAutoFetched.current) return
+    hasAutoFetched.current = true
+
+    // Find all providers that have a stored key
+    const providersWithKeys = (Object.keys(apiKeys) as AIProvider[]).filter(
+      provider => apiKeys[provider].key.length > 0
+    )
+
+    if (providersWithKeys.length === 0) return
+
+    // Fetch models for all providers with keys in parallel
+    const fetchAll = async () => {
+      setIsLoadingModels(true)
+      try {
+        await Promise.all(providersWithKeys.map(provider => fetchModelsInternal(provider)))
+      } finally {
+        setIsLoadingModels(false)
+      }
+    }
+    fetchAll()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // Intentionally empty — runs once on mount with sync-loaded apiKeys
 
   const getValidProviders = useCallback((): AIProvider[] => {
     return (Object.keys(apiKeys) as AIProvider[]).filter(
