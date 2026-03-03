@@ -3,11 +3,13 @@
 import { useState } from "react"
 import { useSession } from "next-auth/react"
 import { Button } from "@/components/ui/button"
-import { Code2, GitFork, Github, Settings } from "lucide-react"
+import { Code2, GitCompareArrows, GitFork, Github, Settings } from "lucide-react"
+import Link from "next/link"
 import { SettingsModal } from "@/components/features/settings/settings-modal"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { AuthButton } from "@/components/features/auth/auth-button"
 import { UserMenu } from "@/components/features/auth/user-menu"
+import { ExportMenu } from "@/components/features/export/export-menu"
 import { useAPIKeys } from "@/providers"
 
 interface HeaderProps {
@@ -25,11 +27,19 @@ export function Header({ className }: HeaderProps) {
   return (
     <>
       <header className={`flex h-11 items-center bg-primary-background border-b border-foreground/[0.06] px-4 justify-between ${className || ''}`}>
-        <div className="flex items-center">
+        <div className="flex items-center gap-2">
           <Code2 className="h-5 w-5 text-text-primary" />
+          <Link
+            href="/compare"
+            className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-text-secondary hover:text-text-primary hover:bg-foreground/5 transition-colors"
+          >
+            <GitCompareArrows className="h-3.5 w-3.5" />
+            Compare
+          </Link>
         </div>
         <div className="flex items-center gap-1">
           {session ? <UserMenu /> : <AuthButton />}
+          <ExportMenu />
           <ThemeToggle />
           <Button
             variant="ghost"

@@ -12,6 +12,7 @@ import { CodeBrowser } from "@/components/features/code/code-browser"
 import { DocViewer } from "@/components/features/docs/doc-viewer"
 import { DiagramViewer } from "@/components/features/diagrams/diagram-viewer"
 import { IssuesPanel } from "@/components/features/issues/issues-panel"
+import { parseShareableUrl, updateUrlState, clearUrlState } from "@/lib/export"
 
 
 
@@ -88,6 +89,27 @@ export function PreviewPanel({ className }: { className?: string }) {
   ]
   const [activeTab, setActiveTab] = useState("repo")
   const [repoUrl, setRepoUrl] = useState("")
+
+  // Shareable URL: auto-connect from URL params on mount
+  const hasAutoLoaded = useRef(false)
+  useEffect(() => {
+    if (hasAutoLoaded.current || repo) return
+    const shared = parseShareableUrl()
+    if (!shared) return
+    hasAutoLoaded.current = true
+    setRepoUrl(shared.repoUrl)
+    connectRepository(shared.repoUrl)
+    if (shared.view) setActiveTab(shared.view)
+  }, [repo, connectRepository])
+
+  // Shareable URL: sync URL bar when repo or tab changes
+  useEffect(() => {
+    if (repo) {
+      updateUrlState({ repoUrl: repo.url, view: activeTab as 'repo' | 'issues' | 'docs' | 'diagram' | 'code' })
+    } else if (!isConnecting) {
+      clearUrlState()
+    }
+  }, [repo, activeTab, isConnecting])
 
 
   const handleConnect = async () => {
