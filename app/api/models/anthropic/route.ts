@@ -4,10 +4,8 @@ import { apiKeyRequestSchema } from '@/types/types'
 // Anthropic doesn't have a models endpoint, so we validate the key
 // and return known available models
 const ANTHROPIC_MODELS = [
-  { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet', contextLength: 200000 },
-  { id: 'claude-3-5-haiku-20241022', name: 'Claude 3.5 Haiku', contextLength: 200000 },
-  { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus', contextLength: 200000 },
-  { id: 'claude-3-sonnet-20240229', name: 'Claude 3 Sonnet', contextLength: 200000 },
+  { id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4', contextLength: 200000 },
+  { id: 'claude-opus-4-20250514', name: 'Claude Opus 4', contextLength: 200000 },
   { id: 'claude-3-haiku-20240307', name: 'Claude 3 Haiku', contextLength: 200000 },
 ]
 

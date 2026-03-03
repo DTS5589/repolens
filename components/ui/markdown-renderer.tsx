@@ -1,9 +1,9 @@
 "use client"
 
-import ReactMarkdown from "react-markdown"
+import ReactMarkdown, { type Components } from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { useTheme } from "next-themes"
-import { useState, useEffect } from "react"
+import { useState, useEffect, memo } from "react"
 import { cn } from "@/lib/utils"
 import type { BundledLanguage, BundledTheme, HighlighterGeneric } from "shiki"
 
@@ -153,6 +153,34 @@ function InlineCode({ children }: { children: React.ReactNode }) {
 }
 
 // ---------------------------------------------------------------------------
+// Stable props for ReactMarkdown — defined at module level to prevent
+// cascading re-renders during streaming when these objects are re-created.
+// ---------------------------------------------------------------------------
+
+const REMARK_PLUGINS = [remarkGfm]
+
+const MARKDOWN_COMPONENTS: Components = {
+  code({ className: codeClassName, children }) {
+    const match = /language-(\w+)/.exec(codeClassName || "")
+    const isBlock = Boolean(match || codeClassName)
+
+    if (isBlock) {
+      return (
+        <CodeBlock language={match?.[1]}>
+          {String(children).replace(/\n$/, "")}
+        </CodeBlock>
+      )
+    }
+
+    return <InlineCode>{children}</InlineCode>
+  },
+  pre({ children }) {
+    // react-markdown wraps code blocks in <pre>. CodeBlock handles its own <pre>.
+    return <>{children}</>
+  },
+}
+
+// ---------------------------------------------------------------------------
 // MarkdownRenderer — shared by Chat and Docs
 // ---------------------------------------------------------------------------
 
@@ -163,7 +191,10 @@ interface MarkdownRendererProps {
   className?: string
 }
 
-export function MarkdownRenderer({ content, className }: MarkdownRendererProps) {
+export const MarkdownRenderer = memo(function MarkdownRenderer({
+  content,
+  className,
+}: MarkdownRendererProps) {
   return (
     <div
       className={cn(
@@ -198,30 +229,11 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
       )}
     >
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={{
-          code({ className: codeClassName, children }) {
-            const match = /language-(\w+)/.exec(codeClassName || "")
-            const isBlock = Boolean(match || codeClassName)
-
-            if (isBlock) {
-              return (
-                <CodeBlock language={match?.[1]}>
-                  {String(children).replace(/\n$/, "")}
-                </CodeBlock>
-              )
-            }
-
-            return <InlineCode>{children}</InlineCode>
-          },
-          pre({ children }) {
-            // react-markdown wraps code blocks in <pre>. CodeBlock handles its own <pre>.
-            return <>{children}</>
-          },
-        }}
+        remarkPlugins={REMARK_PLUGINS}
+        components={MARKDOWN_COMPONENTS}
       >
         {content}
       </ReactMarkdown>
     </div>
   )
-}
+})

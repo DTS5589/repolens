@@ -41,39 +41,38 @@ export function ChatSidebar({ className }: { className?: string }) {
     return map
   }, [codeIndex])
 
-  // Create transport with file contents for tool-based exploration
-  const transport = useMemo(() => {
-    if (!selectedModel || !hasValidKey) return undefined
-    
-    return new DefaultChatTransport({
-      api: '/api/chat',
-      prepareSendMessagesRequest: ({ messages }) => ({
-        body: {
-          messages,
-          provider: selectedModel.provider,
-          model: selectedModel.id,
-          apiKey: apiKeys[selectedModel.provider].key,
-          repoContext,
-          fileContents: fileContentsMap,
-        },
-      }),
-    })
-  }, [selectedModel, hasValidKey, apiKeys, repoContext, fileContentsMap])
+  // Create a stable transport — always available so the Chat instance
+  // created by useChat is never initialised with transport: undefined.
+  const transport = useMemo(
+    () => new DefaultChatTransport({ api: '/api/chat' }),
+    [],
+  )
 
   const { messages, sendMessage, status, error } = useChat({
-    transport: transport ?? undefined,
+    transport,
     id: 'codedoc-chat',
   })
 
   const isLoading = status === 'streaming' || status === 'submitted'
 
   const handleSubmit = () => {
-    if (!input.trim() || isLoading || !hasValidKey || !transport) return
+    if (!input.trim() || isLoading || !hasValidKey || !selectedModel) return
 
     const currentInput = input.trim()
     setInput("")
     
-    sendMessage({ text: currentInput })
+    sendMessage(
+      { text: currentInput },
+      {
+        body: {
+          provider: selectedModel.provider,
+          model: selectedModel.id,
+          apiKey: apiKeys[selectedModel.provider].key,
+          repoContext,
+          fileContents: fileContentsMap,
+        },
+      },
+    )
   }
 
   return (

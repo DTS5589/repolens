@@ -16,7 +16,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer"
-import { useState } from "react"
+import { memo, useState } from "react"
 import type { UIMessage } from "ai"
 import { isToolUIPart, getToolName } from "ai"
 
@@ -114,7 +114,7 @@ interface ChatMessageProps {
   className?: string
 }
 
-export function ChatMessage({ message, className }: ChatMessageProps) {
+export const ChatMessage = memo(function ChatMessage({ message, className }: ChatMessageProps) {
   const isUser = message.role === "user"
   const isAssistant = message.role === "assistant"
 
@@ -191,4 +191,4 @@ export function ChatMessage({ message, className }: ChatMessageProps) {
       )}
     </div>
   )
-}
+})
