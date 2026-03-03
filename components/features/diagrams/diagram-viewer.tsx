@@ -20,8 +20,9 @@ import {
   type DiagramStats,
   type AvailableDiagram,
 } from '@/lib/diagrams/diagram-data'
-import { analyzeCodebase, type FullAnalysis } from '@/lib/code/import-parser'
+import type { FullAnalysis } from '@/lib/code/import-parser'
 import type { CodeIndex } from '@/lib/code/code-index'
+import { useRepository } from '@/providers'
 import {
   Download, Network, GitBranch, Boxes, ZoomIn, ZoomOut, RotateCcw,
   Route, Component, SquareStack, Package, AlertTriangle, ArrowRight,
@@ -291,8 +292,7 @@ function StatsBar({ stats, topology }: { stats: DiagramStats; topology?: { clust
 
 export function DiagramViewer({ files, codeIndex, className, onNavigateToFile }: DiagramViewerProps) {
   const [selectedType, setSelectedType] = useState<DiagramType>('topology')
-  const [isAnalyzing, setIsAnalyzing] = useState(false)
-  const [analysis, setAnalysis] = useState<FullAnalysis | null>(null)
+  const { codebaseAnalysis: analysis } = useRepository()
   const mermaidRef = useRef<MermaidDiagramHandle>(null)
 
   // Focus mode
@@ -319,18 +319,6 @@ export function DiagramViewer({ files, codeIndex, className, onNavigateToFile }:
     observer.observe(containerRef.current)
     return () => observer.disconnect()
   }, [])
-
-  // Run analysis when codeIndex changes
-  useEffect(() => {
-    if (codeIndex.totalFiles === 0) { setAnalysis(null); return }
-    setIsAnalyzing(true)
-    const timer = setTimeout(() => {
-      const result = analyzeCodebase(codeIndex)
-      setAnalysis(result)
-      setIsAnalyzing(false)
-    }, 50)
-    return () => clearTimeout(timer)
-  }, [codeIndex])
 
   // Dynamic available tabs
   const availableDiagrams = useMemo<AvailableDiagram[]>(() => {
@@ -527,7 +515,7 @@ export function DiagramViewer({ files, codeIndex, className, onNavigateToFile }:
       )}
 
       {/* Content */}
-      {isAnalyzing && !diagram ? (
+      {!analysis && codeIndex.totalFiles > 0 && !diagram ? (
         <div className="flex-1 flex items-center justify-center">
           <div className="flex flex-col items-center gap-3">
             <Loader2 className="h-6 w-6 animate-spin text-text-secondary" />

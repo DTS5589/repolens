@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo } from 'react'
 import type { CodeIndex } from '@/lib/code/code-index'
-import { analyzeCodebase, type FullAnalysis } from '@/lib/code/import-parser'
+import type { FullAnalysis } from '@/lib/code/import-parser'
 import { scanIssues, type ScanResults, type CodeIssue, type IssueSeverity, type IssueCategory, type HealthGrade } from '@/lib/code/issue-scanner'
+import { useRepository } from '@/providers'
 import { cn } from '@/lib/utils'
 import {
   Shield, AlertTriangle, Info, ChevronRight, ChevronDown, FileCode2,
@@ -41,15 +42,7 @@ export function IssuesPanel({ codeIndex, onNavigateToFile }: IssuesPanelProps) {
   const [filter, setFilter] = useState<FilterMode>('all')
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
   const [expandedIssues, setExpandedIssues] = useState<Set<string>>(new Set())
-  const [analysis, setAnalysis] = useState<FullAnalysis | null>(null)
-
-  useEffect(() => {
-    if (codeIndex.totalFiles === 0) { setAnalysis(null); return }
-    const timer = setTimeout(() => {
-      setAnalysis(analyzeCodebase(codeIndex))
-    }, 50)
-    return () => clearTimeout(timer)
-  }, [codeIndex])
+  const { codebaseAnalysis: analysis } = useRepository()
 
   const results: ScanResults | null = useMemo(() => {
     if (codeIndex.totalFiles === 0) return null

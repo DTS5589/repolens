@@ -1,14 +1,15 @@
 "use client"
 
-import { useMemo, useEffect, useState } from 'react'
+import { useMemo, useState } from 'react'
 import {
   AlertTriangle, ArrowRight, Target, ChevronRight, Link2,
   FileWarning, Activity, Loader2, Package,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { generateProjectSummary, type ProjectSummary } from '@/lib/diagrams/diagram-data'
-import { analyzeCodebase, type FullAnalysis } from '@/lib/code/import-parser'
+import type { FullAnalysis } from '@/lib/code/import-parser'
 import type { CodeIndex } from '@/lib/code/code-index'
+import { useRepository } from '@/providers'
 
 // ---------------------------------------------------------------------------
 // Language colors + labels
@@ -381,19 +382,7 @@ interface ProjectSummaryPanelProps {
 }
 
 export function ProjectSummaryPanel({ codeIndex, onNavigateToFile }: ProjectSummaryPanelProps) {
-  const [analysis, setAnalysis] = useState<FullAnalysis | null>(null)
-  const [isAnalyzing, setIsAnalyzing] = useState(false)
-
-  useEffect(() => {
-    if (codeIndex.totalFiles === 0) { setAnalysis(null); return }
-    setIsAnalyzing(true)
-    const timer = setTimeout(() => {
-      const result = analyzeCodebase(codeIndex)
-      setAnalysis(result)
-      setIsAnalyzing(false)
-    }, 50)
-    return () => clearTimeout(timer)
-  }, [codeIndex])
+  const { codebaseAnalysis: analysis } = useRepository()
 
   const summaryData = useMemo<ProjectSummary | null>(() => {
     if (!analysis) return null
@@ -401,7 +390,7 @@ export function ProjectSummaryPanel({ codeIndex, onNavigateToFile }: ProjectSumm
     return result.data
   }, [analysis, codeIndex])
 
-  if (isAnalyzing || !summaryData) {
+  if (!summaryData) {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="flex flex-col items-center gap-3">

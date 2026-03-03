@@ -24,7 +24,6 @@ import { useReplace } from "./hooks/use-replace"
 import { useDownloads } from "./hooks/use-downloads"
 import { FileTreeNode, type FileIssueCounts } from "./file-tree-node"
 import { scanIssues } from "@/lib/code/issue-scanner"
-import { analyzeCodebase } from "@/lib/code/import-parser"
 import { CodeEditor } from "./code-editor"
 import { SearchResultItem } from "./search-result-item"
 import { SearchSidebar } from "./search-sidebar"
@@ -32,7 +31,7 @@ import { SymbolOutline } from "./symbol-outline"
 import { useSymbolExtraction } from "./hooks/use-symbol-extraction"
 
 export function CodeBrowser({ navigateToFile, onNavigateComplete }: CodeBrowserProps) {
-  const { repo, files, codeIndex, updateCodeIndex, indexingProgress: sharedIndexingProgress, modifiedContents, setModifiedContents, getFileContent } = useRepository()
+  const { repo, files, codeIndex, updateCodeIndex, indexingProgress: sharedIndexingProgress, modifiedContents, setModifiedContents, getFileContent, codebaseAnalysis } = useRepository()
 
   // Sidebar state
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>('explorer')
@@ -152,10 +151,9 @@ export function CodeBrowser({ navigateToFile, onNavigateComplete }: CodeBrowserP
   // Compute lightweight issue-count-by-file map for tree badges
   const issueCountByFile = useMemo<Map<string, FileIssueCounts>>(() => {
     const map = new Map<string, FileIssueCounts>()
-    if (codeIndex.totalFiles === 0) return map
+    if (codeIndex.totalFiles === 0 || !codebaseAnalysis) return map
     try {
-      const analysis = analyzeCodebase(codeIndex)
-      const results = scanIssues(codeIndex, analysis)
+      const results = scanIssues(codeIndex, codebaseAnalysis)
       for (const issue of results.issues) {
         const existing = map.get(issue.file) ?? { critical: 0, warning: 0, info: 0 }
         existing[issue.severity] += 1
@@ -165,7 +163,7 @@ export function CodeBrowser({ navigateToFile, onNavigateComplete }: CodeBrowserP
       // Scanner failure should not break the tree
     }
     return map
-  }, [codeIndex])
+  }, [codeIndex, codebaseAnalysis])
 
   // Debounce search query
   useEffect(() => {

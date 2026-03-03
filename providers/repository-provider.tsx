@@ -1,11 +1,15 @@
 "use client"
 
-import { createContext, useContext, useState, useCallback, useRef, type ReactNode, type Dispatch, type SetStateAction } from "react"
+import { createContext, useContext, useState, useCallback, useRef, useEffect, type ReactNode, type Dispatch, type SetStateAction } from "react"
 import type { GitHubRepo, FileNode, ParsedFile, RepositoryContext } from "@/types/repository"
 import { parseGitHubUrl } from "@/lib/github/parser"
 import { fetchRepoMetadata, fetchRepoTree, buildFileTree, fetchFileContent, detectLanguage } from "@/lib/github/fetcher"
 import type { CodeIndex } from "@/lib/code/code-index"
-import { createEmptyIndex, indexFile, flattenFiles, buildAIContext } from "@/lib/code/code-index"
+import { createEmptyIndex, batchIndexFiles, flattenFiles, buildAIContext } from "@/lib/code/code-index"
+import { fetchRepoZipball, isFileIndexable } from "@/lib/github/zipball"
+import { getCachedRepo, setCachedRepo } from "@/lib/cache/repo-cache"
+import { analyzeCodebase, type FullAnalysis } from "@/lib/code/import-parser"
+import { toast } from "sonner"
 
 interface IndexingProgress {
   current: number
@@ -55,6 +59,12 @@ interface RepositoryContextType extends RepositoryContext {
   setModifiedContents: Dispatch<SetStateAction<Map<string, string>>>
   /** Read file content: modifiedContents first, then codeIndex, then null */
   getFileContent: (path: string) => string | null
+  /** Codebase analysis computed once after indexing completes (B5). */
+  codebaseAnalysis: FullAnalysis | null
+  /** Files that failed to fetch during indexing (B6). */
+  failedFiles: Array<{ path: string; error: string }>
+  /** Whether the code index was hydrated from IndexedDB cache (B2). */
+  isCacheHit: boolean
 }
 
 const RepositoryContextDefault: RepositoryContext = {
@@ -108,6 +118,9 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
   const indexingAbortRef = useRef<AbortController | null>(null)
   const [searchState, setSearchState] = useState<SearchState>(defaultSearchState)
   const [modifiedContents, setModifiedContents] = useState<Map<string, string>>(new Map())
+  const [codebaseAnalysis, setCodebaseAnalysis] = useState<FullAnalysis | null>(null)
+  const [failedFiles, setFailedFiles] = useState<Array<{ path: string; error: string }>>([])
+  const [isCacheHit, setIsCacheHit] = useState(false)
 
   // Helper: get file content from modifiedContents first, then codeIndex
   const getFileContent = useCallback((path: string): string | null => {
@@ -116,27 +129,17 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
     return indexed ? indexed.content : null
   }, [modifiedContents, codeIndex])
 
-  // Start indexing files in background
+  // Start indexing files in background (B1 zipball, B3 batch, B6 error tracking)
   const startIndexing = useCallback(async (
     repoData: GitHubRepo,
     fileTree: FileNode[],
+    treeSha: string,
     signal: AbortSignal
   ) => {
-    // Get all indexable files
-    const indexableExtensions = new Set([
-      'ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs',
-      'py', 'rb', 'go', 'rs', 'java', 'kt', 'swift',
-      'cs', 'cpp', 'c', 'h', 'hpp', 'php',
-      'vue', 'svelte', 'html', 'css', 'scss', 'sass',
-      'json', 'yaml', 'yml', 'md', 'mdx', 'sql', 'graphql',
-      'sh', 'bash', 'zsh', 'dockerfile'
-    ])
-    
-    const indexableFiles = flattenFiles(fileTree).filter(f => {
-      const ext = f.name.split('.').pop()?.toLowerCase()
-      const size = f.size || 0
-      return ext && indexableExtensions.has(ext) && size < 500000 // Skip files > 500KB
-    })
+    // Get all indexable files from tree metadata
+    const indexableFiles = flattenFiles(fileTree).filter(f =>
+      isFileIndexable(f.name, f.size || 0)
+    )
     
     setIndexingProgress({ current: 0, total: indexableFiles.length, isComplete: false })
     
@@ -145,43 +148,96 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
       return
     }
     
-    let currentIndex = createEmptyIndex()
-    let processed = 0
-    
-    // Process files in parallel with concurrency limit
-    await fetchWithConcurrency(
-      indexableFiles,
-      async (file) => {
+    const accumulated: Array<{ path: string; content: string; language?: string }> = []
+    const errors: Array<{ path: string; error: string }> = []
+    let zipballUsed = false
+
+    // B1: Try zipball for repos under 50 MB (GitHub API reports size in KB)
+    if (repoData.size != null && repoData.size < 50_000) {
+      try {
+        const zipFiles = await fetchRepoZipball(
+          repoData.owner,
+          repoData.name,
+          repoData.defaultBranch,
+          { signal },
+        )
+
         if (signal.aborted) return
-        
-        try {
-          const content = await fetchFileContent(
-            repoData.owner,
-            repoData.name,
-            repoData.defaultBranch,
-            file.path
-          )
-          
+
+        for (const [path, content] of zipFiles) {
+          const filename = path.split('/').pop() || path
+          accumulated.push({ path, content, language: detectLanguage(filename) })
+        }
+
+        zipballUsed = true
+        setIndexingProgress({
+          current: accumulated.length,
+          total: accumulated.length,
+          isComplete: false,
+        })
+      } catch (err) {
+        // Zipball failed — fall back to per-file fetch
+        if (signal.aborted) return
+        console.warn('Zipball download failed, falling back to per-file fetch:', err)
+      }
+    }
+
+    // Per-file fetch fallback
+    if (!zipballUsed) {
+      let processed = 0
+
+      await fetchWithConcurrency(
+        indexableFiles,
+        async (file) => {
           if (signal.aborted) return
-          
-          currentIndex = indexFile(currentIndex, file.path, content, file.language)
+
+          try {
+            const content = await fetchFileContent(
+              repoData.owner,
+              repoData.name,
+              repoData.defaultBranch,
+              file.path,
+            )
+
+            if (signal.aborted) return
+
+            accumulated.push({ path: file.path, content, language: file.language })
+          } catch (err) {
+            const message = err instanceof Error ? err.message : 'Unknown error'
+            errors.push({ path: file.path, error: message })
+          }
+
           processed++
-          
-          // Update progress every 5 files to reduce re-renders
           if (processed % 5 === 0 || processed === indexableFiles.length) {
             setIndexingProgress(prev => ({ ...prev, current: processed }))
           }
-        } catch (err) {
-          // Skip failed files silently
-          processed++
-        }
-      },
-      CONCURRENCY_LIMIT
-    )
-    
-    if (!signal.aborted) {
-      setCodeIndex(currentIndex)
-      setIndexingProgress({ current: processed, total: indexableFiles.length, isComplete: true })
+        },
+        CONCURRENCY_LIMIT,
+      )
+    }
+
+    if (signal.aborted) return
+
+    // B3: Batch-index all accumulated files at once (avoids O(N²) Map copies)
+    const finalIndex = batchIndexFiles(createEmptyIndex(), accumulated)
+
+    setCodeIndex(finalIndex)
+    setFailedFiles(errors)
+    setIndexingProgress({
+      current: accumulated.length,
+      total: zipballUsed ? accumulated.length : indexableFiles.length,
+      isComplete: true,
+    })
+
+    // B2: Persist to IndexedDB cache
+    setCachedRepo(repoData.owner, repoData.name, treeSha, accumulated, fileTree)
+      .catch(() => { /* cache write failure is non-critical */ })
+
+    // B6: Notify user of failed files
+    if (errors.length > 0) {
+      toast.error(
+        `Indexed ${accumulated.length} files (${errors.length} failed)`,
+      )
     }
   }, [])
 
@@ -195,6 +251,9 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
     setError(null)
     setCodeIndex(createEmptyIndex())
     setIndexingProgress({ current: 0, total: 0, isComplete: false })
+    setFailedFiles([])
+    setIsCacheHit(false)
+    setCodebaseAnalysis(null)
 
     try {
       // Parse the URL
@@ -215,11 +274,26 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
       setFiles(fileTree)
 
       setIsLoading(false)
+
+      // B2: Check IndexedDB cache before indexing
+      const cached = await getCachedRepo(owner, repoName)
+      if (cached && cached.sha === tree.sha) {
+        // Cache hit — hydrate code index from cached data
+        const index = batchIndexFiles(createEmptyIndex(), cached.files)
+        setCodeIndex(index)
+        setIndexingProgress({
+          current: cached.files.length,
+          total: cached.files.length,
+          isComplete: true,
+        })
+        setIsCacheHit(true)
+        return true
+      }
       
       // Start indexing immediately in background
       const abortController = new AbortController()
       indexingAbortRef.current = abortController
-      startIndexing(repoData, fileTree, abortController.signal)
+      startIndexing(repoData, fileTree, tree.sha, abortController.signal)
       
       return true
     } catch (err) {
@@ -245,6 +319,9 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
     setError(null)
     setSearchState(defaultSearchState)
     setModifiedContents(new Map())
+    setCodebaseAnalysis(null)
+    setFailedFiles([])
+    setIsCacheHit(false)
   }, [])
   
   const updateCodeIndex = useCallback((index: CodeIndex) => {
@@ -256,6 +333,10 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
   }, [codeIndex])
 
   const loadFileContent = useCallback(async (path: string): Promise<string | null> => {
+    // B4: Check code index first before hitting the network
+    const existingFile = codeIndex?.files?.get(path)
+    if (existingFile?.content) return existingFile.content
+
     if (!repo) return null
 
     try {
@@ -265,7 +346,7 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
       console.error('Failed to load file content:', err)
       return null
     }
-  }, [repo])
+  }, [repo, codeIndex])
 
   const getFileByPath = useCallback((path: string): FileNode | null => {
     function findNode(nodes: FileNode[], targetPath: string): FileNode | null {
@@ -280,6 +361,18 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
     }
     return findNode(files, path)
   }, [files])
+
+  // B5: Compute codebaseAnalysis once when indexing completes
+  useEffect(() => {
+    if (codeIndex.totalFiles === 0 || !indexingProgress.isComplete) {
+      setCodebaseAnalysis(null)
+      return
+    }
+    const timer = setTimeout(() => {
+      setCodebaseAnalysis(analyzeCodebase(codeIndex))
+    }, 50)
+    return () => clearTimeout(timer)
+  }, [codeIndex, indexingProgress.isComplete])
 
   return (
     <RepositoryContext.Provider
@@ -302,6 +395,9 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
         modifiedContents,
         setModifiedContents,
         getFileContent,
+        codebaseAnalysis,
+        failedFiles,
+        isCacheHit,
       }}
     >
       {children}

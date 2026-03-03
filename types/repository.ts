@@ -12,6 +12,8 @@ export interface GitHubRepo {
   topics: string[]
   isPrivate: boolean
   url: string
+  /** Repository size in KB as returned by the GitHub API. */
+  size?: number
 }
 
 export interface RepoFile {

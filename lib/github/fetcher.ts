@@ -51,6 +51,7 @@ export async function fetchRepoMetadata(
     topics: data.topics || [],
     isPrivate: data.private,
     url: data.html_url,
+    size: data.size,
   }
 }
 

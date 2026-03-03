@@ -20,7 +20,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useRepository } from '@/providers'
-import { analyzeCodebase, type FullAnalysis } from '@/lib/code/import-parser'
+import type { FullAnalysis } from '@/lib/code/import-parser'
 import { scanIssues, type ScanResults } from '@/lib/code/issue-scanner'
 import { generateProjectSummary } from '@/lib/diagrams/diagram-data'
 import type { ProjectSummary } from '@/lib/diagrams/types'
@@ -39,26 +39,25 @@ interface ExportMenuProps {
 }
 
 export function ExportMenu({ activeTab }: ExportMenuProps) {
-  const { repo, codeIndex } = useRepository()
+  const { repo, codeIndex, codebaseAnalysis } = useRepository()
   const [isExporting, setIsExporting] = useState(false)
 
   const hasData = Boolean(repo && codeIndex.totalFiles > 0)
 
-  // Lazily compute analysis only when needed (these are cheap on already-indexed data).
+  // Use provider-level analysis instead of computing locally.
   const getAnalysisData = useCallback((): {
     analysis: FullAnalysis | null
     scanResults: ScanResults | null
     summary: ProjectSummary | null
   } => {
-    if (!codeIndex || codeIndex.totalFiles === 0) {
+    if (!codeIndex || codeIndex.totalFiles === 0 || !codebaseAnalysis) {
       return { analysis: null, scanResults: null, summary: null }
     }
 
-    const analysis = analyzeCodebase(codeIndex)
-    const scanResults = scanIssues(codeIndex, analysis)
-    const summary = generateProjectSummary(analysis, codeIndex).data
-    return { analysis, scanResults, summary }
-  }, [codeIndex])
+    const scanResults = scanIssues(codeIndex, codebaseAnalysis)
+    const summary = generateProjectSummary(codebaseAnalysis, codeIndex).data
+    return { analysis: codebaseAnalysis, scanResults, summary }
+  }, [codeIndex, codebaseAnalysis])
 
   const handleExportJson = useCallback(async () => {
     if (!repo) return
