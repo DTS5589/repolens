@@ -6,14 +6,15 @@ import { DefaultChatTransport } from "ai"
 import { Button } from "@/components/ui/button"
 import { ChatMessage } from "./chat-message"
 import { ChatInput } from "./chat-input"
-import { Bot, AlertCircle } from "lucide-react"
+import { Bot, AlertCircle, Download } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAPIKeys, useRepository } from "@/providers"
 import { buildFileTreeString } from "@/lib/github/fetcher"
+import { downloadFile } from "@/lib/export"
 
 export function ChatSidebar({ className }: { className?: string }) {
   const { selectedModel, apiKeys, getValidProviders } = useAPIKeys()
-  const { repo, files, getAIContext } = useRepository()
+  const { repo, files, codeIndex } = useRepository()
   const [input, setInput] = useState("")
 
   const validProviders = getValidProviders()
@@ -29,33 +30,35 @@ export function ChatSidebar({ className }: { className?: string }) {
     }
   }, [repo, files])
 
-  // Create transport with dynamic body - includes code context based on query
+  // Build file contents map from indexed files
+  const fileContentsMap = useMemo(() => {
+    const map: Record<string, string> = {}
+    if (codeIndex?.files) {
+      for (const [path, file] of codeIndex.files) {
+        if (file.content) map[path] = file.content
+      }
+    }
+    return map
+  }, [codeIndex])
+
+  // Create transport with file contents for tool-based exploration
   const transport = useMemo(() => {
     if (!selectedModel || !hasValidKey) return undefined
     
     return new DefaultChatTransport({
       api: '/api/chat',
-      prepareSendMessagesRequest: ({ messages }) => {
-        // Get the latest user message to build relevant code context
-        const lastUserMessage = [...messages].reverse().find(m => m.role === 'user')
-        const query = lastUserMessage?.parts?.find((p): p is { type: 'text'; text: string } => p.type === 'text')?.text || ''
-        
-        // Build code context from indexed files
-        const codeContext = query ? getAIContext(query) : undefined
-        
-        return {
-          body: {
-            messages,
-            provider: selectedModel.provider,
-            model: selectedModel.id,
-            apiKey: apiKeys[selectedModel.provider].key,
-            repoContext,
-            codeContext,
-          },
-        }
-      },
+      prepareSendMessagesRequest: ({ messages }) => ({
+        body: {
+          messages,
+          provider: selectedModel.provider,
+          model: selectedModel.id,
+          apiKey: apiKeys[selectedModel.provider].key,
+          repoContext,
+          fileContents: fileContentsMap,
+        },
+      }),
     })
-  }, [selectedModel, hasValidKey, apiKeys, repoContext, getAIContext])
+  }, [selectedModel, hasValidKey, apiKeys, repoContext, fileContentsMap])
 
   const { messages, sendMessage, status, error } = useChat({
     transport: transport ?? undefined,
@@ -78,11 +81,39 @@ export function ChatSidebar({ className }: { className?: string }) {
       {/* Header */}
       <div className="flex h-11 items-center justify-between border-b border-foreground/[0.06] px-4">
         <span className="text-sm font-medium text-text-primary">Chat</span>
-        {repo && (
-          <span className="text-xs text-text-muted truncate max-w-[150px]" title={repo.fullName}>
-            {repo.fullName}
-          </span>
-        )}
+        <div className="flex items-center gap-1">
+          {messages.length > 0 && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-text-muted hover:text-text-primary"
+              title="Export chat as Markdown"
+              onClick={() => {
+                const md = messages.map(m => {
+                  const role = m.role === 'user' ? 'User' : 'Assistant'
+                  const text = m.parts
+                    ?.filter((p): p is { type: 'text'; text: string } => p.type === 'text')
+                    .map(p => p.text)
+                    .join('') || ''
+                  return `## ${role}\n\n${text}`
+                }).join('\n\n---\n\n')
+                const title = repo ? `# Chat — ${repo.name}\n\n` : '# Chat\n\n'
+                downloadFile({
+                  content: title + md,
+                  filename: `chat-${repo?.name || 'export'}.md`,
+                  mimeType: 'text/markdown',
+                })
+              }}
+            >
+              <Download className="h-4 w-4" />
+            </Button>
+          )}
+          {repo && (
+            <span className="text-xs text-text-muted truncate max-w-[150px]" title={repo.fullName}>
+              {repo.fullName}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* API Key Warning */}

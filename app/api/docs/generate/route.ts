@@ -1,28 +1,26 @@
-import { streamText, convertToModelMessages, UIMessage, tool, stepCountIs, consumeStream } from 'ai'
-import { createOpenAI } from '@ai-sdk/openai'
-import { createGoogleGenerativeAI } from '@ai-sdk/google'
-import { createAnthropic } from '@ai-sdk/anthropic'
+import { streamText, convertToModelMessages, stepCountIs, consumeStream } from 'ai'
 import * as z from 'zod'
+import { createAIModel } from '@/lib/ai/providers'
+import { createCodeTools } from '@/lib/ai/tools'
 
 export const maxDuration = 120
 
 type DocType = 'architecture' | 'setup' | 'api-reference' | 'file-explanation' | 'custom'
 
-interface DocsRequest {
-  messages: UIMessage[]
-  provider: 'openai' | 'google' | 'anthropic' | 'openrouter'
-  model: string
-  apiKey: string
-  docType: DocType
-  repoContext: {
-    name: string
-    description: string
-    structure: string // file tree string
-  }
-  /** Map of file path -> file content. All indexed file contents from the client. */
-  fileContents: Record<string, string>
-  targetFile?: string
-}
+const docsRequestSchema = z.object({
+  messages: z.array(z.any()),
+  provider: z.enum(['openai', 'google', 'anthropic', 'openrouter']),
+  model: z.string().min(1),
+  apiKey: z.string().min(1),
+  docType: z.enum(['architecture', 'setup', 'api-reference', 'file-explanation', 'custom']),
+  repoContext: z.object({
+    name: z.string(),
+    description: z.string(),
+    structure: z.string(),
+  }),
+  fileContents: z.record(z.string(), z.string()),
+  targetFile: z.string().optional(),
+})
 
 /**
  * System prompts per doc type.
@@ -136,120 +134,21 @@ Produce a clear, well-structured **Architecture Overview** document.
 
 export async function POST(req: Request) {
   try {
-    const body: DocsRequest = await req.json()
-    const { messages, provider, model, apiKey, docType, repoContext, fileContents, targetFile } = body
-
-    if (!apiKey) {
-      return new Response(JSON.stringify({ error: 'API key is required' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' },
-      })
+    const raw = await req.json()
+    const parsed = docsRequestSchema.safeParse(raw)
+    if (!parsed.success) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid request', details: parsed.error.flatten().fieldErrors }),
+        { status: 422, headers: { 'Content-Type': 'application/json' } },
+      )
     }
+    const { messages, provider, model, apiKey, docType, repoContext, fileContents, targetFile } = parsed.data
 
     // Build the file content map for tool access
     const fileMap = new Map(Object.entries(fileContents || {}))
-    const allPaths = Array.from(fileMap.keys()).sort()
 
-    // Tools the AI can use to browse the codebase
-    const codeTools = {
-      readFile: tool({
-        description: 'Read the full contents of a file in the repository. Use this to inspect actual code before documenting it.',
-        inputSchema: z.object({
-          path: z.string().describe('The file path relative to the repo root, e.g. "src/index.ts"'),
-        }),
-        execute: async ({ path }) => {
-          const content = fileMap.get(path)
-          if (!content) {
-            // Try partial match
-            const match = allPaths.find(p => p.endsWith(path) || p.includes(path))
-            if (match) {
-              return { path: match, content: fileMap.get(match)!, lineCount: (fileMap.get(match)!).split('\n').length }
-            }
-            return { error: `File not found: ${path}. Use searchFiles or check the file tree.` }
-          }
-          return { path, content, lineCount: content.split('\n').length }
-        },
-      }),
-
-      searchFiles: tool({
-        description: 'Search for files by path pattern or search for text content across all files. Returns matching file paths and line matches.',
-        inputSchema: z.object({
-          query: z.string().describe('Search query -- matches against file paths AND file contents'),
-          maxResults: z.number().nullable().describe('Max results to return. Defaults to 15.'),
-        }),
-        execute: async ({ query, maxResults }) => {
-          const limit = maxResults ?? 15
-          const q = query.toLowerCase()
-          const results: { path: string; matchType: 'path' | 'content'; preview?: string }[] = []
-
-          // Path matches first
-          for (const path of allPaths) {
-            if (results.length >= limit) break
-            if (path.toLowerCase().includes(q)) {
-              results.push({ path, matchType: 'path' })
-            }
-          }
-
-          // Content matches
-          if (results.length < limit) {
-            for (const [path, content] of fileMap) {
-              if (results.length >= limit) break
-              if (results.some(r => r.path === path)) continue
-              const lines = content.split('\n')
-              for (let i = 0; i < lines.length; i++) {
-                if (lines[i].toLowerCase().includes(q)) {
-                  results.push({
-                    path,
-                    matchType: 'content',
-                    preview: `L${i + 1}: ${lines[i].trim().slice(0, 120)}`,
-                  })
-                  break
-                }
-              }
-            }
-          }
-
-          return {
-            totalFiles: allPaths.length,
-            matchCount: results.length,
-            results,
-          }
-        },
-      }),
-
-      listDirectory: tool({
-        description: 'List files and subdirectories in a specific directory. Useful to explore folder structure.',
-        inputSchema: z.object({
-          path: z.string().describe('Directory path relative to repo root, e.g. "src" or "src/components". Use "" for root.'),
-        }),
-        execute: async ({ path }) => {
-          const prefix = path ? (path.endsWith('/') ? path : path + '/') : ''
-          const entries = new Set<string>()
-
-          for (const filePath of allPaths) {
-            if (!filePath.startsWith(prefix)) continue
-            const rest = filePath.slice(prefix.length)
-            const firstPart = rest.split('/')[0]
-            if (firstPart) {
-              const isDir = rest.includes('/')
-              entries.add(isDir ? firstPart + '/' : firstPart)
-            }
-          }
-
-          return {
-            directory: path || '(root)',
-            entries: Array.from(entries).sort((a, b) => {
-              // Directories first
-              const aDir = a.endsWith('/')
-              const bDir = b.endsWith('/')
-              if (aDir && !bDir) return -1
-              if (!aDir && bDir) return 1
-              return a.localeCompare(b)
-            }),
-          }
-        },
-      }),
-    }
+    // Shared code-browsing tools
+    const codeTools = createCodeTools(fileMap)
 
     // Build system prompt
     let systemPrompt = DOC_SYSTEM_PROMPTS[docType] || DOC_SYSTEM_PROMPTS['custom']
@@ -257,7 +156,7 @@ export async function POST(req: Request) {
     systemPrompt += `\n\n## Repository
 **Name:** ${repoContext.name}
 **Description:** ${repoContext.description || 'No description'}
-**Total files indexed:** ${allPaths.length}
+**Total files indexed:** ${fileMap.size}
 
 ## File Tree
 \`\`\`
@@ -276,31 +175,8 @@ Start by reading this file with readFile.`
 - Read at least the key files for the doc type before writing
 - Your final response should be the complete documentation in markdown`
 
-    // Create provider-specific model
-    let aiModel: Parameters<typeof streamText>[0]['model']
-
-    switch (provider) {
-      case 'openai':
-        aiModel = createOpenAI({ apiKey })(model)
-        break
-      case 'google':
-        aiModel = createGoogleGenerativeAI({ apiKey })(model)
-        break
-      case 'anthropic':
-        aiModel = createAnthropic({ apiKey })(model)
-        break
-      case 'openrouter':
-        aiModel = createOpenAI({ apiKey, baseURL: 'https://openrouter.ai/api/v1' })(model)
-        break
-      default:
-        return new Response(JSON.stringify({ error: 'Unsupported provider' }), {
-          status: 400,
-          headers: { 'Content-Type': 'application/json' },
-        })
-    }
-
     const result = streamText({
-      model: aiModel,
+      model: createAIModel(provider, model, apiKey),
       system: systemPrompt,
       messages: await convertToModelMessages(messages),
       tools: codeTools,

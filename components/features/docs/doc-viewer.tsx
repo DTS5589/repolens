@@ -3,7 +3,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
 import {
   FileText, Code, BookOpen, Rocket, FileCode, MessageSquare,
-  Loader2, AlertCircle, Trash2, ChevronDown, Search, X, Plus,
+  Loader2, AlertCircle, Trash2, ChevronDown, Search, X, Plus, Download,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -12,8 +12,11 @@ import { useAPIKeys, useRepository } from '@/providers'
 import { useChat } from '@ai-sdk/react'
 import { DefaultChatTransport } from 'ai'
 import type { UIMessage } from 'ai'
+import { isToolUIPart, getToolName } from 'ai'
 import { buildFileTreeString } from '@/lib/github/fetcher'
 import { flattenFiles } from '@/lib/code/code-index'
+import { downloadFile } from '@/lib/export'
+import { MarkdownRenderer } from '@/components/ui/markdown-renderer'
 import type { FileNode } from '@/types/repository'
 
 type DocType = 'architecture' | 'setup' | 'api-reference' | 'file-explanation' | 'custom'
@@ -477,10 +480,29 @@ export function DocViewer({ className }: DocViewerProps) {
             <div className="max-w-3xl">
               <div className="flex items-center gap-2 mb-4 pb-3 border-b border-foreground/[0.06]">
                 {DOC_PRESETS.find(p => p.id === activeDoc.type)?.icon}
-                <h1 className="text-lg font-semibold text-text-primary">{activeDoc.title}</h1>
+                <h1 className="text-lg font-semibold text-text-primary flex-1">{activeDoc.title}</h1>
                 {activeDoc.targetFile && (
-                  <code className="text-[10px] text-text-muted bg-foreground/[0.04] px-1.5 py-0.5 rounded ml-auto">{activeDoc.targetFile}</code>
+                  <code className="text-[10px] text-text-muted bg-foreground/[0.04] px-1.5 py-0.5 rounded">{activeDoc.targetFile}</code>
                 )}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-text-muted hover:text-text-primary shrink-0"
+                  title="Export as Markdown"
+                  onClick={() => {
+                    const text = activeDoc.messages
+                      .filter(m => m.role === 'assistant')
+                      .flatMap(m => m.parts?.filter((p): p is { type: 'text'; text: string } => p.type === 'text').map(p => p.text) || [])
+                      .join('')
+                    downloadFile({
+                      content: text,
+                      filename: `${activeDoc.type}-${repo?.name || 'doc'}.md`,
+                      mimeType: 'text/markdown',
+                    })
+                  }}
+                >
+                  <Download className="h-4 w-4" />
+                </Button>
               </div>
               <div className="prose prose-invert max-w-none">
                 <MarkdownContent messages={activeDoc.messages} />
@@ -504,10 +526,10 @@ function ToolActivity({ messages }: { messages: UIMessage[] }) {
   for (const msg of messages) {
     if (msg.role !== 'assistant') continue
     for (const part of msg.parts || []) {
-      if (part.type === 'dynamic-tool') {
+      if (isToolUIPart(part)) {
         const input = (part.input as Record<string, unknown> | undefined) ?? {}
         toolCalls.push({
-          name: part.toolName,
+          name: getToolName(part),
           path: (input.path as string) || (input.query as string) || undefined,
           state: part.state,
         })
@@ -562,15 +584,6 @@ function ToolActivity({ messages }: { messages: UIMessage[] }) {
 }
 
 /** Renders the assistant text from chat messages as formatted markdown. */
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;')
-}
-
 function MarkdownContent({ messages }: { messages: UIMessage[] }) {
   const text = messages
     .filter(m => m.role === 'assistant')
@@ -579,23 +592,5 @@ function MarkdownContent({ messages }: { messages: UIMessage[] }) {
 
   if (!text) return null
 
-  // Escape HTML first to prevent XSS, then apply markdown transformations
-  const html = escapeHtml(text)
-    .replace(/```(\w+)?\n([\s\S]*?)```/g, '<pre class="bg-foreground/5 rounded-lg p-4 my-3 overflow-x-auto text-xs leading-relaxed"><code>$2</code></pre>')
-    .replace(/`([^`]+)`/g, '<code class="bg-foreground/5 px-1.5 py-0.5 rounded text-xs">$1</code>')
-    .replace(/^### (.+)$/gm, '<h3 class="text-base font-semibold text-text-primary mt-6 mb-2">$1</h3>')
-    .replace(/^## (.+)$/gm, '<h2 class="text-lg font-semibold text-text-primary mt-8 mb-3">$1</h2>')
-    .replace(/^# (.+)$/gm, '<h1 class="text-xl font-bold text-text-primary mt-8 mb-4">$1</h1>')
-    .replace(/\*\*([^*]+)\*\*/g, '<strong class="text-text-primary font-medium">$1</strong>')
-    .replace(/^\- (.+)$/gm, '<li class="text-text-secondary text-sm ml-4 list-disc">$1</li>')
-    .replace(/^\d+\. (.+)$/gm, '<li class="text-text-secondary text-sm ml-4 list-decimal">$1</li>')
-    .replace(/\n\n/g, '<br/><br/>')
-    .replace(/\n/g, '<br/>')
-
-  return (
-    <div
-      className="text-sm text-text-secondary leading-relaxed [&_h1]:leading-tight [&_h2]:leading-tight [&_h3]:leading-tight"
-      dangerouslySetInnerHTML={{ __html: html }}
-    />
-  )
+  return <MarkdownRenderer content={text} />
 }

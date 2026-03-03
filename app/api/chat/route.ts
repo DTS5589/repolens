@@ -1,43 +1,79 @@
-import { streamText, convertToModelMessages, UIMessage, consumeStream } from 'ai'
-import { createOpenAI } from '@ai-sdk/openai'
-import { createGoogleGenerativeAI } from '@ai-sdk/google'
-import { createAnthropic } from '@ai-sdk/anthropic'
+import { streamText, convertToModelMessages, stepCountIs, consumeStream } from 'ai'
+import * as z from 'zod'
+import { createAIModel } from '@/lib/ai/providers'
+import { createCodeTools, createAdvancedTools } from '@/lib/ai/tools'
 
-export const maxDuration = 60
+export const maxDuration = 120
 
-interface ChatRequest {
-  messages: UIMessage[]
-  provider: 'openai' | 'google' | 'anthropic' | 'openrouter'
-  model: string
-  apiKey: string
-  repoContext?: {
-    name: string
-    description: string
-    structure: string
-  }
-  codeContext?: string // Relevant code snippets from indexed files
-}
+const chatRequestSchema = z.object({
+  messages: z.array(z.any()),
+  provider: z.enum(['openai', 'google', 'anthropic', 'openrouter']),
+  model: z.string().min(1),
+  apiKey: z.string().min(1),
+  repoContext: z.object({
+    name: z.string(),
+    description: z.string(),
+    structure: z.string(),
+  }).optional(),
+  fileContents: z.record(z.string(), z.string()).optional(),
+})
 
 export async function POST(req: Request) {
   try {
-    const { messages, provider, model, apiKey, repoContext, codeContext }: ChatRequest = await req.json()
+    const raw = await req.json()
+    const parsed = chatRequestSchema.safeParse(raw)
+    if (!parsed.success) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid request', details: parsed.error.flatten().fieldErrors }),
+        { status: 422, headers: { 'Content-Type': 'application/json' } },
+      )
+    }
+    const { messages, provider, model, apiKey, repoContext, fileContents } = parsed.data
 
-    if (!apiKey) {
-      return new Response(JSON.stringify({ error: 'API key is required' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' },
-      })
+    // Build file content map for tool access
+    const fileMap = new Map(Object.entries(fileContents || {}))
+
+    // Shared + advanced tools for codebase exploration, analysis, and generation
+    const codeTools = {
+      ...createCodeTools(fileMap),
+      ...createAdvancedTools(fileMap),
     }
 
-    // Build system prompt with repo context
-    let systemPrompt = `You are CodeDoc, an expert code documentation assistant. You help developers understand codebases, explain architecture, and answer questions about code.
+    // Build system prompt
+    let systemPrompt = `You are CodeDoc, a senior software engineer with full access to the codebase. You help developers understand code, answer architecture questions, write documentation, and create diagrams.
+
+## Your Philosophy
+- Quality and accuracy over speed. Take as many tool calls as needed.
+- ALWAYS read the actual code before making claims about it. Never guess or hallucinate.
+- When you produce documentation or diagrams, verify them by re-reading the source files.
+- If you're unsure about something, read more files. If you still can't verify, say so explicitly.
+- Provide specific file paths, line references, and code snippets from the actual codebase.
+
+## Your Capabilities
+You have 9 tools to explore the codebase:
+- **readFile** — Read any file in full. Use this before discussing any code.
+- **searchFiles** — Search for text patterns or file names across the entire codebase.
+- **listDirectory** — Browse the folder structure.
+- **findSymbol** — Find function, class, interface, type, or enum definitions by name.
+- **getFileStats** — Get line count, language, imports, and exports for a file.
+- **analyzeImports** — See what a file imports and what imports it (dependency relationships).
+- **scanIssues** — Run security and quality checks on a specific file.
+- **generateDiagram** — Create Mermaid diagrams of the codebase architecture.
+- **getProjectOverview** — Get project statistics and structure summary.
+
+## Self-Verification Protocol
+After generating documentation or making claims about code:
+1. Re-read the key files you referenced to verify accuracy
+2. Cross-check function signatures, type definitions, and import chains
+3. If you find a discrepancy, correct your output and note the correction
 
 ## Response Guidelines
-- Be concise and direct
-- Use markdown formatting for readability
-- Include code examples in fenced code blocks with language tags
-- Always cite specific file paths when discussing code (e.g., \`app/page.tsx\`)
-- If unsure about something, say so clearly`
+- Use markdown formatting: headings, lists, tables, code blocks
+- Put code examples in fenced blocks with correct language tags: \`\`\`typescript
+- Reference files as \`path/to/file.tsx\`
+- When creating Mermaid diagrams, wrap them in \`\`\`mermaid blocks
+- For long explanations, use clear section headers
+- When writing documentation, follow the file → understand → write → verify cycle`
 
     if (repoContext) {
       systemPrompt += `
@@ -45,72 +81,29 @@ export async function POST(req: Request) {
 ## Connected Repository
 **Name:** ${repoContext.name}
 **Description:** ${repoContext.description || 'No description'}
+**Total files indexed:** ${fileMap.size}
 
-## File Structure
+## File Tree
 \`\`\`
 ${repoContext.structure}
 \`\`\`
 
-## Grounding Rules
-- ALWAYS reference actual files from the structure above
-- Format file references as inline code: \`path/to/file.tsx\`
-- When explaining architecture, list the relevant files
-- If asked about code not in this repo, state clearly "I don't see that file in this repository"
-- Suggest specific files to look at when giving advice`
+## Important
+- You have 9 tools — use them to read and explore real code before answering
+- NEVER describe a file you haven't read — use readFile first
+- ALWAYS reference actual files from the codebase`
     } else {
       systemPrompt += `
 
 No repository is currently connected. You can still answer general programming questions, but won't be able to reference specific codebase files.`
     }
 
-    // Add relevant code context if available
-    if (codeContext) {
-      systemPrompt += `
-
-## Relevant Code Files
-The following code snippets are relevant to the user's question:
-${codeContext}
-
-When answering:
-- Reference line numbers when discussing specific code
-- Quote relevant code snippets in your response
-- Explain how different files/functions relate to each other`
-    }
-
-    // Create provider-specific model
-    let aiModel: Parameters<typeof streamText>[0]['model']
-
-    switch (provider) {
-      case 'openai':
-        const openai = createOpenAI({ apiKey })
-        aiModel = openai(model)
-        break
-      case 'google':
-        const google = createGoogleGenerativeAI({ apiKey })
-        aiModel = google(model)
-        break
-      case 'anthropic':
-        const anthropic = createAnthropic({ apiKey })
-        aiModel = anthropic(model)
-        break
-      case 'openrouter':
-        const openrouter = createOpenAI({
-          apiKey,
-          baseURL: 'https://openrouter.ai/api/v1',
-        })
-        aiModel = openrouter(model)
-        break
-      default:
-        return new Response(JSON.stringify({ error: 'Unsupported provider' }), {
-          status: 400,
-          headers: { 'Content-Type': 'application/json' },
-        })
-    }
-
     const result = streamText({
-      model: aiModel,
+      model: createAIModel(provider, model, apiKey),
       system: systemPrompt,
       messages: await convertToModelMessages(messages),
+      tools: codeTools,
+      stopWhen: stepCountIs(50),
       abortSignal: req.signal,
     })
 
@@ -121,8 +114,8 @@ When answering:
   } catch (error) {
     console.error('Chat API error:', error)
     return new Response(
-      JSON.stringify({ 
-        error: error instanceof Error ? error.message : 'An error occurred' 
+      JSON.stringify({
+        error: error instanceof Error ? error.message : 'An error occurred',
       }),
       {
         status: 500,
