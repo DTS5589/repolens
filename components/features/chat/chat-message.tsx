@@ -1,8 +1,6 @@
 "use client"
 
 import {
-  Bot,
-  User,
   ChevronRight,
   FileText,
   Search,
@@ -136,12 +134,6 @@ export const ChatMessage = memo(function ChatMessage({ message, className }: Cha
         className,
       )}
     >
-      {isAssistant && (
-        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-foreground/10">
-          <Bot className="h-4 w-4 text-text-primary" />
-        </div>
-      )}
-
       <div
         className={cn(
           "max-w-[85%] rounded-lg px-3 py-2",
@@ -183,12 +175,6 @@ export const ChatMessage = memo(function ChatMessage({ message, className }: Cha
           return null
         })}
       </div>
-
-      {isUser && (
-        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-foreground/10">
-          <User className="h-4 w-4 text-text-primary" />
-        </div>
-      )}
     </div>
   )
 })

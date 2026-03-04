@@ -17,6 +17,16 @@ interface IndexingProgress {
   isComplete: boolean
 }
 
+export type LoadingStage =
+  | 'idle'
+  | 'metadata'
+  | 'tree'
+  | 'downloading'
+  | 'extracting'
+  | 'indexing'
+  | 'ready'
+  | 'cached'
+
 export interface SearchState {
   searchQuery: string
   debouncedSearchQuery: string
@@ -65,6 +75,8 @@ interface RepositoryContextType extends RepositoryContext {
   failedFiles: Array<{ path: string; error: string }>
   /** Whether the code index was hydrated from IndexedDB cache (B2). */
   isCacheHit: boolean
+  /** Current loading stage for multi-step progress UI. */
+  loadingStage: LoadingStage
 }
 
 const RepositoryContextDefault: RepositoryContext = {
@@ -121,6 +133,7 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
   const [codebaseAnalysis, setCodebaseAnalysis] = useState<FullAnalysis | null>(null)
   const [failedFiles, setFailedFiles] = useState<Array<{ path: string; error: string }>>([])
   const [isCacheHit, setIsCacheHit] = useState(false)
+  const [loadingStage, setLoadingStage] = useState<LoadingStage>('idle')
 
   // Helper: get file content from modifiedContents first, then codeIndex
   const getFileContent = useCallback((path: string): string | null => {
@@ -145,6 +158,7 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
     
     if (indexableFiles.length === 0) {
       setIndexingProgress({ current: 0, total: 0, isComplete: true })
+      setLoadingStage('ready')
       return
     }
     
@@ -155,6 +169,7 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
     // B1: Try zipball for repos under 50 MB (GitHub API reports size in KB)
     if (repoData.size != null && repoData.size < 50_000) {
       try {
+        setLoadingStage('downloading')
         const zipFiles = await fetchRepoZipball(
           repoData.owner,
           repoData.name,
@@ -164,6 +179,7 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
 
         if (signal.aborted) return
 
+        setLoadingStage('extracting')
         for (const [path, content] of zipFiles) {
           const filename = path.split('/').pop() || path
           accumulated.push({ path, content, language: detectLanguage(filename) })
@@ -184,6 +200,7 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
 
     // Per-file fetch fallback
     if (!zipballUsed) {
+      setLoadingStage('indexing')
       let processed = 0
 
       await fetchWithConcurrency(
@@ -218,6 +235,8 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
 
     if (signal.aborted) return
 
+    setLoadingStage('indexing')
+
     // B3: Batch-index all accumulated files at once (avoids O(N²) Map copies)
     const finalIndex = batchIndexFiles(createEmptyIndex(), accumulated)
 
@@ -228,6 +247,7 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
       total: zipballUsed ? accumulated.length : indexableFiles.length,
       isComplete: true,
     })
+    setLoadingStage('ready')
 
     // B2: Persist to IndexedDB cache
     setCachedRepo(repoData.owner, repoData.name, treeSha, accumulated, fileTree)
@@ -254,6 +274,7 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
     setFailedFiles([])
     setIsCacheHit(false)
     setCodebaseAnalysis(null)
+    setLoadingStage('metadata')
 
     try {
       // Parse the URL
@@ -269,6 +290,7 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
       setRepo(repoData)
 
       // Fetch file tree
+      setLoadingStage('tree')
       const tree = await fetchRepoTree(owner, repoName, repoData.defaultBranch)
       const fileTree = buildFileTree(tree)
       setFiles(fileTree)
@@ -287,6 +309,7 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
           isComplete: true,
         })
         setIsCacheHit(true)
+        setLoadingStage('cached')
         return true
       }
       
@@ -300,6 +323,7 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
       const message = err instanceof Error ? err.message : 'Failed to connect repository'
       setError(message)
       setIsLoading(false)
+      setLoadingStage('idle')
       return false
     }
   }, [startIndexing])
@@ -322,6 +346,7 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
     setCodebaseAnalysis(null)
     setFailedFiles([])
     setIsCacheHit(false)
+    setLoadingStage('idle')
   }, [])
   
   const updateCodeIndex = useCallback((index: CodeIndex) => {
@@ -398,6 +423,7 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
         codebaseAnalysis,
         failedFiles,
         isCacheHit,
+        loadingStage,
       }}
     >
       {children}

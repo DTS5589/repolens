@@ -14,6 +14,9 @@ export interface GitHubRepo {
   url: string
   /** Repository size in KB as returned by the GitHub API. */
   size?: number
+  openIssuesCount: number
+  pushedAt: string
+  license: string | null
 }
 
 export interface RepoFile {

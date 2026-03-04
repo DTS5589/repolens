@@ -11,10 +11,11 @@ import type { FileNode } from "@/types/repository"
 import type {
   ComparisonRepo,
   RepoMetrics,
+  RepoDependencies,
 } from "@/types/comparison"
 import { MAX_COMPARISON_REPOS } from "@/types/comparison"
 import { parseGitHubUrl } from "@/lib/github/parser"
-import { fetchRepoViaProxy, fetchTreeViaProxy } from "@/lib/github/client"
+import { fetchRepoViaProxy, fetchTreeViaProxy, fetchFileViaProxy } from "@/lib/github/client"
 import { buildFileTree } from "@/lib/github/fetcher"
 import { flattenFiles } from "@/lib/code/code-index"
 import { toast } from "sonner"
@@ -67,6 +68,25 @@ function computeMetrics(
     languageBreakdown: languageCounts,
     stars: repo.stars,
     forks: repo.forks,
+    openIssues: repo.openIssuesCount,
+    pushedAt: repo.pushedAt || null,
+    license: repo.license,
+  }
+}
+
+/** Parse package.json content into structured dependencies. */
+function parseDependencies(content: string): RepoDependencies {
+  try {
+    const pkg = JSON.parse(content) as {
+      dependencies?: Record<string, string>
+      devDependencies?: Record<string, string>
+    }
+    return {
+      deps: pkg.dependencies ?? {},
+      devDeps: pkg.devDependencies ?? {},
+    }
+  } catch {
+    return { deps: {}, devDeps: {}, fetchError: "Invalid package.json format" }
   }
 }
 
@@ -116,6 +136,9 @@ export function ComparisonProvider({ children }: { children: ReactNode }) {
           topics: [],
           isPrivate: false,
           url: `https://github.com/${owner}/${repoName}`,
+          openIssuesCount: 0,
+          pushedAt: '',
+          license: null,
         },
         files: [],
         metrics: {
@@ -125,6 +148,9 @@ export function ComparisonProvider({ children }: { children: ReactNode }) {
           languageBreakdown: {},
           stars: 0,
           forks: 0,
+          openIssues: 0,
+          pushedAt: null,
+          license: null,
         },
         status: "loading",
       }
@@ -156,6 +182,20 @@ export function ComparisonProvider({ children }: { children: ReactNode }) {
         // Compute metrics from tree metadata
         const metrics = computeMetrics(repoData, fileTree)
 
+        // Attempt to fetch package.json for dependency analysis
+        let dependencies: RepoDependencies | undefined
+        try {
+          const packageContent = await fetchFileViaProxy(
+            repoData.owner,
+            repoData.name,
+            repoData.defaultBranch,
+            "package.json"
+          )
+          dependencies = parseDependencies(packageContent)
+        } catch {
+          // No package.json or fetch failed — not an error, just skip
+        }
+
         // Mark ready
         setRepos((prev) => {
           const next = new Map(prev)
@@ -165,6 +205,7 @@ export function ComparisonProvider({ children }: { children: ReactNode }) {
             files: fileTree,
             metrics,
             status: "ready",
+            dependencies,
           })
           return next
         })

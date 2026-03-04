@@ -3,9 +3,10 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { ExternalLink, Maximize2, Github, Code2, Star, GitFork, Loader2, X, FileText, Network, Search, Bug } from "lucide-react"
+import { ExternalLink, Maximize2, Github, Code2, Star, GitFork, X, FileText, Network, Search, Bug } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useApp, useRepository } from "@/providers"
+import { LoadingProgress } from "@/components/features/loading/loading-progress"
 import { ProjectSummaryPanel } from "@/components/features/repo/project-summary"
 import { flattenFiles } from "@/lib/code/code-index"
 import { CodeBrowser } from "@/components/features/code/code-browser"
@@ -13,6 +14,7 @@ import { DocViewer } from "@/components/features/docs/doc-viewer"
 import { DiagramViewer } from "@/components/features/diagrams/diagram-viewer"
 import { IssuesPanel } from "@/components/features/issues/issues-panel"
 import { parseShareableUrl, updateUrlState, clearUrlState } from "@/lib/export"
+import { LandingPage } from "@/components/features/landing/landing-page"
 
 
 
@@ -67,8 +69,23 @@ const LoadingWithStatus = () => (
 
 export function PreviewPanel({ className }: { className?: string }) {
   const { previewUrl, isGenerating: isLoading } = useApp()
-  const { repo, files, isLoading: isConnecting, error: repoError, connectRepository, disconnectRepository, codeIndex } = useRepository()
+  const {
+    repo, files, isLoading: isConnecting, error: repoError,
+    connectRepository, disconnectRepository, codeIndex,
+    loadingStage, indexingProgress, isCacheHit,
+  } = useRepository()
   const [localPreviewUrl, setLocalPreviewUrl] = useState<string | null>(null)
+
+  // Show "Ready!" state briefly before transitioning to loaded view
+  const [showReadyState, setShowReadyState] = useState(false)
+  useEffect(() => {
+    if (loadingStage === 'ready' || loadingStage === 'cached') {
+      setShowReadyState(true)
+      const timer = setTimeout(() => setShowReadyState(false), 1500)
+      return () => clearTimeout(timer)
+    }
+    setShowReadyState(false)
+  }, [loadingStage])
 
   // Sync local state with global state
   useEffect(() => {
@@ -278,68 +295,43 @@ export function PreviewPanel({ className }: { className?: string }) {
               
               {/* Project summary */}
               <div className="flex-1 overflow-auto px-4 py-3">
-                {codeIndex && codeIndex.totalFiles > 0 ? (
-                  <ProjectSummaryPanel codeIndex={codeIndex} onNavigateToFile={handleNavigateToFile} />
-                ) : (
+                {showReadyState || (codeIndex.totalFiles === 0 && (loadingStage !== 'idle')) ? (
                   <div className="flex items-center justify-center h-32">
-                    <Loader2 className="h-5 w-5 animate-spin text-text-muted" />
+                    <LoadingProgress
+                      stage={loadingStage}
+                      progress={indexingProgress}
+                      isCacheHit={isCacheHit}
+                      error={repoError}
+                      repoName={repo?.fullName}
+                    />
                   </div>
-                )}
+                ) : codeIndex && codeIndex.totalFiles > 0 ? (
+                  <ProjectSummaryPanel codeIndex={codeIndex} onNavigateToFile={handleNavigateToFile} />
+                ) : null}
               </div>
             </div>
           ) : (
-            // Connect repository form
-            <div className="flex h-full flex-col items-center justify-center p-8">
-              <div className="flex flex-col items-center gap-6 w-full max-w-md">
-                <div className="flex flex-col items-center gap-3">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-foreground/5 border border-foreground/10">
-                    <Github className="h-6 w-6 text-text-secondary" />
-                  </div>
-                  <h2 className="text-lg font-medium text-text-primary">Explore Any GitHub Repository</h2>
-                  <p className="text-sm text-text-secondary text-center">Paste a GitHub URL to get AI-powered code analysis, documentation, and insights instantly</p>
-                </div>
-                <div className="w-full space-y-3">
-                  <Input
-                    type="url"
-                    value={repoUrl}
-                    onChange={(e) => setRepoUrl(e.target.value)}
-                    placeholder="https://github.com/username/repo"
-                    className="h-10 bg-foreground/5 border-foreground/10 text-text-primary placeholder:text-text-muted focus:border-foreground/20"
-                    onKeyDown={(e) => e.key === 'Enter' && handleConnect()}
-                  />
-                  {repoError && (
-                    <p className="text-sm text-status-error">{repoError}</p>
-                  )}
-                  <Button 
-                    className="w-full h-10 bg-primary text-primary-foreground hover:bg-primary/90 font-medium"
-                    disabled={!repoUrl.trim() || isConnecting}
-                    onClick={handleConnect}
-                  >
-                    {isConnecting ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                        Connecting...
-                      </>
-                    ) : (
-                      "Connect Repository"
-                    )}
-                  </Button>
-                  <p className="text-xs text-text-muted text-center">
-                    Tip: Add <span className="font-medium text-text-secondary">m</span> before github.com — e.g. <span className="font-medium text-text-secondary">mgithub.com/owner/repo</span>
-                  </p>
-                </div>
-              </div>
-            </div>
+            <LandingPage
+              repoUrl={repoUrl}
+              onRepoUrlChange={setRepoUrl}
+              onConnect={handleConnect}
+              onConnectWithUrl={connectRepository}
+              isConnecting={isConnecting}
+              error={repoError}
+            />
           )
         ) : activeTab === "issues" ? (
           codeIndex && codeIndex.totalFiles > 0 ? (
             <IssuesPanel codeIndex={codeIndex} onNavigateToFile={handleNavigateToFile} />
           ) : repo ? (
             <div className="flex items-center justify-center h-full">
-              <div className="flex flex-col items-center gap-3 text-text-muted">
-                <Loader2 className="h-6 w-6 animate-spin" />
-                <p className="text-sm">Indexing codebase...</p>
-              </div>
+              <LoadingProgress
+                stage={loadingStage}
+                progress={indexingProgress}
+                isCacheHit={isCacheHit}
+                error={repoError}
+                repoName={repo.fullName}
+              />
             </div>
           ) : (
             <IssuesPanel codeIndex={codeIndex} onNavigateToFile={handleNavigateToFile} />

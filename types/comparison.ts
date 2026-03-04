@@ -7,9 +7,18 @@ export interface RepoMetrics {
   languageBreakdown: Record<string, number>
   stars: number
   forks: number
+  openIssues: number
+  pushedAt: string | null
+  license: string | null
 }
 
 export type ComparisonRepoStatus = "loading" | "indexing" | "ready" | "error"
+
+export interface RepoDependencies {
+  deps: Record<string, string>
+  devDeps: Record<string, string>
+  fetchError?: string
+}
 
 export interface ComparisonRepo {
   /** Unique key: `owner/name` */
@@ -19,6 +28,7 @@ export interface ComparisonRepo {
   metrics: RepoMetrics
   status: ComparisonRepoStatus
   error?: string
+  dependencies?: RepoDependencies
 }
 
 export const MAX_COMPARISON_REPOS = 5

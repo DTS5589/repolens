@@ -27,6 +27,9 @@ function createRepo(overrides: Partial<GitHubRepo> = {}): GitHubRepo {
     topics: [],
     isPrivate: false,
     url: 'https://github.com/acme/widget',
+    openIssuesCount: 5,
+    pushedAt: '2025-01-01T00:00:00Z',
+    license: 'MIT',
     ...overrides,
   }
 }

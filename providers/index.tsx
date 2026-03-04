@@ -5,7 +5,7 @@ import { SessionProvider } from "next-auth/react"
 import { ThemeProvider } from "next-themes"
 import { AppProvider, useApp } from "./app-provider"
 import { APIKeysProvider, useAPIKeys } from "./api-keys-provider"
-import { RepositoryProvider, useRepository } from "./repository-provider"
+import { RepositoryProvider, useRepository, type LoadingStage } from "./repository-provider"
 import { DocsProvider, useDocs, useDocsChat } from "./docs-provider"
 
 interface ProvidersProps {
@@ -31,3 +31,4 @@ export function Providers({ children }: ProvidersProps) {
 }
 
 export { useApp, useAPIKeys, useRepository, useDocs, useDocsChat }
+export type { LoadingStage }

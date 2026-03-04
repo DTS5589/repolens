@@ -52,6 +52,9 @@ export async function fetchRepoMetadata(
     isPrivate: data.private,
     url: data.html_url,
     size: data.size,
+    openIssuesCount: data.open_issues_count ?? 0,
+    pushedAt: data.pushed_at ?? '',
+    license: data.license?.spdx_id ?? null,
   }
 }
 

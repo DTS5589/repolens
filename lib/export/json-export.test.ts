@@ -22,6 +22,9 @@ function createRepo(overrides: Partial<GitHubRepo> = {}): GitHubRepo {
     topics: [],
     isPrivate: false,
     url: 'https://github.com/test-owner/test-repo',
+    openIssuesCount: 3,
+    pushedAt: '2025-01-01T00:00:00Z',
+    license: 'MIT',
     ...overrides,
   }
 }
