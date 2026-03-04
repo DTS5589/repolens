@@ -528,7 +528,7 @@ describe('Category F: Crypto Weaknesses', () => {
     expect(hits.length).toBeGreaterThanOrEqual(1)
   })
 
-  it('F3: detects hashlib.md5 in Python style', () => {
+  it('F3: detects Java MessageDigest.getInstance with md5', () => {
     // The weak-hash pattern requires quotes around the algo name:
     // (?:createHash|hashlib|...) \s*\(?\s*['"](?:md5|sha1|sha-1)['"]
     // Python hashlib.md5() doesn't have quotes — GAP for method-based API.
@@ -908,6 +908,21 @@ describe('Category I: Quality & Structural', () => {
     const result = scanCode('src/config.ts', code, 'typescript')
     const hits = issuesForRule(result.issues, 'hardcoded-ip')
     expect(hits.length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('I13: detects Go blank import without comment', () => {
+    const code = '_ "database/sql"'
+    const result = scanCode('src/main.go', code, 'go')
+    const hits = issuesForRule(result.issues, 'go-unused-import-comment')
+    expect(hits.length).toBeGreaterThanOrEqual(1)
+    expect(hits[0].severity).toBe('info')
+  })
+
+  it('I14: FALSE POSITIVE — Go blank import with comment is suppressed', () => {
+    const code = '_ "database/sql" // for init()'
+    const result = scanCode('src/main.go', code, 'go')
+    const hits = issuesForRule(result.issues, 'go-unused-import-comment')
+    expect(hits).toHaveLength(0)
   })
 })
 
