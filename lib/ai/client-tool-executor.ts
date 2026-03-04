@@ -209,6 +209,10 @@ function executeListDirectory(
     }
   }
 
+  if (entries.size === 0 && input.path) {
+    return { error: `Directory not found: ${input.path}. Use listDirectory with an empty path to see the root.` }
+  }
+
   return {
     directory: input.path || '(root)',
     entries: Array.from(entries).sort((a, b) => {
@@ -495,7 +499,7 @@ function executeScanIssues(
     if (line.match(/console\.(log|debug|info)\(/)) issues.push({ line: i + 1, severity: 'info', message: 'Console statement (remove before production)' })
     if (line.includes('any') && line.match(/:\s*any\b/)) issues.push({ line: i + 1, severity: 'warning', message: 'TypeScript `any` type reduces type safety' })
     if (line.includes('TODO') || line.includes('FIXME') || line.includes('HACK')) issues.push({ line: i + 1, severity: 'info', message: `Code annotation: ${line.trim().slice(0, 80)}` })
-    if (line.includes('password') && line.match(/['"]\w+['"]/)) issues.push({ line: i + 1, severity: 'critical', message: 'Possible hardcoded credential' })
+    if (/(?:password|passwd|pwd)\s*[:=]\s*['"][^'"]{4,}['"]/i.test(line)) issues.push({ line: i + 1, severity: 'critical', message: 'Possible hardcoded credential' })
   }
 
   return { path: file.path, issueCount: issues.length, issues: issues.slice(0, 50) }
@@ -528,7 +532,7 @@ function executeGenerateDiagram(
     for (const [filePath, file] of codeIndex.files) {
       const dir = filePath.split('/').slice(0, -1).join('/') || '(root)'
       nodes.add(dir)
-      const importRegex = /import\s+.*from\s+['"](\.\.?\/[^'"]+)['"]/g
+      const importRegex = /import\s+.*from\s+['"](@\/[^'"]+|\.\.?\/[^'"]+)['"]/g
       let m
       while ((m = importRegex.exec(file.content)) !== null) {
         const importPath = m[1].replace(/\.\w+$/, '')
@@ -557,12 +561,7 @@ function executeGenerateDiagram(
     return { type: input.type, mermaid, nodeCount: nodes.size, edgeCount: uniqueEdges.length }
   }
 
-  return {
-    type: input.type,
-    note: `Diagram type '${input.type}' requires complex analysis. Here's the file structure you can reference in a Mermaid diagram:`,
-    structure: paths.slice(0, 100),
-    totalFiles: paths.length,
-  }
+  return { error: `Unsupported diagram type: ${input.type}` }
 }
 
 function executeGetProjectOverview(

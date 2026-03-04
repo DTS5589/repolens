@@ -196,16 +196,19 @@ function compactFileReadResult(
   if (output.type === 'json') {
     const value = output.value as Record<string, unknown>
 
-    // readFiles returns an array of file results
-    if (toolName === 'readFiles' && Array.isArray(value)) {
-      const summaries = value.map((file: Record<string, unknown>) => {
-        const content = typeof file.content === 'string' ? file.content : ''
-        const path = typeof file.path === 'string' ? file.path : ''
-        return summarizeCodeForCompaction(content, path)
-      })
-      return {
-        ...(part as Record<string, unknown>),
-        output: { type: 'text' as const, value: `[compacted] ${summaries.join('\n')}` },
+    // readFiles returns { files: [...] } wrapper shape
+    if (toolName === 'readFiles' && typeof value === 'object' && value !== null && 'files' in value) {
+      const filesArray = (value as Record<string, unknown>).files
+      if (Array.isArray(filesArray)) {
+        const summaries = filesArray.map((file: Record<string, unknown>) => {
+          const content = typeof file.content === 'string' ? file.content : ''
+          const path = typeof file.path === 'string' ? file.path : ''
+          return summarizeCodeForCompaction(content, path)
+        })
+        return {
+          ...(part as Record<string, unknown>),
+          output: { type: 'text' as const, value: `[compacted batch] ${summaries.join('\n')}` },
+        }
       }
     }
 

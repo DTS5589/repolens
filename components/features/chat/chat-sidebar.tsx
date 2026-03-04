@@ -12,6 +12,7 @@ import { useAPIKeys, useRepository } from "@/providers"
 import { buildFileTreeString } from "@/lib/github/fetcher"
 import { downloadFile } from "@/lib/export"
 import { buildStructuralIndex } from "@/lib/ai/structural-index"
+import { getMaxIndexBytesForModel } from "@/lib/ai/providers"
 import { executeToolLocally } from "@/lib/ai/client-tool-executor"
 import type { CodeIndex } from "@/lib/code/code-index"
 
@@ -85,7 +86,7 @@ export function ChatSidebar({ className }: { className?: string }) {
     const currentInput = input.trim()
     setInput("")
 
-    const structuralIndex = buildStructuralIndex(codeIndex)
+    const structuralIndex = buildStructuralIndex(codeIndex, { maxIndexBytes: getMaxIndexBytesForModel(selectedModel.id) })
 
     sendMessage(
       { text: currentInput },

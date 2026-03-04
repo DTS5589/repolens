@@ -1,19 +1,8 @@
-import { streamText, convertToModelMessages, stepCountIs, consumeStream, tool, type UIMessage } from 'ai'
+import { streamText, convertToModelMessages, stepCountIs, consumeStream, type UIMessage } from 'ai'
 import * as z from 'zod'
 import { createAIModel, getModelContextWindow } from '@/lib/ai/providers'
 import { createContextCompactor } from '@/lib/ai/context-compactor'
-import {
-  readFileSchema,
-  readFilesSchema,
-  searchFilesSchema,
-  listDirectorySchema,
-  findSymbolSchema,
-  getFileStatsSchema,
-  analyzeImportsSchema,
-  scanIssuesSchema,
-  generateDiagramSchema,
-  getProjectOverviewSchema,
-} from '@/lib/ai/tool-schemas'
+import { codeTools } from '@/lib/ai/tool-definitions'
 
 export const maxDuration = 120
 
@@ -37,8 +26,17 @@ const chatRequestSchema = z.object({
 })
 
 export async function POST(req: Request) {
+  let raw: unknown
   try {
-    const raw = await req.json()
+    raw = await req.json()
+  } catch {
+    return new Response(
+      JSON.stringify({ error: 'Invalid JSON in request body' }),
+      { status: 400, headers: { 'Content-Type': 'application/json' } }
+    )
+  }
+
+  try {
     const parsed = chatRequestSchema.safeParse(raw)
     if (!parsed.success) {
       return new Response(
@@ -48,20 +46,6 @@ export async function POST(req: Request) {
     }
     const { messages: rawMessages, provider, model, apiKey, repoContext, structuralIndex, maxSteps } = parsed.data
     const messages = rawMessages as unknown as UIMessage[]
-
-    // Client-side tools — no execute function, tool calls stream to client
-    const codeTools = {
-      readFile: tool({ description: 'Read the full contents of a file, or a specific line range. Use startLine/endLine to read sections of large files efficiently. Always read files before making claims about their code.', inputSchema: readFileSchema }),
-      readFiles: tool({ description: 'Read multiple files at once (max 10). More efficient than calling readFile repeatedly.', inputSchema: readFilesSchema }),
-      searchFiles: tool({ description: 'Search for files by path pattern or search for text content across all files. Returns matching file paths and line matches. Set isRegex=true to use regular expression patterns (e.g. "export\\s+function\\s+handle" to find exported functions starting with handle).', inputSchema: searchFilesSchema }),
-      listDirectory: tool({ description: 'List files and subdirectories in a specific directory. Useful to explore folder structure.', inputSchema: listDirectorySchema }),
-      findSymbol: tool({ description: 'Find function, class, interface, type, or enum definitions across the codebase by name. Returns file path and line number.', inputSchema: findSymbolSchema }),
-      getFileStats: tool({ description: 'Get statistics for a file: line count, language, imports, and exports.', inputSchema: getFileStatsSchema }),
-      analyzeImports: tool({ description: 'Analyze import relationships for a file. Shows what it imports and what other files import it.', inputSchema: analyzeImportsSchema }),
-      scanIssues: tool({ description: 'Run the code quality and security scanner on a specific file. Returns issues found with severity.', inputSchema: scanIssuesSchema }),
-      generateDiagram: tool({ description: 'Generate a Mermaid diagram of the codebase. Types: summary, topology, import-graph, class-diagram, entry-points, module-usage, treemap, external-deps, focus-diagram.', inputSchema: generateDiagramSchema }),
-      getProjectOverview: tool({ description: 'Get a comprehensive overview of the project: file count, languages, folder structure, and key patterns.', inputSchema: getProjectOverviewSchema }),
-    }
 
     // Build system prompt
     let systemPrompt = `You are CodeDoc, a senior software engineer with full access to the codebase. You help developers understand code, answer architecture questions, write documentation, and create diagrams.

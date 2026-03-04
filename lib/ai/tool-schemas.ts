@@ -14,7 +14,7 @@ export const readFilesSchema = z.object({
 
 export const searchFilesSchema = z.object({
   query: z.string().describe('Search query -- matches against file paths AND file contents. Supports regex when isRegex is true.'),
-  maxResults: z.number().nullable().describe('Max results to return. Defaults to 15.'),
+  maxResults: z.number().optional().describe('Max results to return. Defaults to 15.'),
   isRegex: z.boolean().optional().describe('When true, treat query as a regular expression pattern. Defaults to false.'),
 })
 
@@ -46,19 +46,9 @@ export const scanIssuesSchema = z.object({
 
 export const generateDiagramSchema = z.object({
   type: z
-    .enum([
-      'summary',
-      'topology',
-      'import-graph',
-      'class-diagram',
-      'entry-points',
-      'module-usage',
-      'treemap',
-      'external-deps',
-      'focus-diagram',
-    ])
-    .describe('Diagram type'),
-  focusFile: z.string().optional().describe('For focus-diagram: the file path to focus on'),
+    .enum(['summary', 'topology', 'import-graph'])
+    .describe('Diagram type: summary (file distribution pie chart), topology (module dependency graph), or import-graph (import relationship graph)'),
+  focusFile: z.string().optional().describe('Optional file path to focus the diagram on'),
 })
 
 export const getProjectOverviewSchema = z.object({})

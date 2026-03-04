@@ -16,6 +16,7 @@ import type { UIMessage } from 'ai'
 import { useAPIKeys, useRepository } from '@/providers'
 import { buildFileTreeString } from '@/lib/github/fetcher'
 import { buildStructuralIndex } from '@/lib/ai/structural-index'
+import { getMaxIndexBytesForModel } from '@/lib/ai/providers'
 import { executeToolLocally } from '@/lib/ai/client-tool-executor'
 import type { CodeIndex } from '@/lib/code/code-index'
 
@@ -230,7 +231,7 @@ export function DocsProvider({ children }: { children: ReactNode }) {
             throw new Error('Model or repository not ready for doc generation')
           }
 
-          const structuralIndex = buildStructuralIndex(codeIndexRef.current)
+          const structuralIndex = buildStructuralIndex(codeIndexRef.current, { maxIndexBytes: getMaxIndexBytesForModel(model.id) })
 
           return {
             body: {
