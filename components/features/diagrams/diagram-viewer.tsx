@@ -1,7 +1,8 @@
 "use client"
 
-import { useState, useMemo, useRef, useCallback, useEffect } from 'react'
-import { MermaidDiagram, type MermaidDiagramHandle } from './mermaid-diagram'
+import { useState, useMemo, useRef, useCallback, useEffect, lazy, Suspense } from 'react'
+import type { MermaidDiagramHandle } from './mermaid-diagram'
+import { MermaidDiagramSkeleton } from '@/components/features/loading/tab-skeleton'
 import {
   generateDiagram,
   getAvailableDiagrams,
@@ -20,6 +21,11 @@ import { StatsBar } from './stats-bar'
 import { DiagramFloatingControls } from './diagram-floating-controls'
 import { DiagramToolbar } from './diagram-toolbar'
 import { exportSvg, exportPng } from './diagram-export'
+
+// Lazy-load MermaidDiagram — it pulls in ~2.7 MB of Mermaid.js
+const MermaidDiagram = lazy(() =>
+  import('./mermaid-diagram').then(m => ({ default: m.MermaidDiagram }))
+)
 
 // ---------------------------------------------------------------------------
 // Props
@@ -153,9 +159,14 @@ export function DiagramViewer({ files, codeIndex, className, onNavigateToFile }:
   if (!files || files.length === 0) {
     return (
       <div className={cn('flex h-full items-center justify-center', className)}>
-        <div className="text-center text-text-secondary">
-          <Network className="h-12 w-12 mx-auto mb-4 opacity-50" />
-          <p>Connect a repository to generate diagrams</p>
+        <div className="flex flex-col items-center gap-4 text-text-muted animate-in fade-in duration-300">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-foreground/[0.04] border border-foreground/[0.06]">
+            <Network className="h-6 w-6 text-text-secondary" />
+          </div>
+          <div className="flex flex-col items-center gap-1">
+            <p className="text-sm font-medium text-text-secondary">No repository connected</p>
+            <p className="text-xs text-center max-w-[260px]">Connect a GitHub repository to generate architecture, dependency, and topology diagrams</p>
+          </div>
         </div>
       </div>
     )
@@ -211,11 +222,16 @@ export function DiagramViewer({ files, codeIndex, className, onNavigateToFile }:
                 isTreemap && diagram.type === 'treemap' ? (
                   <TreemapChart data={(diagram as TreemapDiagramResult).data} width={containerSize.width} height={containerSize.height} onNodeClick={handleTreemapClick} />
                 ) : diagram.type !== 'treemap' && diagram.type !== 'summary' ? (
-                  <MermaidDiagram ref={mermaidRef} chart={diagram.chart} className="min-h-[400px] p-4" onNodeClick={handleNodeClick} />
+                  <Suspense fallback={<MermaidDiagramSkeleton />}>
+                    <MermaidDiagram ref={mermaidRef} chart={diagram.chart} className="min-h-[400px] p-4" onNodeClick={handleNodeClick} />
+                  </Suspense>
                 ) : null
               ) : (
                 <div className="flex h-full items-center justify-center">
-                  <p className="text-sm text-text-muted">No diagram data available</p>
+                  <div className="flex flex-col items-center gap-3 animate-in fade-in duration-300">
+                    <Network className="h-8 w-8 text-text-muted" />
+                    <p className="text-sm text-text-muted">No diagram data available for this view</p>
+                  </div>
                 </div>
               )}
             </div>

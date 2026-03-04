@@ -194,9 +194,14 @@ export function CodeBrowser({ navigateToFile, onNavigateComplete }: CodeBrowserP
   if (!repo) {
     return (
       <div className="flex h-full items-center justify-center bg-background">
-        <div className="text-center text-text-secondary">
-          <Code2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
-          <p>Connect a repository to browse code</p>
+        <div className="flex flex-col items-center gap-4 text-text-muted animate-in fade-in duration-300">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-foreground/[0.04] border border-foreground/[0.06]">
+            <Code2 className="h-6 w-6 text-text-secondary" />
+          </div>
+          <div className="flex flex-col items-center gap-1">
+            <p className="text-sm font-medium text-text-secondary">No repository connected</p>
+            <p className="text-xs text-center max-w-[260px]">Connect a GitHub repository to browse, search, and edit source code</p>
+          </div>
         </div>
       </div>
     )

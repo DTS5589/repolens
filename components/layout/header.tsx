@@ -40,7 +40,7 @@ export function Header({ className }: HeaderProps) {
           <Image src="/repolens.svg" alt="RepoLens" width={24} height={20} className="dark:invert" />
           <Link
             href="/compare"
-            className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-text-secondary hover:text-text-primary hover:bg-foreground/5 transition-colors"
+            className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-text-secondary hover:text-text-primary hover:bg-foreground/5 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <GitCompareArrows className="h-3.5 w-3.5" />
             Compare
@@ -53,7 +53,7 @@ export function Header({ className }: HeaderProps) {
           <Button
             variant="ghost"
             size="icon"
-            className="relative h-7 w-7 text-text-secondary hover:text-text-primary hover:bg-foreground/5"
+            className="relative h-7 w-7 text-text-secondary hover:text-text-primary hover:bg-foreground/5 transition-colors duration-150"
             onClick={() => setSettingsOpen(true)}
           >
             <Settings className="h-3.5 w-3.5" />

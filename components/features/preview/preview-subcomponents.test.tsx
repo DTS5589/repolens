@@ -6,7 +6,7 @@ import { LoadingWithStatus } from './loading-with-status'
 describe('DefaultContent', () => {
   it('renders without crashing', () => {
     render(<DefaultContent />)
-    expect(screen.getByText('Preview')).toBeInTheDocument()
+    expect(screen.getByText('Select a tab to get started')).toBeInTheDocument()
   })
 
   it('displays the Code2 icon area', () => {

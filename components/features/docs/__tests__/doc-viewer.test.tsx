@@ -620,7 +620,7 @@ describe('DocViewer', () => {
     it('shows connect repository message', () => {
       setupMocks({ repo: null, files: [] })
       render(<DocViewer />)
-      expect(screen.getByText(/connect a repository/i)).toBeInTheDocument()
+      expect(screen.getByText(/connect a github repository/i)).toBeInTheDocument()
     })
   })
 

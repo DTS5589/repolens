@@ -1,15 +1,11 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef, useMemo } from "react"
+import { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense } from "react"
 import { cn } from "@/lib/utils"
 import { useApp, useRepository } from "@/providers"
 import { LoadingProgress } from "@/components/features/loading/loading-progress"
 import { ProjectSummaryPanel } from "@/components/features/repo/project-summary"
 import { flattenFiles } from "@/lib/code/code-index"
-import { CodeBrowser } from "@/components/features/code/code-browser"
-import { DocViewer } from "@/components/features/docs/doc-viewer"
-import { DiagramViewer } from "@/components/features/diagrams/diagram-viewer"
-import { IssuesPanel } from "@/components/features/issues/issues-panel"
 import { parseShareableUrl, updateUrlState, clearUrlState } from "@/lib/export"
 import { LandingPage } from "@/components/features/landing/landing-page"
 import { DefaultContent } from "./default-content"
@@ -18,6 +14,27 @@ import { PREVIEW_TABS } from "./tab-config"
 import { GlobalSearchOverlay } from "./global-search-overlay"
 import { PreviewRepoHeader } from "./preview-repo-header"
 import { PreviewTabBar } from "./preview-tab-bar"
+import {
+  IssuesTabSkeleton,
+  DocsTabSkeleton,
+  DiagramTabSkeleton,
+  CodeTabSkeleton,
+} from "@/components/features/loading/tab-skeleton"
+import { FeatureErrorBoundary } from "@/components/ui/feature-error-boundary"
+
+// Lazy-loaded heavy tab components (code-split per tab)
+const CodeBrowser = lazy(() =>
+  import("@/components/features/code/code-browser").then(m => ({ default: m.CodeBrowser }))
+)
+const DocViewer = lazy(() =>
+  import("@/components/features/docs/doc-viewer").then(m => ({ default: m.DocViewer }))
+)
+const DiagramViewer = lazy(() =>
+  import("@/components/features/diagrams/diagram-viewer").then(m => ({ default: m.DiagramViewer }))
+)
+const IssuesPanel = lazy(() =>
+  import("@/components/features/issues/issues-panel").then(m => ({ default: m.IssuesPanel }))
+)
 
 export function PreviewPanel({ className }: { className?: string }) {
   const { previewUrl, isGenerating: isLoading } = useApp()
@@ -176,27 +193,43 @@ export function PreviewPanel({ className }: { className?: string }) {
             />
           )
         ) : activeTab === "issues" ? (
-          codeIndex && codeIndex.totalFiles > 0 ? (
-            <IssuesPanel codeIndex={codeIndex} onNavigateToFile={handleNavigateToFile} />
-          ) : repo ? (
-            <div className="flex items-center justify-center h-full">
-              <LoadingProgress
-                stage={loadingStage}
-                progress={indexingProgress}
-                isCacheHit={isCacheHit}
-                error={repoError}
-                repoName={repo.fullName}
-              />
-            </div>
-          ) : (
-            <IssuesPanel codeIndex={codeIndex} onNavigateToFile={handleNavigateToFile} />
-          )
+          <FeatureErrorBoundary featureName="Issues Scanner">
+            <Suspense fallback={<IssuesTabSkeleton />}>
+              {codeIndex && codeIndex.totalFiles > 0 ? (
+                <IssuesPanel codeIndex={codeIndex} onNavigateToFile={handleNavigateToFile} />
+              ) : repo ? (
+                <div className="flex items-center justify-center h-full">
+                  <LoadingProgress
+                    stage={loadingStage}
+                    progress={indexingProgress}
+                    isCacheHit={isCacheHit}
+                    error={repoError}
+                    repoName={repo.fullName}
+                  />
+                </div>
+              ) : (
+                <IssuesPanel codeIndex={codeIndex} onNavigateToFile={handleNavigateToFile} />
+              )}
+            </Suspense>
+          </FeatureErrorBoundary>
         ) : activeTab === "docs" ? (
-          <DocViewer />
+          <FeatureErrorBoundary featureName="Documentation">
+            <Suspense fallback={<DocsTabSkeleton />}>
+              <DocViewer />
+            </Suspense>
+          </FeatureErrorBoundary>
         ) : activeTab === "diagram" ? (
-          <DiagramViewer files={files} codeIndex={codeIndex} onNavigateToFile={handleNavigateToFile} />
+          <FeatureErrorBoundary featureName="Diagram Viewer">
+            <Suspense fallback={<DiagramTabSkeleton />}>
+              <DiagramViewer files={files} codeIndex={codeIndex} onNavigateToFile={handleNavigateToFile} />
+            </Suspense>
+          </FeatureErrorBoundary>
         ) : activeTab === "code" ? (
-          <CodeBrowser key="code-browser" navigateToFile={pendingNavigateFile} onNavigateComplete={handleNavigateComplete} />
+          <FeatureErrorBoundary featureName="Code Browser">
+            <Suspense fallback={<CodeTabSkeleton />}>
+              <CodeBrowser key="code-browser" navigateToFile={pendingNavigateFile} onNavigateComplete={handleNavigateComplete} />
+            </Suspense>
+          </FeatureErrorBoundary>
         ) : (
           <DefaultContent />
         )}

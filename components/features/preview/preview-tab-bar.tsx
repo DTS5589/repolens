@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { ExternalLink, Maximize2, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -24,6 +25,11 @@ export function PreviewTabBar({
   onOpenSearch,
   localPreviewUrl,
 }: PreviewTabBarProps) {
+  const [isMac, setIsMac] = useState(false)
+  useEffect(() => {
+    setIsMac(navigator.platform.toUpperCase().includes('MAC'))
+  }, [])
+
   return (
     <div className="flex h-11 items-center justify-between border-b border-foreground/[0.06] px-4 bg-card">
       <div className="flex items-center h-full gap-0.5">
@@ -35,14 +41,16 @@ export function PreviewTabBar({
               key={tab.id}
               onClick={() => onTabChange(tab.id)}
               className={cn(
-                "relative flex items-center gap-1.5 h-full px-3 text-xs font-medium transition-colors",
+                "relative flex items-center gap-1.5 h-full px-3 text-xs font-medium",
+                "transition-colors duration-150",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
                 isActive
                   ? "text-text-primary after:absolute after:bottom-0 after:inset-x-3 after:h-px after:bg-foreground"
                   : "text-text-secondary hover:text-text-primary"
               )}
             >
               <Icon className="h-3.5 w-3.5" />
-              {tab.label}
+              <span className="hidden sm:inline">{tab.label}</span>
             </button>
           )
         })}
@@ -53,12 +61,12 @@ export function PreviewTabBar({
         {hasRepo && fileCount > 0 && (
           <button
             onClick={onOpenSearch}
-            className="flex items-center gap-2 h-7 px-2.5 rounded-md text-xs text-text-muted hover:text-text-secondary bg-foreground/[0.03] border border-foreground/[0.06] hover:border-foreground/10 transition-colors"
-            title="Search files (Ctrl+K)"
+            className="flex items-center gap-2 h-7 px-2.5 rounded-md text-xs text-text-muted hover:text-text-secondary bg-foreground/[0.03] border border-foreground/[0.06] hover:border-foreground/10 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            title={`Search files (${isMac ? '⌘' : 'Ctrl+'}K)`}
           >
             <Search className="h-3 w-3" />
             <span className="hidden sm:inline">Search files</span>
-            <kbd className="hidden sm:inline text-[10px] text-text-muted/60 bg-foreground/[0.04] px-1 py-0.5 rounded font-mono leading-none">{'⌘K'}</kbd>
+            <kbd className="hidden sm:inline text-[10px] text-text-muted/60 bg-foreground/[0.04] px-1 py-0.5 rounded font-mono leading-none">{isMac ? '⌘K' : 'Ctrl+K'}</kbd>
           </button>
         )}
         {localPreviewUrl && (
@@ -66,7 +74,7 @@ export function PreviewTabBar({
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7 text-text-secondary hover:text-text-primary hover:bg-foreground/5"
+              className="h-7 w-7 text-text-secondary hover:text-text-primary hover:bg-foreground/5 transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-ring"
               onClick={() => window.open(localPreviewUrl, "_blank")}
               title="Open in new tab"
             >
@@ -75,7 +83,7 @@ export function PreviewTabBar({
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7 text-text-secondary hover:text-text-primary hover:bg-foreground/5"
+              className="h-7 w-7 text-text-secondary hover:text-text-primary hover:bg-foreground/5 transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-ring"
               title="Fullscreen"
             >
               <Maximize2 className="h-3.5 w-3.5" />

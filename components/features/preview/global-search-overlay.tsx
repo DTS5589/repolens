@@ -63,7 +63,7 @@ export function GlobalSearchOverlay({
                 <button
                   key={f.path}
                   onClick={() => onSelect(f.path)}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-foreground/5 transition-colors group"
+                  className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-foreground/5 transition-colors duration-150 focus-visible:outline-none focus-visible:bg-foreground/5 group"
                 >
                   <Code2 className="h-3.5 w-3.5 text-text-muted shrink-0" />
                   <div className="flex flex-col min-w-0">

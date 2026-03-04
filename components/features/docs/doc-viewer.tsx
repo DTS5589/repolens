@@ -150,9 +150,14 @@ export function DocViewer({ className }: DocViewerProps) {
   if (!repo) {
     return (
       <div className={cn('flex items-center justify-center h-full', className)}>
-        <div className="text-center text-text-secondary">
-          <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
-          <p className="text-sm">Connect a repository to generate documentation</p>
+        <div className="flex flex-col items-center gap-4 text-text-muted animate-in fade-in duration-300">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-foreground/[0.04] border border-foreground/[0.06]">
+            <FileText className="h-6 w-6 text-text-secondary" />
+          </div>
+          <div className="flex flex-col items-center gap-1">
+            <p className="text-sm font-medium text-text-secondary">No repository connected</p>
+            <p className="text-xs text-center max-w-[260px]">Connect a GitHub repository to generate architecture docs, setup guides, and API references</p>
+          </div>
         </div>
       </div>
     )
@@ -162,10 +167,14 @@ export function DocViewer({ className }: DocViewerProps) {
   if (!hasValidKey) {
     return (
       <div className={cn('flex items-center justify-center h-full', className)}>
-        <div className="text-center max-w-sm">
-          <AlertCircle className="h-10 w-10 mx-auto mb-3 text-text-muted" />
-          <p className="text-sm text-text-secondary mb-1">API key required</p>
-          <p className="text-xs text-text-muted">Add an API key in Settings and select a model to generate documentation with AI.</p>
+        <div className="flex flex-col items-center gap-4 animate-in fade-in duration-300">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-status-warning/10 border border-status-warning/20">
+            <AlertCircle className="h-6 w-6 text-status-warning" />
+          </div>
+          <div className="flex flex-col items-center gap-1 text-center max-w-sm">
+            <p className="text-sm font-medium text-text-secondary">API key required</p>
+            <p className="text-xs text-text-muted">Add an API key in Settings and select a model to generate documentation with AI.</p>
+          </div>
         </div>
       </div>
     )

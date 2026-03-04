@@ -154,10 +154,14 @@ export function IssuesPanel({ codeIndex, onNavigateToFile }: IssuesPanelProps) {
   if (codeIndex.totalFiles === 0) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="flex flex-col items-center gap-3 text-text-muted">
-          <Shield className="h-6 w-6" />
-          <p className="text-sm font-medium">Load a repository to see code issues</p>
-          <p className="text-xs text-center max-w-[240px]">Enter a GitHub repository URL to analyze code quality</p>
+        <div className="flex flex-col items-center gap-4 text-text-muted animate-in fade-in duration-300">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-foreground/[0.04] border border-foreground/[0.06]">
+            <Shield className="h-6 w-6 text-text-secondary" />
+          </div>
+          <div className="flex flex-col items-center gap-1">
+            <p className="text-sm font-medium text-text-secondary">No repository loaded</p>
+            <p className="text-xs text-center max-w-[260px]">Connect a GitHub repository to scan for security issues, code quality, and best practices</p>
+          </div>
         </div>
       </div>
     )

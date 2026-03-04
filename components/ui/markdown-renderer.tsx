@@ -3,12 +3,31 @@
 import ReactMarkdown, { type Components } from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { useTheme } from "next-themes"
-import { useState, useEffect, useRef, useCallback, memo } from "react"
+import { useState, useEffect, useRef, useCallback, memo, lazy, Suspense } from "react"
 import { cn } from "@/lib/utils"
 import type { BundledLanguage, BundledTheme, HighlighterGeneric } from "shiki"
-import mermaid from "mermaid"
-import { MermaidDiagram, type MermaidDiagramHandle } from "@/components/features/diagrams/mermaid-diagram"
+import type { MermaidDiagramHandle } from "@/components/features/diagrams/mermaid-diagram"
 import { Download, WrapText, Copy, Check, EyeOff } from "lucide-react"
+
+const LazyMermaidDiagram = lazy(() =>
+  import("@/components/features/diagrams/mermaid-diagram").then(m => ({ default: m.MermaidDiagram }))
+)
+
+// ---------------------------------------------------------------------------
+// Singleton Mermaid loader (deferred to reduce initial bundle by ~2.8 MB)
+// ---------------------------------------------------------------------------
+
+let mermaidPromise: Promise<typeof import('mermaid')['default']> | null = null
+
+function getMermaid() {
+  if (!mermaidPromise) {
+    mermaidPromise = import('mermaid').then(m => {
+      m.default.initialize({ startOnLoad: false, theme: 'default' })
+      return m.default
+    })
+  }
+  return mermaidPromise
+}
 
 // ---------------------------------------------------------------------------
 // Singleton Shiki highlighter (mirrors pattern in use-syntax-highlighting.ts)
@@ -267,44 +286,51 @@ function MermaidDiagramBlock({ children }: { children: string }) {
   // Re-initialize mermaid with correct theme variables when theme changes
   useEffect(() => {
     const isDark = resolvedTheme === "dark"
-    mermaid.initialize({
-      startOnLoad: false,
-      theme: isDark ? "dark" : "default",
-      securityLevel: "strict",
-      themeVariables: isDark
-        ? {
-            primaryColor: "#3b82f6",
-            primaryTextColor: "#f8fafc",
-            primaryBorderColor: "#60a5fa",
-            lineColor: "#64748b",
-            secondaryColor: "#1e293b",
-            tertiaryColor: "#0f172a",
-            background: "#0a0a0a",
-            mainBkg: "#1e293b",
-            nodeBorder: "#475569",
-            clusterBkg: "#1e293b",
-            titleColor: "#f8fafc",
-            edgeLabelBackground: "#1e293b",
-          }
-        : {
-            primaryColor: "#3b82f6",
-            primaryTextColor: "#1e293b",
-            primaryBorderColor: "#3b82f6",
-            lineColor: "#94a3b8",
-            secondaryColor: "#f1f5f9",
-            tertiaryColor: "#e2e8f0",
-            background: "#ffffff",
-            mainBkg: "#f1f5f9",
-            nodeBorder: "#94a3b8",
-            clusterBkg: "#f8fafc",
-            titleColor: "#1e293b",
-            edgeLabelBackground: "#f8fafc",
-          },
-      flowchart: {
-        htmlLabels: true,
-        curve: "basis",
-      },
+    let cancelled = false
+
+    getMermaid().then((m) => {
+      if (cancelled) return
+      m.initialize({
+        startOnLoad: false,
+        theme: isDark ? "dark" : "default",
+        securityLevel: "strict",
+        themeVariables: isDark
+          ? {
+              primaryColor: "#3b82f6",
+              primaryTextColor: "#f8fafc",
+              primaryBorderColor: "#60a5fa",
+              lineColor: "#64748b",
+              secondaryColor: "#1e293b",
+              tertiaryColor: "#0f172a",
+              background: "#0a0a0a",
+              mainBkg: "#1e293b",
+              nodeBorder: "#475569",
+              clusterBkg: "#1e293b",
+              titleColor: "#f8fafc",
+              edgeLabelBackground: "#1e293b",
+            }
+          : {
+              primaryColor: "#3b82f6",
+              primaryTextColor: "#1e293b",
+              primaryBorderColor: "#3b82f6",
+              lineColor: "#94a3b8",
+              secondaryColor: "#f1f5f9",
+              tertiaryColor: "#e2e8f0",
+              background: "#ffffff",
+              mainBkg: "#f1f5f9",
+              nodeBorder: "#94a3b8",
+              clusterBkg: "#f8fafc",
+              titleColor: "#1e293b",
+              edgeLabelBackground: "#f8fafc",
+            },
+        flowchart: {
+          htmlLabels: true,
+          curve: "basis",
+        },
+      })
     })
+
+    return () => { cancelled = true }
   }, [resolvedTheme])
 
   // Reset raw code panel when chart content changes
@@ -346,11 +372,13 @@ function MermaidDiagramBlock({ children }: { children: string }) {
         </div>
       </div>
       <div className="p-4">
-        <MermaidDiagram
-          ref={mermaidRef}
-          chart={children}
-          onShowRawCode={handleToggleRawCode}
-        />
+        <Suspense fallback={<div className="animate-pulse h-48 bg-muted rounded" />}>
+          <LazyMermaidDiagram
+            ref={mermaidRef}
+            chart={children}
+            onShowRawCode={handleToggleRawCode}
+          />
+        </Suspense>
       </div>
       {showRawCode && (
         <div className="border-t border-foreground/[0.06]">

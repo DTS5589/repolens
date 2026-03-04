@@ -156,15 +156,17 @@ export function ChatSidebar({ className }: { className?: string }) {
       {/* Messages */}
       <div className="flex-1 space-y-4 overflow-y-auto p-4 text-sm">
         {messages.length === 0 && hasValidKey && (
-          <div className="flex flex-col items-center justify-center h-full text-center">
-            <Bot className="h-10 w-10 text-text-muted mb-3" />
-            <p className="text-text-secondary">
+          <div className="flex flex-col items-center justify-center h-full text-center animate-in fade-in duration-300">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-foreground/[0.04] border border-foreground/[0.06] mb-4">
+              <Bot className="h-6 w-6 text-text-secondary" />
+            </div>
+            <p className="text-sm font-medium text-text-secondary">
               {repo 
                 ? `Ask me anything about ${repo.name}`
                 : "Connect a repository to get contextual help"
               }
             </p>
-            <p className="text-xs text-text-muted mt-1">
+            <p className="text-xs text-text-muted mt-1.5">
               I can explain code, generate docs, and answer questions
             </p>
           </div>
