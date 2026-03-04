@@ -81,6 +81,8 @@ Valid diagram types: flowchart, sequenceDiagram, classDiagram, erDiagram, gantt,
 Syntax rules:
 - Use \`-->\` for flowchart arrows, never \`->\`
 - Wrap labels containing special characters in quotes: \`A["Label with (parens)"]\`
+- ALWAYS quote node labels containing file paths or slashes: \`A["components/features/chat"]\` NOT \`A[components/features/chat]\`
+- Unquoted \`[/text]\` is trapezoid syntax in mermaid — always quote labels with paths to avoid parse errors
 - Every \`subgraph\` must have a matching \`end\`
 - Sequence diagram arrows: \`->>\` (solid), \`-->>\` (dashed)
 - Never use empty node labels or HTML entities in labels

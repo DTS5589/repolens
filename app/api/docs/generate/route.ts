@@ -51,6 +51,7 @@ Produce a clear, well-structured **Architecture Overview** document.
 - NEVER describe a file you haven't read -- use readFile first
 - Reference specific file paths as \`inline code\`
 - Use mermaid diagrams where helpful (wrap in \`\`\`mermaid blocks)
+- In mermaid diagrams, ALWAYS quote node labels containing file paths or slashes: \`A["src/lib/utils.ts"]\` NOT \`A[src/lib/utils.ts]\`. Unquoted \`[/text]\` triggers trapezoid syntax and causes parse errors
 - Cite actual functions, classes, and patterns from code you inspected`,
 
   'setup': `You are a developer experience expert writing a **Getting Started / Setup Guide**.

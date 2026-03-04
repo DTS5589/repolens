@@ -10,6 +10,7 @@ mermaid.initialize({
   startOnLoad: false,
   theme: 'dark',
   securityLevel: 'strict',
+  suppressErrors: true,
   themeVariables: {
     primaryColor: '#3b82f6',
     primaryTextColor: '#f8fafc',
@@ -90,6 +91,23 @@ interface MermaidDiagramProps {
   onShowRawCode?: () => void
 }
 
+/**
+ * Sanitize mermaid source to fix common AI-generated syntax issues.
+ * Primary fix: quote node labels that contain forward slashes to prevent
+ * mermaid interpreting `[/text]` as trapezoid syntax.
+ */
+function sanitizeMermaidSource(source: string): string {
+  return source.replace(
+    // Match node patterns: ID[label] where label contains / and is not already quoted
+    /(\w+)\[([^\]"]*\/[^\]"]*)](?!\()/g,
+    (_match, id: string, content: string) => {
+      // Don't modify intentional trapezoid syntax: [/ ... \]
+      if (content.startsWith('/') && content.endsWith('\\')) return _match
+      return `${id}["${content}"]`
+    },
+  )
+}
+
 export function MermaidDiagram({ chart, className, onNodeClick, onShowRawCode, ref }: MermaidDiagramProps & { ref?: Ref<MermaidDiagramHandle> }) {
     const containerRef = useRef<HTMLDivElement>(null)
     const [error, setError] = useState<string | null>(null)
@@ -114,7 +132,8 @@ export function MermaidDiagram({ chart, className, onNodeClick, onShowRawCode, r
         try {
           setError(null)
           const id = `mermaid_${currentRender}_${Date.now()}`
-          const { svg } = await mermaid.render(id, chart)
+          const sanitizedChart = sanitizeMermaidSource(chart)
+          const { svg } = await mermaid.render(id, sanitizedChart)
           // Guard against stale renders
           if (currentRender !== renderIdRef.current) return
           setSvgContent(svg)
@@ -122,6 +141,9 @@ export function MermaidDiagram({ chart, className, onNodeClick, onShowRawCode, r
           if (currentRender !== renderIdRef.current) return
           console.error('Mermaid render error:', err)
           setError(err instanceof Error ? err.message : 'Failed to render diagram')
+
+          // Clean up orphaned mermaid error elements from the DOM
+          document.querySelectorAll('[id^="dmermaid_"]').forEach((el) => el.remove())
         }
       }
 
