@@ -7,6 +7,7 @@ export interface LineClassification {
   isTypeAnnotation: boolean
   isTestFile: boolean
   isGeneratedFile: boolean
+  isExampleFile: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -15,6 +16,7 @@ export interface LineClassification {
 
 const TEST_FILE_PATTERN = /\.test\.|\.spec\.|__tests__[/\\]|[/\\]test[/\\]|__mocks__[/\\]|fixtures[/\\]/i
 const GENERATED_FILE_PATTERN = /\.generated\.|\.g\.ts$|__generated__[/\\]|codegen[/\\]|\.d\.ts$|generated[/\\]/i
+const EXAMPLE_FILE_PATTERN = /[/\\](?:examples?|docs?|documentation|samples?|demo|tutorials?|playground|fixtures?|mocks?|__mocks__|__fixtures__|stories|\.storybook)[/\\]|\.stories\./i
 
 // ---------------------------------------------------------------------------
 // Comment patterns
@@ -37,7 +39,46 @@ const TYPE_ANNOTATION_PATTERN = /^\s*(?:type\s+\w|interface\s+\w)|:\s*[A-Z]\w+|(
 // ---------------------------------------------------------------------------
 
 const STRING_ASSIGNMENT = /=\s*(?:"[^"]*"|'[^']*'|`(?:(?!\$\{)[^`])*`)\s*[;,]?\s*$/
+// ---------------------------------------------------------------------------
+// Sanitizer patterns — known functions that sanitize/escape untrusted input
+// ---------------------------------------------------------------------------
 
+export const SANITIZER_PATTERNS: RegExp[] = [
+  /DOMPurify/i,
+  /\bsanitize\s*\(/i,
+  /\bescape\s*\(/i,
+  /\bencode\s*\(/i,
+  /\bhtmlEncode\s*\(/i,
+  /\bvalidator\./i,
+  /\bxss\s*\(/i,
+  /\bpurify\s*\(/i,
+  /\bbleach\./i,
+  /\bstrip_tags\s*\(/i,
+  /\bhtml_escape\s*\(/i,
+  /\bescapeHtml\s*\(/i,
+  /\bhtml\.escape\s*\(/i,
+  /\bcgi\.escape/i,
+  /CGI\.escapeHTML/,
+]
+
+// ---------------------------------------------------------------------------
+// Inline suppression comment patterns
+// ---------------------------------------------------------------------------
+
+/**
+ * Regex that matches inline suppression comments.
+ *
+ * Supported formats:
+ *   // repolens-ignore                     → suppress all rules on this line
+ *   // repolens-ignore-next-line           → suppress all rules on the next line
+ *   // repolens-disable rule-id            → suppress a specific rule
+ *   // scanner-ignore                      → suppress all rules (alias)
+ *   // scanner-ignore: rule-id1, rule-id2  → suppress specific rules (alias)
+ *   # noqa: rule-id                        → Python-style suppression
+ *   # scanner-ignore                       → Python-style (hash comment)
+ *   /* scanner-ignore *\/                   → CSS/C-style
+ */
+const SUPPRESSION_PATTERN = /(?:\/\/|#|\/?\*)\s*(?:repolens-ignore(?:-next-line)?|scanner-ignore|repolens-disable|noqa)(?:[:\s]\s*([\w-]+(?:\s*,\s*[\w-]+)*))?/i
 /**
  * Classify the context of a source line to help suppress false-positive
  * scanner matches. Pure function — no side effects.
@@ -54,6 +95,7 @@ export function classifyLine(
 ): LineClassification {
   const isTestFile = TEST_FILE_PATTERN.test(filePath)
   const isGeneratedFile = GENERATED_FILE_PATTERN.test(filePath)
+  const isExampleFile = EXAMPLE_FILE_PATTERN.test(filePath)
 
   // --- Comment detection ---
   let isComment = SINGLE_LINE_COMMENT.test(line)
@@ -69,7 +111,150 @@ export function classifyLine(
   // --- Type annotation detection ---
   const isTypeAnnotation = TYPE_ANNOTATION_PATTERN.test(line) || filePath.endsWith('.d.ts')
 
-  return { isComment, isStringLiteral, isTypeAnnotation, isTestFile, isGeneratedFile }
+  return { isComment, isStringLiteral, isTypeAnnotation, isTestFile, isGeneratedFile, isExampleFile }
+}
+
+// ---------------------------------------------------------------------------
+// Sanitizer proximity detection
+// ---------------------------------------------------------------------------
+
+/**
+ * Check whether a known sanitizer function call appears within `windowSize`
+ * lines of the match line.  This is a lightweight heuristic — not dataflow
+ * analysis — designed to downgrade confidence when a sanitizer is nearby.
+ *
+ * @param lines All lines in the file.
+ * @param matchLine 0-based index of the matched line.
+ * @param windowSize Number of lines to check before and after (default 3).
+ */
+export function hasSanitizerNearby(
+  lines: string[],
+  matchLine: number,
+  windowSize = 3,
+): boolean {
+  const start = Math.max(0, matchLine - windowSize)
+  const end = Math.min(lines.length - 1, matchLine + windowSize)
+
+  for (let i = start; i <= end; i++) {
+    if (i === matchLine) continue
+    const line = lines[i]
+    for (const pat of SANITIZER_PATTERNS) {
+      if (pat.test(line)) return true
+    }
+  }
+  return false
+}
+
+// ---------------------------------------------------------------------------
+// Inline suppression
+// ---------------------------------------------------------------------------
+
+/**
+ * Check whether an inline suppression comment on the current line (or the
+ * previous line as a "next-line" suppression) covers the given rule.
+ *
+ * Supported comment formats:
+ *   // repolens-ignore                     → suppress all rules on this line
+ *   // repolens-ignore-next-line           → suppress all on the next line
+ *   // repolens-disable rule-id            → suppress a specific rule
+ *   // scanner-ignore                      → suppress all (alias)
+ *   // scanner-ignore: rule-id1, rule-id2  → suppress specific rules (alias)
+ *   # noqa: rule-id                        → Python-style suppression
+ *   # scanner-ignore                       → Python hash-comment style
+ *   /* scanner-ignore *\/                   → CSS/C block-comment style
+ *
+ * @param line        The matched line content.
+ * @param previousLine The line immediately before (undefined if first line).
+ * @param ruleId      The id of the rule being checked.
+ * @returns `true` if the issue should be suppressed.
+ */
+export function hasInlineSuppression(
+  line: string,
+  previousLine: string | undefined,
+  ruleId: string,
+): boolean {
+  // Check the current line for an inline comment
+  if (matchesSuppression(line, ruleId)) return true
+
+  // Check the previous line for a "next-line" suppression
+  if (previousLine !== undefined && matchesSuppression(previousLine, ruleId, true)) return true
+
+  return false
+}
+
+/**
+ * @internal  Test a single line against the suppression pattern.
+ * When `nextLineOnly` is true, only "ignore-next-line" variants match.
+ */
+function matchesSuppression(line: string, ruleId: string, nextLineOnly = false): boolean {
+  const m = SUPPRESSION_PATTERN.exec(line)
+  if (!m) return false
+
+  // If checking a previous line, it must be a "next-line" style suppression
+  if (nextLineOnly && !/ignore-next-line/i.test(line)) return false
+
+  const ruleList = m[1]
+  if (!ruleList) return true  // No specific rules → suppress all
+
+  const ids = ruleList.split(/\s*,\s*/).map(s => s.trim().toLowerCase())
+  return ids.includes(ruleId.toLowerCase())
+}
+
+// ---------------------------------------------------------------------------
+// Example / docs file detection
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns `true` if the file path belongs to an example, documentation,
+ * sample, demo, tutorial, fixture, mock, or storybook directory.
+ */
+export function isExampleOrDocsFile(filePath: string): boolean {
+  return EXAMPLE_FILE_PATTERN.test(filePath)
+}
+
+// ---------------------------------------------------------------------------
+// Dynamic confidence scoring
+// ---------------------------------------------------------------------------
+
+type ConfidenceLevel = 'high' | 'medium' | 'low'
+
+const CONFIDENCE_ORDER: ConfidenceLevel[] = ['high', 'medium', 'low']
+
+function downgradeConfidence(level: ConfidenceLevel): ConfidenceLevel {
+  const idx = CONFIDENCE_ORDER.indexOf(level)
+  return CONFIDENCE_ORDER[Math.min(idx + 1, CONFIDENCE_ORDER.length - 1)]
+}
+
+/**
+ * Compute a dynamic confidence level by adjusting the rule's base confidence
+ * based on file context.  Each applicable factor downgrades one level (min: low).
+ *
+ * Factors:
+ *  - Match is in a test file
+ *  - Match is in an example/docs path
+ *  - Match line contains a known sanitizer
+ *  - Match is inside a comment (for security rules that still report on comments)
+ */
+export function computeDynamicConfidence(
+  baseConfidence: ConfidenceLevel | undefined,
+  context: LineClassification,
+  matchContent: string,
+): ConfidenceLevel {
+  let level: ConfidenceLevel = baseConfidence ?? 'medium'
+
+  if (context.isTestFile) level = downgradeConfidence(level)
+  if (context.isExampleFile) level = downgradeConfidence(level)
+  if (context.isComment) level = downgradeConfidence(level)
+
+  // Check if the match line itself contains a sanitizer call
+  for (const pat of SANITIZER_PATTERNS) {
+    if (pat.test(matchContent)) {
+      level = downgradeConfidence(level)
+      break
+    }
+  }
+
+  return level
 }
 
 // ---------------------------------------------------------------------------

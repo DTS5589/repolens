@@ -114,4 +114,10 @@ export interface CompositeRule {
   fix?: string
   /** Description of the fix approach */
   fixDescription?: string
+  /** If ANY of these patterns match, suppress the rule entirely (hard suppression) */
+  mustNotContain?: RegExp[]
+  /** When true, requiredPatterns[0] must appear on an earlier line than requiredPatterns[1] */
+  sourceBeforeSink?: boolean
+  /** Max line distance between pattern matches; if exceeded, the rule does not fire */
+  maxLineDistance?: number
 }

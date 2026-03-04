@@ -107,6 +107,7 @@ export const COMPOSITE_RULES: CompositeRule[] = [
     ],
     sinkPattern: /(?:readFile|writeFile|createReadStream|readdir|unlink|stat|access)(?:Sync)?\s*\(/,
     mitigations: [/path\.resolve.*startsWith|sanitize.*path|whitelist|allowedPaths/],
+    sourceBeforeSink: true,
     confidence: 'medium',
   },
   // SSRF: user input flows into HTTP request
@@ -127,6 +128,7 @@ export const COMPOSITE_RULES: CompositeRule[] = [
     ],
     sinkPattern: /(?:fetch\s*\(|axios\.|got\(|http\.request|https\.request)/,
     mitigations: [/allowlist|whitelist|allowedHosts|validUrl|isValidUrl|URL_ALLOWLIST/i],
+    maxLineDistance: 50,
     confidence: 'medium',
   },
 
@@ -153,6 +155,7 @@ export const COMPOSITE_RULES: CompositeRule[] = [
     ],
     sinkPattern: /app\.(post|put|patch|delete)\s*\(/,
     mitigations: [/csrf|csurf|_csrf|csrfProtection/i],
+    mustNotContain: [/csrf|csurf|lusca/i],
     confidence: 'medium',
   },
   // Django class-based view without CSRF protection
@@ -200,6 +203,7 @@ export const COMPOSITE_RULES: CompositeRule[] = [
     ],
     sinkPattern: /router\.(get|post|put|delete)\s*\(/,
     mitigations: [/auth|authenticate|isAuthenticated|passport|requireAuth|ensureAuth|isLoggedIn|verifyToken|jwt\.verify|requireLogin/i],
+    mustNotContain: [/isAuthenticated|requireAuth|passport\.authenticate|jwt\.verify/i],
     confidence: 'low',
   },
 
@@ -226,6 +230,7 @@ export const COMPOSITE_RULES: CompositeRule[] = [
     ],
     sinkPattern: /multer|formidable|busboy|upload|file\.(path|name|buffer|stream)/,
     mitigations: [/\.(mimetype|ext|extension|size|limit|fileFilter|allowedTypes|validat|accept)/i],
+    mustNotContain: [/fileFilter|maxFileSize|accept|validateFile/i],
     confidence: 'medium',
   },
 
@@ -252,6 +257,7 @@ export const COMPOSITE_RULES: CompositeRule[] = [
     ],
     sinkPattern: /\.(create|update|findOneAndUpdate|updateOne|insertOne)\s*\(/,
     mitigations: [/\.(select|pick|omit|whitelist|allowedFields|sanitize)/i],
+    mustNotContain: [/\.pick\(|\.omit\(|allowedFields|sanitizeBody/i],
     confidence: 'medium',
   },
   // Sequelize-specific mass assignment
@@ -326,6 +332,7 @@ export const COMPOSITE_RULES: CompositeRule[] = [
     ],
     sinkPattern: /(readFileSync|writeFileSync|unlinkSync|renameSync)\s*\(/,
     mitigations: [/lock|mutex|semaphore|flock/i],
+    sourceBeforeSink: true,
     confidence: 'medium',
   },
   // Async file existence check followed by async file operation
@@ -348,6 +355,7 @@ export const COMPOSITE_RULES: CompositeRule[] = [
     ],
     sinkPattern: /\b(readFile|writeFile|unlink|rename)\s*\(/,
     mitigations: [/lock|mutex|semaphore/i],
+    sourceBeforeSink: true,
     confidence: 'low',
   },
 
@@ -401,6 +409,7 @@ export const COMPOSITE_RULES: CompositeRule[] = [
     ],
     sinkPattern: /res\.redirect\s*\(/,
     mitigations: [/whitelist|allowedUrl|validUrl|startsWith.*https|url\.parse|new URL/i],
+    maxLineDistance: 15,
     confidence: 'medium',
   },
 
@@ -477,6 +486,9 @@ export function scanCompositeRules(codeIndex: CodeIndex): CodeIssue[] {
       const allPresent = rule.requiredPatterns.every(p => p.test(content))
       if (!allPresent) continue
 
+      // mustNotContain — if ANY of these patterns match, suppress the rule entirely
+      if (rule.mustNotContain && rule.mustNotContain.some(p => p.test(content))) continue
+
       // Check mitigations — if ANY mitigation is present, skip
       // Track partial mitigation for credit
       let hasPartialMitigation = false
@@ -484,6 +496,39 @@ export function scanCompositeRules(codeIndex: CodeIndex): CodeIssue[] {
         const mitigationMatches = rule.mitigations.filter(m => m.test(content))
         if (mitigationMatches.length === rule.mitigations.length) continue // all mitigations present → skip
         if (mitigationMatches.length > 0) hasPartialMitigation = true
+      }
+
+      // sourceBeforeSink — requiredPatterns[0] must appear on an earlier line than requiredPatterns[1]
+      if (rule.sourceBeforeSink && rule.requiredPatterns.length >= 2) {
+        let sourceLine = -1
+        let sinkMatchLine = -1
+        for (let i = 0; i < file.lines.length; i++) {
+          if (sourceLine === -1 && rule.requiredPatterns[0].test(file.lines[i])) {
+            sourceLine = i
+          }
+          if (sinkMatchLine === -1 && rule.requiredPatterns[1].test(file.lines[i])) {
+            sinkMatchLine = i
+          }
+          if (sourceLine !== -1 && sinkMatchLine !== -1) break
+        }
+        if (sourceLine === -1 || sinkMatchLine === -1 || sourceLine >= sinkMatchLine) continue
+      }
+
+      // maxLineDistance — max distance between any requiredPattern first-matches
+      if (rule.maxLineDistance !== undefined) {
+        const matchLines: number[] = []
+        for (const pattern of rule.requiredPatterns) {
+          for (let i = 0; i < file.lines.length; i++) {
+            if (pattern.test(file.lines[i])) {
+              matchLines.push(i)
+              break
+            }
+          }
+        }
+        if (matchLines.length >= 2) {
+          const maxDist = Math.max(...matchLines) - Math.min(...matchLines)
+          if (maxDist > rule.maxLineDistance) continue
+        }
       }
 
       // Find the sink line (where the dangerous operation happens)

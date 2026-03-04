@@ -13,7 +13,7 @@ describe('COMPOSITE_RULES', () => {
       expect(rule.severity).toMatch(/^(critical|warning|info)$/)
       expect(rule.title).toBeTruthy()
       expect(rule.description).toBeTruthy()
-      expect(rule.requiredPatterns.length).toBeGreaterThanOrEqual(2)
+      expect(rule.requiredPatterns.length).toBeGreaterThanOrEqual(1)
       expect(rule.sinkPattern).toBeTruthy()
       expect(rule.fileFilter.length).toBeGreaterThanOrEqual(1)
     }
@@ -148,5 +148,99 @@ describe('scanCompositeRules', () => {
     const index = createEmptyIndex()
     const issues = scanCompositeRules(index)
     expect(issues).toHaveLength(0)
+  })
+
+  // --- mustNotContain tests ---
+
+  it('suppresses rule when mustNotContain pattern is found', () => {
+    let index = createEmptyIndex()
+    // CSRF rule has mustNotContain: [/csrf|csurf|lusca/i]
+    const code = [
+      `const csurf = require('csurf')`,
+      `app.use(csurf({ cookie: true }))`,
+      `app.post('/submit', handler)`,
+    ].join('\n')
+    index = indexFile(index, 'src/routes.ts', code, 'typescript')
+
+    const issues = scanCompositeRules(index)
+    const csrf = issues.filter(i => i.ruleId === 'composite-csrf-missing-express')
+    expect(csrf).toHaveLength(0)
+  })
+
+  it('fires rule when mustNotContain patterns are absent', () => {
+    let index = createEmptyIndex()
+    // No CSRF middleware present
+    const code = [
+      `const express = require('express')`,
+      `app.post('/submit', handler)`,
+    ].join('\n')
+    index = indexFile(index, 'src/no-csrf.ts', code, 'typescript')
+
+    const issues = scanCompositeRules(index)
+    const csrf = issues.filter(i => i.ruleId === 'composite-csrf-missing-express')
+    expect(csrf.length).toBeGreaterThanOrEqual(1)
+  })
+
+  // --- sourceBeforeSink tests ---
+
+  it('fires TOCTOU rule when source (check) appears before sink (operation)', () => {
+    let index = createEmptyIndex()
+    const code = [
+      `if (existsSync(filePath)) {`,
+      `  const data = readFileSync(filePath)`,
+      `}`,
+    ].join('\n')
+    index = indexFile(index, 'src/toctou.ts', code, 'typescript')
+
+    const issues = scanCompositeRules(index)
+    const toctou = issues.filter(i => i.ruleId === 'composite-toctou-file-check')
+    expect(toctou.length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('does NOT fire TOCTOU rule when sink appears before source', () => {
+    let index = createEmptyIndex()
+    // Operation first, then existence check (reversed order — no TOCTOU)
+    const code = [
+      `const data = readFileSync(filePath)`,
+      `if (existsSync(otherPath)) {`,
+      `  // some other check`,
+      `}`,
+    ].join('\n')
+    index = indexFile(index, 'src/no-toctou.ts', code, 'typescript')
+
+    const issues = scanCompositeRules(index)
+    const toctou = issues.filter(i => i.ruleId === 'composite-toctou-file-check')
+    expect(toctou).toHaveLength(0)
+  })
+
+  // --- maxLineDistance tests ---
+
+  it('fires rule when patterns are within maxLineDistance', () => {
+    let index = createEmptyIndex()
+    const code = [
+      `const target = req.query.redirect`,
+      `// validate`,
+      `res.redirect(target)`,
+    ].join('\n')
+    index = indexFile(index, 'src/close-redirect.ts', code, 'typescript')
+
+    const issues = scanCompositeRules(index)
+    const redirect = issues.filter(i => i.ruleId === 'composite-open-redirect-response')
+    expect(redirect.length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('does NOT fire rule when patterns exceed maxLineDistance', () => {
+    let index = createEmptyIndex()
+    // Put 50 blank lines between req.query and res.redirect (exceeds maxLineDistance: 15)
+    const lines = [
+      `const target = req.query.redirect`,
+      ...Array(50).fill(`// unrelated code`),
+      `res.redirect(target)`,
+    ]
+    index = indexFile(index, 'src/far-redirect.ts', lines.join('\n'), 'typescript')
+
+    const issues = scanCompositeRules(index)
+    const redirect = issues.filter(i => i.ruleId === 'composite-open-redirect-response')
+    expect(redirect).toHaveLength(0)
   })
 })

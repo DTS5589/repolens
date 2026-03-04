@@ -13,7 +13,7 @@ import { FRAMEWORK_RULES } from './rules-framework'
 import { COMPOSITE_RULES, scanCompositeRules } from './rules-composite'
 import { scanStructuralIssues } from './structural-scanner'
 import { scanSupplyChain } from './supply-chain-scanner'
-import { classifyLine, computeBlockCommentLines } from './context-classifier'
+import { classifyLine, computeBlockCommentLines, hasInlineSuppression, hasSanitizerNearby, computeDynamicConfidence } from './context-classifier'
 import { isLikelyRealSecret } from './entropy'
 
 // Combined rule set (all regex-based rules)
@@ -122,8 +122,8 @@ export function scanIssues(
         // Comment suppression (unless security-critical)
         if (ctx.isComment && !isSecurityCritical) continue
 
-        // Test/generated file suppression (non-security only)
-        if ((ctx.isTestFile || ctx.isGeneratedFile) && rule.category !== 'security') continue
+        // Test/generated/example file suppression (non-security only)
+        if ((ctx.isTestFile || ctx.isGeneratedFile || ctx.isExampleFile) && rule.category !== 'security') continue
 
         // Type annotation suppression for credential patterns
         if (ctx.isTypeAnnotation && SECRET_RULE_IDS.test(rule.id)) continue
@@ -143,6 +143,31 @@ export function scanIssues(
           }
         }
 
+        // --- Inline suppression check ---
+        const prevLine = allLines && match.line >= 2 ? allLines[match.line - 2] : undefined
+        if (hasInlineSuppression(match.content, prevLine, rule.id)) continue
+
+        // --- Compute dynamic confidence ---
+        let issueConfidence = computeDynamicConfidence(rule.confidence, ctx, match.content)
+
+        // --- Sanitizer proximity detection (security rules only) ---
+        let issueDescription = rule.description
+        if (rule.category === 'security' && allLines) {
+          if (hasSanitizerNearby(allLines, match.line - 1)) {
+            issueConfidence = issueConfidence === 'high' ? 'medium'
+              : issueConfidence === 'medium' ? 'low'
+              : 'low'
+            issueDescription += ' (sanitizer detected nearby)'
+          }
+        }
+
+        // --- Dynamic confidence boost for config files (secret rules) ---
+        if (SECRET_RULE_IDS.test(rule.id) && /\.(?:config|env)/i.test(result.file)) {
+          // Config files are higher risk for leaked secrets — boost confidence
+          if (issueConfidence === 'low') issueConfidence = 'medium'
+          else if (issueConfidence === 'medium') issueConfidence = 'high'
+        }
+
         const issueId = `${rule.id}-${result.file}-${match.line}`
         if (seenIds.has(issueId)) continue
         seenIds.add(issueId)
@@ -159,7 +184,7 @@ export function scanIssues(
           category: rule.category,
           severity: rule.severity,
           title: rule.title,
-          description: rule.description,
+          description: issueDescription,
           file: result.file,
           line: match.line,
           column: match.column,
@@ -168,7 +193,7 @@ export function scanIssues(
           cwe: rule.cwe,
           owasp: rule.owasp,
           learnMoreUrl: rule.learnMoreUrl,
-          confidence: rule.confidence,
+          confidence: issueConfidence,
           fix: rule.fix,
           fixDescription: rule.fixDescription,
         })
