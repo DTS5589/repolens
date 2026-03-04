@@ -10,28 +10,61 @@ import {
 } from './structural-index'
 
 /** Minimum number of recent steps whose tool results are kept in full. */
-const MIN_FULL_RESULT_STEPS = 4
+const MIN_FULL_RESULT_STEPS = 8
 
 /** Default max length for compacted tool results. */
-const DEFAULT_TOOL_RESULT_LENGTH = 1500
+const DEFAULT_TOOL_RESULT_LENGTH = 6000
 
 /** Tool-specific limits for non-file-read tools during compaction. */
 const TOOL_RESULT_LIMITS: Record<string, number> = {
-  searchFiles: 2000,
-  analyzeImports: 2000,
-  listDirectory: 1000,
-  findSymbol: 1500,
-  getFileStats: 500,
-  scanIssues: 2000,
-  getProjectOverview: 1500,
-  generateDiagram: 500,
+  searchFiles: 6000,
+  analyzeImports: 6000,
+  listDirectory: 3000,
+  findSymbol: 4000,
+  getFileStats: 1500,
+  scanIssues: 6000,
+  getProjectOverview: 0, // handled by PINNED_TOOLS (never truncated)
+  generateDiagram: 1500,
 }
+
+/** Tools whose results must never be truncated — they provide critical structural context. */
+const PINNED_TOOLS = new Set(['getProjectOverview'])
 
 /** Maximum items per structural section in a compaction summary. */
 const MAX_SUMMARY_ITEMS = 20
 
 interface CompactorOptions {
   maxSteps?: number
+  /** Model context window in tokens. */
+  contextWindow?: number
+  /** AI provider ('openai' | 'google' | 'anthropic' | 'openrouter'). Informational — scaling uses contextWindow. */
+  provider?: string
+}
+
+interface ContextScaling {
+  /** Multiplier applied to all truncation limits. */
+  limitMultiplier: number
+  /** Fraction of maxSteps to keep full results for. */
+  keepFullRatio: number
+  /** Minimum number of full-result steps. */
+  minFullSteps: number
+}
+
+/**
+ * Compute context-aware scaling factors.
+ * Models with larger context windows get more generous compaction thresholds.
+ */
+function getContextScaling(contextWindow: number): ContextScaling {
+  // Large context models (Google Gemini 1M+) — barely need compaction
+  if (contextWindow >= 500_000) {
+    return { limitMultiplier: 3.0, keepFullRatio: 0.35, minFullSteps: 12 }
+  }
+  // Standard context models (128K-500K — most OpenAI, Anthropic)
+  if (contextWindow >= 128_000) {
+    return { limitMultiplier: 1.0, keepFullRatio: 0.25, minFullSteps: 8 }
+  }
+  // Smaller context models (<128K)
+  return { limitMultiplier: 0.8, keepFullRatio: 0.20, minFullSteps: 6 }
 }
 
 /**
@@ -40,20 +73,32 @@ interface CompactorOptions {
  * multi-step tool-calling sessions.
  *
  * Strategy:
+ * - Scales thresholds based on the model's context window size
  * - Keep the last `fullResultSteps` worth of assistant+tool message pairs intact
- *   (scales with maxSteps: 15% of budget, minimum MIN_FULL_RESULT_STEPS)
+ *   (scales with maxSteps via keepFullRatio, minimum from context scaling)
  * - For older tool messages, truncate large tool-result content to a short summary
+ * - Pinned tools (e.g. `getProjectOverview`) are never truncated
  * - Never modify user or system messages
+ *
+ * @param options.maxSteps      Maximum tool-calling steps (default 50)
+ * @param options.contextWindow  Model context window in tokens (default 128_000)
+ * @param options.provider       AI provider name — informational only
  */
 export function createContextCompactor(options?: CompactorOptions) {
   const maxSteps = options?.maxSteps ?? 50
-  const fullResultSteps = Math.max(MIN_FULL_RESULT_STEPS, Math.floor(maxSteps * 0.15))
+  const contextWindow = options?.contextWindow ?? 128_000
+  const scaling = getContextScaling(contextWindow)
+
+  const fullResultSteps = Math.max(
+    scaling.minFullSteps,
+    Math.floor(maxSteps * scaling.keepFullRatio)
+  )
 
   return ({ stepNumber, messages }: { stepNumber: number; messages: ModelMessage[] }) => {
     // No compaction needed for early steps
     if (stepNumber < fullResultSteps) return undefined
 
-    const compacted = compactMessages(messages, fullResultSteps)
+    const compacted = compactMessages(messages, fullResultSteps, scaling.limitMultiplier)
     return { messages: compacted }
   }
 }
@@ -66,6 +111,7 @@ export function createContextCompactor(options?: CompactorOptions) {
 function compactMessages(
   messages: ModelMessage[],
   keepFullSteps: number,
+  limitMultiplier: number = 1.0,
 ): ModelMessage[] {
   // Find indices of all tool-role messages (these carry tool results)
   const toolMessageIndices: number[] = []
@@ -85,7 +131,7 @@ function compactMessages(
 
   return messages.map((msg, idx) => {
     if (msg.role !== 'tool' || idx >= cutoffIndex) return msg
-    return compactToolMessage(msg as ToolModelMessage)
+    return compactToolMessage(msg as ToolModelMessage, limitMultiplier)
   })
 }
 
@@ -176,16 +222,20 @@ const FILE_READ_TOOLS = new Set(['readFile', 'readFiles'])
 /**
  * Create a compacted version of a tool message. For readFile/readFiles results,
  * produces a structural summary (imports, exports, symbols). For all other tools,
- * falls back to 500-char truncation.
+ * applies scaled truncation. Pinned tools are never truncated.
  */
-function compactToolMessage(msg: ToolModelMessage): ToolModelMessage {
+function compactToolMessage(msg: ToolModelMessage, limitMultiplier: number): ToolModelMessage {
   return {
     ...msg,
     content: msg.content.map(part => {
       if (part.type !== 'tool-result') return part
 
-      const output = part.output as { type: string; value: unknown }
       const toolName = 'toolName' in part ? (part as { toolName: string }).toolName : undefined
+
+      // NEVER truncate pinned tools
+      if (toolName && PINNED_TOOLS.has(toolName)) return part
+
+      const output = part.output as { type: string; value: unknown }
 
       // Structural summarization for file-read tools
       if (toolName && FILE_READ_TOOLS.has(toolName)) {
@@ -193,7 +243,7 @@ function compactToolMessage(msg: ToolModelMessage): ToolModelMessage {
       }
 
       // Default truncation for all other tools
-      return truncateToolOutput(part, output, toolName)
+      return truncateToolOutput(part, output, toolName, limitMultiplier)
     }),
   }
 }
@@ -260,13 +310,16 @@ function compactFileReadResult(
 /**
  * Default truncation for non-file-read tool results.
  * Uses tool-specific limits when available, otherwise DEFAULT_TOOL_RESULT_LENGTH.
+ * The base limit is scaled by `limitMultiplier` for context-window-aware compaction.
  */
 function truncateToolOutput(
   part: unknown,
   output: { type: string; value: unknown },
   toolName?: string,
+  limitMultiplier: number = 1.0,
 ): unknown {
-  const maxLength = (toolName && TOOL_RESULT_LIMITS[toolName]) || DEFAULT_TOOL_RESULT_LENGTH
+  const baseLimit = (toolName && TOOL_RESULT_LIMITS[toolName]) || DEFAULT_TOOL_RESULT_LENGTH
+  const maxLength = Math.floor(baseLimit * limitMultiplier)
 
   if (output.type === 'text') {
     const text = output.value as string

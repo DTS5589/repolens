@@ -154,9 +154,36 @@ No repository is currently connected. You can still answer general programming q
       system: systemPrompt,
       messages: await convertToModelMessages(messages),
       tools: codeTools,
-      prepareStep: createContextCompactor({ maxSteps: stepBudget }),
+      prepareStep: createContextCompactor({
+        maxSteps: stepBudget,
+        contextWindow: getModelContextWindow(model),
+        provider,
+      }),
       stopWhen: stepCountIs(stepBudget),
       abortSignal: req.signal,
+      ...(provider === 'anthropic' && {
+        providerOptions: {
+          anthropic: {
+            contextManagement: {
+              edits: [
+                {
+                  type: 'clear_tool_uses_20250919' as const,
+                  trigger: { type: 'input_tokens' as const, value: 80_000 },
+                  keep: { type: 'tool_uses' as const, value: 10 },
+                  clearAtLeast: { type: 'input_tokens' as const, value: 5_000 },
+                  clearToolInputs: false,
+                },
+                {
+                  type: 'compact_20260112' as const,
+                  trigger: { type: 'input_tokens' as const, value: 150_000 },
+                  instructions: 'Summarize the codebase analysis so far, preserving: all file paths examined, key code structure findings (exports, imports, patterns), decisions made about the codebase, and what remains to be analyzed.',
+                  pauseAfterCompaction: false,
+                },
+              ],
+            },
+          },
+        },
+      }),
     })
 
     return result.toUIMessageStreamResponse({
