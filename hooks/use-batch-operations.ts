@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react'
 import type { CodeIndex } from '@/lib/code/code-index'
-import type { CodeIssue, FixSuggestion, ValidationResult } from '@/lib/code/issue-scanner'
+import type { CodeIssue, FixSuggestion, ValidationResult, ValidationOptions } from '@/lib/code/issue-scanner'
 import type { AIProvider, ProviderModel, APIKeysState } from '@/types/types'
 
 // ---------------------------------------------------------------------------
@@ -25,7 +25,7 @@ export interface BatchOperationsOptions {
   validateFinding: (
     issue: CodeIssue,
     fileContent: string,
-    options: { provider: string; model: string; apiKey: string },
+    options: ValidationOptions,
   ) => Promise<ValidationResult>
   setFixCache: React.Dispatch<React.SetStateAction<Map<string, FixSuggestion | null>>>
   setShowFix: React.Dispatch<React.SetStateAction<Set<string>>>
