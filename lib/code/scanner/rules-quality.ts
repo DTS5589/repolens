@@ -56,7 +56,7 @@ export const BAD_PRACTICE_RULES: ScanRule[] = [
     id: 'empty-catch',
     category: 'bad-practice',
     severity: 'warning',
-    title: 'Empty Catch Block',
+    title: 'Empty catch block',
     description: 'Silently swallowing errors makes debugging impossible and can mask security-critical failures. At minimum, log the error.',
     suggestion: 'Log the error, re-throw it, or handle it explicitly. Comment if intentional.',
     cwe: 'CWE-390',

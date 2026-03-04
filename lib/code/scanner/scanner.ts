@@ -19,7 +19,7 @@ import { scanStructuralIssues } from './structural-scanner'
 import { scanSupplyChain } from './supply-chain-scanner'
 import { classifyLine, computeBlockCommentLines, hasInlineSuppression, hasSanitizerNearby, computeDynamicConfidence } from './context-classifier'
 import { isLikelyRealSecret } from './entropy'
-import { getAST, analyzeAST, AST_LANGUAGES } from './ast-analyzer'
+import { getAST, analyzeAST, AST_LANGUAGES, clearASTCache } from './ast-analyzer'
 import { trackTaint, taintFlowsToIssues } from './taint-tracker'
 import { scoreIssue, scoreProject, getRiskDistribution, buildCvssVector } from './risk-scorer'
 
@@ -62,85 +62,73 @@ export function clearScanCache(): void {
   lastScanRef = null
   lastScanAnalysis = null
   lastScanResult = null
+  clearASTCache()
 }
 
 // ---------------------------------------------------------------------------
 // Main scanner
 // ---------------------------------------------------------------------------
 
-export function scanIssues(
-  codeIndex: CodeIndex,
-  analysis: FullAnalysis | null,
-  changedFiles?: string[],
-): ScanResults {
-  // Return cached result if the same codeIndex instance + analysis is requested.
-  // Only applies to full scans (no changedFiles) since partial scans are cheap.
-  if (!changedFiles && lastScanRef && lastScanResult) {
-    const cachedRef = lastScanRef.deref()
-    if (cachedRef === codeIndex && lastScanAnalysis === analysis) {
-      return lastScanResult
-    }
-  }
+/** Shared context for scan helper functions. */
+interface ScanContext {
+  filesToScan: Map<string, { path: string; content: string; language?: string | null; lineCount: number; lines: string[] }>
+  scanCodeIndex: CodeIndex
+  isPartialScan: boolean
+  blockCommentCache: Map<string, Set<number> | undefined>
+  presentExtensions: Set<string>
+  filesByExtension: Map<string, Map<string, { path: string; content: string; language?: string | null; lineCount: number; lines: string[] }>>
+}
 
+/** Result returned by runRegexRules helper. */
+interface RegexRulesResult {
+  issues: CodeIssue[]
+  rulesEvaluated: number
+  suppressionCount: number
+  ruleOverflow: Map<string, number>
+}
+
+// ---------------------------------------------------------------------------
+// D3: Regex rule scanning helper
+// ---------------------------------------------------------------------------
+
+function runRegexRules(ctx: ScanContext): RegexRulesResult {
+  const { filesToScan, scanCodeIndex, isPartialScan, blockCommentCache, presentExtensions, filesByExtension } = ctx
   const issues: CodeIssue[] = []
   const seenIds = new Set<string>()
-
-  const MAX_PER_RULE = 15
-  const ruleOverflow = new Map<string, number>()
-  let suppressionCount = 0
-
-  const isPartialScan = changedFiles !== undefined && changedFiles.length > 0
-
-  // Empty array → full scan (pass undefined for no files, empty array treated as "no filter")
-  // Build the set of files to scan
-  const filesToScan: Map<string, typeof codeIndex.files extends Map<string, infer V> ? V : never> = new Map()
-  if (isPartialScan) {
-    for (const changed of changedFiles!) {
-      const file = codeIndex.files.get(changed)
-      if (file) filesToScan.set(changed, file)
-    }
-  } else {
-    for (const [path, file] of codeIndex.files) {
-      filesToScan.set(path, file)
-    }
-  }
-
-  // For partial scans we still use the full codeIndex for searchIndex (it
-  // searches globally), but we filter results to only the changed files.
-  const scanCodeIndex = codeIndex
-
-  // Cache block-comment lines per file across all rules to avoid redundant recomputation
-  const blockCommentCache = new Map<string, Set<number> | undefined>()
-
-  // 1. Run regex-based rules via searchIndex
   let rulesEvaluated = 0
+  let suppressionCount = 0
+  const ruleOverflow = new Map<string, number>()
+  const MAX_PER_RULE = 15
+
   for (const rule of RULES) {
     if (!rule.pattern) continue
 
-    // Skip rules for languages not present in the codebase
+    // Skip rules for languages not present in the codebase (O(1) Set lookup)
     if (rule.fileFilter && rule.fileFilter.length > 0) {
-      const hasMatchingFile = Array.from(filesToScan.keys()).some(path => {
-        const ext = '.' + (path.split('.').pop() || '')
-        return rule.fileFilter!.includes(ext.toLowerCase())
-      })
+      const hasMatchingFile = rule.fileFilter.some(ext => presentExtensions.has(ext.toLowerCase()))
       if (!hasMatchingFile) continue
     }
 
     rulesEvaluated++
     let ruleCount = 0
 
-    // Filter code index to only include files matching the rule's fileFilter
-    // to avoid unnecessary regex work on irrelevant file types
-    const ruleCodeIndex = rule.fileFilter && rule.fileFilter.length > 0
-      ? {
-          ...scanCodeIndex,
-          files: new Map(
-            [...filesToScan].filter(([path]) =>
-              rule.fileFilter!.some(ext => path.endsWith(ext))
-            )
-          ),
+    // Build ruleCodeIndex by merging relevant extension groups (avoids per-rule full filter)
+    type FileEntry = typeof filesToScan extends Map<string, infer V> ? V : never
+    let ruleCodeIndex: typeof scanCodeIndex
+    if (rule.fileFilter && rule.fileFilter.length > 0) {
+      const mergedFiles = new Map<string, FileEntry>()
+      for (const ext of rule.fileFilter) {
+        const group = filesByExtension.get(ext.toLowerCase())
+        if (group) {
+          for (const [path, file] of group) {
+            mergedFiles.set(path, file)
+          }
         }
-      : scanCodeIndex
+      }
+      ruleCodeIndex = { ...scanCodeIndex, files: mergedFiles }
+    } else {
+      ruleCodeIndex = scanCodeIndex
+    }
 
     const results: SearchResult[] = searchIndex(ruleCodeIndex, rule.pattern, {
       caseSensitive: rule.patternOptions?.caseSensitive ?? false,
@@ -190,9 +178,6 @@ export function scanIssues(
         if (ctx.isStringLiteral && STRING_LITERAL_SUPPRESSED_IDS.has(rule.id)) continue
 
         // --- Entropy check for secret/password rules ---
-        // Only applies to assignment-pattern rules (hardcoded-secret, hardcoded-password).
-        // High-confidence pattern-specific rules (aws-key, github-token) already have
-        // specific regexes that minimise FPs — entropy is not needed for them.
         if (SECRET_RULE_IDS.test(rule.id)) {
           const valueMatch = match.content.match(EXTRACT_SECRET_VALUE)
           if (valueMatch) {
@@ -225,7 +210,6 @@ export function scanIssues(
 
         // --- Dynamic confidence boost for config files (secret rules) ---
         if (SECRET_RULE_IDS.test(rule.id) && /\.(?:config|env)/i.test(result.file)) {
-          // Config files are higher risk for leaked secrets — boost confidence
           if (issueConfidence === 'low') issueConfidence = 'medium'
           else if (issueConfidence === 'medium') issueConfidence = 'high'
         }
@@ -263,7 +247,17 @@ export function scanIssues(
     }
   }
 
-  // 2. AST-based analysis (scope-aware issue detection)
+  return { issues, rulesEvaluated, suppressionCount, ruleOverflow }
+}
+
+// ---------------------------------------------------------------------------
+// D4: AST analysis helper
+// ---------------------------------------------------------------------------
+
+function runAstAnalysis(
+  filesToScan: Map<string, { path: string; content: string; language?: string | null; lineCount: number; lines: string[] }>,
+): CodeIssue[] {
+  const issues: CodeIssue[] = []
   for (const [path, file] of filesToScan) {
     if (SKIP_VENDORED.test(path)) continue
     const lang = file.language ?? ''
@@ -272,18 +266,22 @@ export function scanIssues(
       const ast = getAST(file)
       if (!ast) continue
       const astIssues = analyzeAST(ast, file)
-      for (const issue of astIssues) {
-        if (!seenIds.has(issue.id)) {
-          seenIds.add(issue.id)
-          issues.push(issue)
-        }
-      }
+      issues.push(...astIssues)
     } catch (err) {
       console.warn(`[scanner] AST analysis failed for ${path}:`, err)
     }
   }
+  return issues
+}
 
-  // 2b. Taint tracking (source→sink analysis on AST)
+// ---------------------------------------------------------------------------
+// D5: Taint analysis helper
+// ---------------------------------------------------------------------------
+
+function runTaintAnalysis(
+  filesToScan: Map<string, { path: string; content: string; language?: string | null; lineCount: number; lines: string[] }>,
+): CodeIssue[] {
+  const issues: CodeIssue[] = []
   for (const [path, file] of filesToScan) {
     if (SKIP_VENDORED.test(path)) continue
     const lang = file.language ?? ''
@@ -292,104 +290,27 @@ export function scanIssues(
       const ast = getAST(file)
       if (!ast) continue
       const taintFlows = trackTaint(ast, file)
-      const taintIssues = taintFlowsToIssues(taintFlows)
-      for (const issue of taintIssues) {
-        if (!seenIds.has(issue.id)) {
-          seenIds.add(issue.id)
-          issues.push(issue)
-        }
-      }
+      issues.push(...taintFlowsToIssues(taintFlows))
     } catch (err) {
       console.warn(`[scanner] Taint analysis failed for ${path}:`, err)
     }
   }
+  return issues
+}
 
-  // 3. Run composite file-level rules
-  const compositeIssues = scanCompositeRules(codeIndex)
-  rulesEvaluated += COMPOSITE_RULES.length
-  for (const issue of compositeIssues) {
-    // Differential scan: only include issues from changed files
-    if (isPartialScan && !filesToScan.has(issue.file)) continue
-    if (!seenIds.has(issue.id)) {
-      seenIds.add(issue.id)
-      issues.push(issue)
-    }
-  }
+// ---------------------------------------------------------------------------
+// D6: Health grade computation helper
+// ---------------------------------------------------------------------------
 
-  // 4. Run structural rules
-  const structuralIssues = scanStructuralIssues(codeIndex, analysis)
-  const structuralRuleIds = new Set(structuralIssues.map(i => i.ruleId))
-  rulesEvaluated += structuralRuleIds.size
-  for (const issue of structuralIssues) {
-    if (isPartialScan && !filesToScan.has(issue.file)) continue
-    if (!seenIds.has(issue.id)) {
-      seenIds.add(issue.id)
-      issues.push(issue)
-    }
-  }
+interface HealthGrades {
+  healthGrade: HealthGrade
+  healthScore: number
+  securityGrade: HealthGrade
+  qualityGrade: HealthGrade
+  issuesPerKloc: number
+}
 
-  // 5. Supply chain rules (package.json, lockfiles, GitHub Actions, Python deps)
-  const supplyChainIssues = scanSupplyChain(scanCodeIndex)
-  const supplyChainRuleIds = new Set(supplyChainIssues.map(i => i.ruleId))
-  rulesEvaluated += supplyChainRuleIds.size
-  for (const issue of supplyChainIssues) {
-    if (isPartialScan && !filesToScan.has(issue.file)) continue
-    if (!seenIds.has(issue.id)) {
-      seenIds.add(issue.id)
-      issues.push(issue)
-    }
-  }
-
-  // 6. Structural context cross-reference (when import graph is available)
-  if (analysis) {
-    for (const issue of issues) {
-      const importers = analysis.graph.reverseEdges.get(issue.file)
-      const importerCount = importers?.size ?? 0
-      const isEntryPoint = analysis.topology.entryPoints.includes(issue.file)
-      const isDead = !isEntryPoint && importerCount === 0
-
-      // Dead code downgrade: quality/reliability issues in unused files → info
-      if (isDead && issue.category !== 'security' && (issue.severity === 'warning' || issue.severity === 'critical')) {
-        issue.severity = 'info'
-      }
-
-      // Entry point annotation for security issues
-      if (isEntryPoint && issue.category === 'security') {
-        issue.description += ' (entry point — publicly accessible)'
-      }
-
-      // High fan-in annotation
-      if (importerCount >= 10) {
-        issue.description += ` (high fan-in: ${importerCount} importers — changes affect many consumers)`
-      }
-    }
-  }
-
-  // Sort: critical first, then warning, then info. Within same severity, by file.
-  const severityOrder: Record<IssueSeverity, number> = { critical: 0, warning: 1, info: 2 }
-  issues.sort((a, b) => {
-    const sev = severityOrder[a.severity] - severityOrder[b.severity]
-    if (sev !== 0) return sev
-    return a.file.localeCompare(b.file)
-  })
-
-  // ---------------------------------------------------------------------------
-  // Risk scoring — assign per-issue risk score and CVSS vector
-  // ---------------------------------------------------------------------------
-  for (const issue of issues) {
-    issue.riskScore = scoreIssue(issue)
-    issue.cvssVector = buildCvssVector(issue)
-  }
-
-  const projectRiskScore = scoreProject(issues)
-  const riskDistribution = getRiskDistribution(issues)
-
-  // ---------------------------------------------------------------------------
-  // Health scoring
-  // ---------------------------------------------------------------------------
-
-  // SLOC estimate for density-based scoring
-  const sloc = Array.from(filesToScan.values()).reduce((sum, f) => sum + f.lineCount, 0)
+function computeHealthGrades(issues: CodeIssue[], sloc: number): HealthGrades {
   const issuesPerKloc = (issues.length / Math.max(sloc, 1)) * 1000
 
   // Overall health score — absolute severity-based
@@ -433,6 +354,186 @@ export function scanIssues(
     qualityDensity < 30 ? 'C' :
     qualityDensity < 50 ? 'D' : 'F'
 
+  return { healthGrade, healthScore, securityGrade, qualityGrade, issuesPerKloc }
+}
+
+// ---------------------------------------------------------------------------
+// Main scan orchestrator
+// ---------------------------------------------------------------------------
+
+export function scanIssues(
+  codeIndex: CodeIndex,
+  analysis: FullAnalysis | null,
+  changedFiles?: string[],
+): ScanResults {
+  // Return cached result if the same codeIndex instance + analysis is requested.
+  // Only applies to full scans (no changedFiles) since partial scans are cheap.
+  if (!changedFiles && lastScanRef && lastScanResult) {
+    const cachedRef = lastScanRef.deref()
+    if (cachedRef === codeIndex && lastScanAnalysis === analysis) {
+      return lastScanResult
+    }
+  }
+
+  const issues: CodeIssue[] = []
+  const seenIds = new Set<string>()
+
+  const isPartialScan = changedFiles !== undefined && changedFiles.length > 0
+
+  // Build the set of files to scan
+  type FileEntry = typeof codeIndex.files extends Map<string, infer V> ? V : never
+  const filesToScan = new Map<string, FileEntry>()
+  if (isPartialScan) {
+    for (const changed of changedFiles!) {
+      const file = codeIndex.files.get(changed)
+      if (file) filesToScan.set(changed, file)
+    }
+  } else {
+    for (const [path, file] of codeIndex.files) {
+      filesToScan.set(path, file)
+    }
+  }
+
+  const scanCodeIndex = codeIndex
+
+  // Pre-compute extension-based data structures for performance
+  const blockCommentCache = new Map<string, Set<number> | undefined>()
+  const presentExtensions = new Set(
+    Array.from(filesToScan.keys()).map(p => '.' + (p.split('.').pop() || '').toLowerCase())
+  )
+  const filesByExtension = new Map<string, Map<string, FileEntry>>()
+  for (const [path, file] of filesToScan) {
+    const ext = '.' + (path.split('.').pop() || '').toLowerCase()
+    let group = filesByExtension.get(ext)
+    if (!group) {
+      group = new Map<string, FileEntry>()
+      filesByExtension.set(ext, group)
+    }
+    group.set(path, file)
+  }
+
+  // 1. Regex-based rules
+  const regexResult = runRegexRules({
+    filesToScan, scanCodeIndex, isPartialScan,
+    blockCommentCache, presentExtensions, filesByExtension,
+  })
+  for (const issue of regexResult.issues) {
+    if (!seenIds.has(issue.id)) {
+      seenIds.add(issue.id)
+      issues.push(issue)
+    }
+  }
+  let rulesEvaluated = regexResult.rulesEvaluated
+  const suppressionCount = regexResult.suppressionCount
+  const ruleOverflow = regexResult.ruleOverflow
+
+  // 2. AST-based analysis
+  for (const issue of runAstAnalysis(filesToScan)) {
+    if (!seenIds.has(issue.id)) {
+      seenIds.add(issue.id)
+      issues.push(issue)
+    }
+  }
+
+  // 2b. Taint tracking
+  for (const issue of runTaintAnalysis(filesToScan)) {
+    if (!seenIds.has(issue.id)) {
+      seenIds.add(issue.id)
+      issues.push(issue)
+    }
+  }
+
+  // 2c. Dedup: AST empty-catch wins over regex empty-catch for same file+line
+  const astEmptyCatchKeys = new Set(
+    issues.filter(i => i.ruleId === 'ast-empty-catch').map(i => `${i.file}:${i.line}`)
+  )
+  if (astEmptyCatchKeys.size > 0) {
+    for (let i = issues.length - 1; i >= 0; i--) {
+      const issue = issues[i]
+      if (issue.ruleId === 'empty-catch' && astEmptyCatchKeys.has(`${issue.file}:${issue.line}`)) {
+        issues.splice(i, 1)
+      }
+    }
+  }
+
+  // 3. Composite file-level rules
+  const compositeIssues = scanCompositeRules(codeIndex)
+  rulesEvaluated += COMPOSITE_RULES.length
+  for (const issue of compositeIssues) {
+    if (isPartialScan && !filesToScan.has(issue.file)) continue
+    if (!seenIds.has(issue.id)) {
+      seenIds.add(issue.id)
+      issues.push(issue)
+    }
+  }
+
+  // 4. Structural rules
+  const structuralIssues = scanStructuralIssues(codeIndex, analysis)
+  const structuralRuleIds = new Set(structuralIssues.map(i => i.ruleId))
+  rulesEvaluated += structuralRuleIds.size
+  for (const issue of structuralIssues) {
+    if (isPartialScan && !filesToScan.has(issue.file)) continue
+    if (!seenIds.has(issue.id)) {
+      seenIds.add(issue.id)
+      issues.push(issue)
+    }
+  }
+
+  // 5. Supply chain rules
+  const supplyChainIssues = scanSupplyChain(scanCodeIndex)
+  const supplyChainRuleIds = new Set(supplyChainIssues.map(i => i.ruleId))
+  rulesEvaluated += supplyChainRuleIds.size
+  for (const issue of supplyChainIssues) {
+    if (isPartialScan && !filesToScan.has(issue.file)) continue
+    if (!seenIds.has(issue.id)) {
+      seenIds.add(issue.id)
+      issues.push(issue)
+    }
+  }
+
+  // 6. Structural context cross-reference
+  if (analysis) {
+    for (const issue of issues) {
+      const importers = analysis.graph.reverseEdges.get(issue.file)
+      const importerCount = importers?.size ?? 0
+      const isEntryPoint = analysis.topology.entryPoints.includes(issue.file)
+      const isDead = !isEntryPoint && importerCount === 0
+
+      if (isDead && issue.category !== 'security' && (issue.severity === 'warning' || issue.severity === 'critical')) {
+        issue.severity = 'info'
+      }
+      if (isEntryPoint && issue.category === 'security') {
+        issue.description += ' (entry point — publicly accessible)'
+      }
+      if (importerCount >= 10) {
+        issue.description += ` (high fan-in: ${importerCount} importers — changes affect many consumers)`
+      }
+    }
+  }
+
+  // Sort: critical first, then warning, then info. Within same severity, by file.
+  const severityOrder: Record<IssueSeverity, number> = { critical: 0, warning: 1, info: 2 }
+  issues.sort((a, b) => {
+    const sev = severityOrder[a.severity] - severityOrder[b.severity]
+    if (sev !== 0) return sev
+    return a.file.localeCompare(b.file)
+  })
+
+  // Risk scoring
+  for (const issue of issues) {
+    issue.riskScore = scoreIssue(issue)
+    issue.cvssVector = buildCvssVector(issue)
+  }
+  const projectRiskScore = scoreProject(issues)
+  const riskDistribution = getRiskDistribution(issues)
+
+  // Health grades
+  const sloc = Array.from(filesToScan.values()).reduce((sum, f) => sum + f.lineCount, 0)
+  const critCount = issues.filter(i => i.severity === 'critical').length
+  const warnCount = issues.filter(i => i.severity === 'warning').length
+  const infoCount = issues.filter(i => i.severity === 'info').length
+  const grades = computeHealthGrades(issues, sloc)
+
   const result: ScanResults = {
     issues,
     summary: {
@@ -444,16 +545,16 @@ export function scanIssues(
       byBadPractice: issues.filter(i => i.category === 'bad-practice').length,
       byReliability: issues.filter(i => i.category === 'reliability').length,
     },
-    healthGrade,
-    healthScore,
+    healthGrade: grades.healthGrade,
+    healthScore: grades.healthScore,
     ruleOverflow,
     languagesDetected: detectLanguages(codeIndex),
     rulesEvaluated,
     scannedFiles: isPartialScan ? filesToScan.size : codeIndex.totalFiles,
     scannedAt: new Date(),
-    securityGrade,
-    qualityGrade,
-    issuesPerKloc,
+    securityGrade: grades.securityGrade,
+    qualityGrade: grades.qualityGrade,
+    issuesPerKloc: grades.issuesPerKloc,
     isPartialScan,
     suppressionCount,
     projectRiskScore,

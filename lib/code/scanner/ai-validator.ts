@@ -1,8 +1,7 @@
 // AI-powered finding validator — verifies scanner findings as true/false positives
 // This module is opt-in only: triggered via "Verify with AI" in the UI, never automatic.
 
-import { generateText } from 'ai'
-import { createAIModel, type AIProvider } from '@/lib/ai/providers'
+import type { AIProvider } from '@/lib/ai/providers'
 import type { CodeIssue, IssueSeverity } from './types'
 
 // ---------------------------------------------------------------------------
@@ -38,9 +37,8 @@ export interface BatchValidationResult {
 
 // ---------------------------------------------------------------------------
 // Session cache — keyed by issueId, cleared on page reload
-// NOTE: This module is client-only. It imports `generateText` from 'ai' and
-// is only triggered via "Verify with AI" button clicks behind a 'use client'
-// boundary. The module-level cache is safe because it is never executed during SSR.
+// Validation requests are sent to /api/issues/validate which runs generateText
+// server-side. The client-side cache prevents duplicate requests.
 // ---------------------------------------------------------------------------
 
 const validationCache = new Map<string, ValidationResult>()
@@ -304,22 +302,23 @@ export async function validateFinding(
   if (cached) return cached
 
   try {
-    const rawContext = getCodeContext(fileContent, issue.line)
-    // Scrub potential secrets before sending code context to an external AI provider
-    const context = scrubSecrets(rawContext)
-    const { system, user } = buildValidationPrompt(issue, context)
-
-    const model = createAIModel(options.provider, options.model, options.apiKey)
-
-    const { text } = await generateText({
-      model,
-      system,
-      prompt: user,
-      maxOutputTokens: 500,
-      temperature: 0.1, // Low temperature for consistent verdicts
+    const res = await fetch('/api/issues/validate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        issue,
+        fileContent,
+        provider: options.provider,
+        model: options.model,
+        apiKey: options.apiKey,
+      }),
     })
 
-    const result = parseValidationResponse(text, issueId)
+    if (!res.ok) {
+      throw new Error(`Validation API returned ${res.status}`)
+    }
+
+    const result = (await res.json()) as ValidationResult
 
     // Cache the result
     validationCache.set(issueId, result)

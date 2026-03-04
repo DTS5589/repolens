@@ -49,7 +49,7 @@ function handler() {
     const index = makeCodeIndex([{ path: 'src/handler.ts', content: code }])
     const results = scanIssues(index, null)
 
-    const emptyCatch = results.issues.filter(i => i.ruleId === 'empty-catch')
+    const emptyCatch = results.issues.filter(i => i.ruleId === 'empty-catch' || i.ruleId === 'ast-empty-catch')
     expect(emptyCatch.length).toBeGreaterThanOrEqual(1)
   })
 

@@ -849,7 +849,8 @@ describe('Category I: Quality & Structural', () => {
 
   it('I5: detects empty catch block', () => {
     const result = scanCode('src/app.ts', 'try { foo() } catch (e) {}', 'typescript')
-    const hits = issuesForRule(result.issues, 'empty-catch')
+    // After dedup, AST-detected ast-empty-catch wins over regex empty-catch
+    const hits = result.issues.filter(i => i.ruleId === 'empty-catch' || i.ruleId === 'ast-empty-catch')
     expect(hits.length).toBeGreaterThanOrEqual(1)
     expect(hits[0].severity).toBe('warning')
     expect(hits[0].cwe).toBe('CWE-390')

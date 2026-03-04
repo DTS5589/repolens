@@ -1,16 +1,6 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 import type { CodeIssue } from '@/lib/code/scanner/types'
 
-// Mock the 'ai' module before importing the module under test
-vi.mock('ai', () => ({
-  generateText: vi.fn(),
-}))
-
-// Mock the providers module
-vi.mock('@/lib/ai/providers', () => ({
-  createAIModel: vi.fn(() => 'mock-model'),
-}))
-
 import {
   buildValidationPrompt,
   parseValidationResponse,
@@ -20,11 +10,15 @@ import {
   clearValidationCache,
   type ValidationOptions,
 } from '@/lib/code/scanner/ai-validator'
-import { generateText } from 'ai'
-import { createAIModel } from '@/lib/ai/providers'
 
-const mockedGenerateText = vi.mocked(generateText)
-const mockedCreateAIModel = vi.mocked(createAIModel)
+/** Helper to create a fetch Response mock. */
+function mockFetchResponse(body: unknown, status = 200): Response {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => body,
+  } as Response
+}
 
 /** Helper to create a minimal CodeIssue. */
 function makeIssue(overrides: Partial<CodeIssue> = {}): CodeIssue {
@@ -228,17 +222,17 @@ describe('validateFinding', () => {
   beforeEach(() => {
     clearValidationCache()
     vi.clearAllMocks()
-    mockedCreateAIModel.mockReturnValue('mock-model' as never)
+    vi.restoreAllMocks()
   })
 
   it('returns correct ValidationResult from AI response', async () => {
-    mockedGenerateText.mockResolvedValueOnce({
-      text: JSON.stringify({
-        verdict: 'true-positive',
-        confidence: 'high',
-        reasoning: 'Eval with user-controlled input is dangerous.',
-      }),
-    } as never)
+    const apiResult = {
+      issueId: 'test-1',
+      verdict: 'true-positive',
+      confidence: 'high',
+      reasoning: 'Eval with user-controlled input is dangerous.',
+    }
+    vi.spyOn(global, 'fetch').mockResolvedValueOnce(mockFetchResponse(apiResult))
 
     const issue = makeIssue()
     const result = await validateFinding(issue, SAMPLE_FILE, defaultOptions)
@@ -246,28 +240,39 @@ describe('validateFinding', () => {
     expect(result.verdict).toBe('true-positive')
     expect(result.confidence).toBe('high')
     expect(result.issueId).toBe('test-1')
-    expect(mockedGenerateText).toHaveBeenCalledOnce()
+    expect(global.fetch).toHaveBeenCalledOnce()
   })
 
-  it('returns uncertain on AI error', async () => {
-    mockedGenerateText.mockRejectedValueOnce(new Error('Rate limit exceeded'))
+  it('returns uncertain on fetch error', async () => {
+    vi.spyOn(global, 'fetch').mockRejectedValueOnce(new Error('Network error'))
 
     const issue = makeIssue()
     const result = await validateFinding(issue, SAMPLE_FILE, defaultOptions)
 
     expect(result.verdict).toBe('uncertain')
     expect(result.confidence).toBe('low')
-    expect(result.reasoning).toContain('Rate limit exceeded')
+    expect(result.reasoning).toContain('Network error')
+  })
+
+  it('returns uncertain on non-OK response', async () => {
+    vi.spyOn(global, 'fetch').mockResolvedValueOnce(mockFetchResponse({ error: 'Bad request' }, 400))
+
+    const issue = makeIssue()
+    const result = await validateFinding(issue, SAMPLE_FILE, defaultOptions)
+
+    expect(result.verdict).toBe('uncertain')
+    expect(result.confidence).toBe('low')
+    expect(result.reasoning).toContain('400')
   })
 
   it('returns cached result on second call', async () => {
-    mockedGenerateText.mockResolvedValueOnce({
-      text: JSON.stringify({
-        verdict: 'false-positive',
-        confidence: 'medium',
-        reasoning: 'Cached result test.',
-      }),
-    } as never)
+    const apiResult = {
+      issueId: 'test-1',
+      verdict: 'false-positive',
+      confidence: 'medium',
+      reasoning: 'Cached result test.',
+    }
+    vi.spyOn(global, 'fetch').mockResolvedValueOnce(mockFetchResponse(apiResult))
 
     const issue = makeIssue()
     const first = await validateFinding(issue, SAMPLE_FILE, defaultOptions)
@@ -275,17 +280,17 @@ describe('validateFinding', () => {
 
     expect(first.verdict).toBe('false-positive')
     expect(second).toEqual(first)
-    expect(mockedGenerateText).toHaveBeenCalledOnce() // only called once
+    expect(global.fetch).toHaveBeenCalledOnce() // only called once
   })
 
-  it('calls createAIModel with correct arguments', async () => {
-    mockedGenerateText.mockResolvedValueOnce({
-      text: JSON.stringify({
-        verdict: 'uncertain',
-        confidence: 'low',
-        reasoning: 'Cannot determine.',
-      }),
-    } as never)
+  it('sends correct provider/model/apiKey in request body', async () => {
+    const apiResult = {
+      issueId: 'test-1',
+      verdict: 'uncertain',
+      confidence: 'low',
+      reasoning: 'Cannot determine.',
+    }
+    vi.spyOn(global, 'fetch').mockResolvedValueOnce(mockFetchResponse(apiResult))
 
     const issue = makeIssue()
     await validateFinding(issue, SAMPLE_FILE, {
@@ -294,11 +299,18 @@ describe('validateFinding', () => {
       apiKey: 'test-google-key',
     })
 
-    expect(mockedCreateAIModel).toHaveBeenCalledWith(
-      'google',
-      'gemini-2.5-flash',
-      'test-google-key',
+    expect(global.fetch).toHaveBeenCalledWith(
+      '/api/issues/validate',
+      expect.objectContaining({
+        method: 'POST',
+        body: expect.stringContaining('"google"'),
+      }),
     )
+    const fetchCall = vi.mocked(global.fetch).mock.calls[0]
+    const body = JSON.parse(fetchCall[1]?.body as string)
+    expect(body.provider).toBe('google')
+    expect(body.model).toBe('gemini-2.5-flash')
+    expect(body.apiKey).toBe('test-google-key')
   })
 })
 
@@ -306,21 +318,20 @@ describe('validateBatch', () => {
   beforeEach(() => {
     clearValidationCache()
     vi.clearAllMocks()
-    mockedCreateAIModel.mockReturnValue('mock-model' as never)
+    vi.restoreAllMocks()
   })
 
   it('prioritizes critical issues first', async () => {
     const callOrder: string[] = []
-    mockedGenerateText.mockImplementation(async () => {
-      // Track call order by examining what was passed
-      callOrder.push('called')
-      return {
-        text: JSON.stringify({
-          verdict: 'uncertain',
-          confidence: 'low',
-          reasoning: 'Test.',
-        }),
-      } as never
+    vi.spyOn(global, 'fetch').mockImplementation(async (_url, init) => {
+      const body = JSON.parse(init?.body as string)
+      callOrder.push(body.issue.id)
+      return mockFetchResponse({
+        issueId: body.issue.id,
+        verdict: 'uncertain',
+        confidence: 'low',
+        reasoning: 'Test.',
+      })
     })
 
     const issues = [
@@ -342,13 +353,15 @@ describe('validateBatch', () => {
   })
 
   it('respects maxFindings limit', async () => {
-    mockedGenerateText.mockResolvedValue({
-      text: JSON.stringify({
+    vi.spyOn(global, 'fetch').mockImplementation(async (_url, init) => {
+      const body = JSON.parse(init?.body as string)
+      return mockFetchResponse({
+        issueId: body.issue.id,
         verdict: 'true-positive',
         confidence: 'high',
         reasoning: 'Test.',
-      }),
-    } as never)
+      })
+    })
 
     const issues = Array.from({ length: 10 }, (_, i) =>
       makeIssue({ id: `issue-${i}`, file: 'a.ts' }),
@@ -364,13 +377,15 @@ describe('validateBatch', () => {
   })
 
   it('skips issues without matching file content', async () => {
-    mockedGenerateText.mockResolvedValue({
-      text: JSON.stringify({
+    vi.spyOn(global, 'fetch').mockImplementation(async (_url, init) => {
+      const body = JSON.parse(init?.body as string)
+      return mockFetchResponse({
+        issueId: body.issue.id,
         verdict: 'true-positive',
         confidence: 'high',
         reasoning: 'Test.',
-      }),
-    } as never)
+      })
+    })
 
     const issues = [
       makeIssue({ id: 'has-content', file: 'a.ts' }),
@@ -392,10 +407,14 @@ describe('validateBatch', () => {
       { verdict: 'uncertain', confidence: 'low', reasoning: 'U' },
     ]
     let callIdx = 0
-    mockedGenerateText.mockImplementation(async () => {
+    vi.spyOn(global, 'fetch').mockImplementation(async (_url, init) => {
+      const body = JSON.parse(init?.body as string)
       const resp = responses[callIdx % responses.length]
       callIdx++
-      return { text: JSON.stringify(resp) } as never
+      return mockFetchResponse({
+        issueId: body.issue.id,
+        ...resp,
+      })
     })
 
     const issues = [

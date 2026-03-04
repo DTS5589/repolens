@@ -36,6 +36,9 @@ const PARSER_PLUGINS: ParserPlugin[] = [
 
 const astCache = new Map<string, { contentLen: number; ast: ParseResult<File> | null }>()
 
+/** Maximum number of entries in the AST cache before evicting oldest */
+const AST_CACHE_MAX_SIZE = 200
+
 /** Clear the AST cache. Exported for testing purposes. */
 export function clearASTCache(): void {
   astCache.clear()
@@ -86,6 +89,11 @@ export function getAST(file: IndexedFile): ParseResult<File> | null {
   if (cached && cached.contentLen === file.content.length) return cached.ast
 
   const ast = parseFileAST(file.content, lang)
+  // Evict oldest entry if cache is full (FIFO approximation)
+  if (astCache.size >= AST_CACHE_MAX_SIZE) {
+    const oldestKey = astCache.keys().next().value
+    if (oldestKey !== undefined) astCache.delete(oldestKey)
+  }
   astCache.set(file.path, { contentLen: file.content.length, ast })
   return ast
 }

@@ -22,7 +22,7 @@ export const COMPOSITE_RULES: CompositeRule[] = [
     cwe: 'CWE-78',
     owasp: 'A03:2021 Injection',
     learnMoreUrl: 'https://cwe.mitre.org/data/definitions/78.html',
-    fileFilter: ['.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs'],
+    fileFilter: JS_TS,
     requiredPatterns: [
       /(?:require\s*\(\s*['"]child_process['"]\)|from\s+['"]child_process['"]|from\s+['"]node:child_process['"])/,
       /\bexec(?:Sync)?\s*\(\s*[a-zA-Z_$]/,  // exec called with a variable, not a string literal
@@ -42,7 +42,7 @@ export const COMPOSITE_RULES: CompositeRule[] = [
     cwe: 'CWE-78',
     owasp: 'A03:2021 Injection',
     learnMoreUrl: 'https://cwe.mitre.org/data/definitions/78.html',
-    fileFilter: ['.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs'],
+    fileFilter: JS_TS,
     requiredPatterns: [
       /(?:require\s*\(\s*['"]child_process['"]\)|from\s+['"]child_process['"]|from\s+['"]node:child_process['"])/,
       /util\.format\s*\(/,
@@ -62,7 +62,7 @@ export const COMPOSITE_RULES: CompositeRule[] = [
     cwe: 'CWE-78',
     owasp: 'A03:2021 Injection',
     learnMoreUrl: 'https://cwe.mitre.org/data/definitions/78.html',
-    fileFilter: ['.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs'],
+    fileFilter: JS_TS,
     requiredPatterns: [
       /(?:require\s*\(\s*['"]child_process['"]\)|from\s+['"]child_process['"]|from\s+['"]node:child_process['"])/,
       /(?:command|cmd)\s*(?:=|\+=)\s*.*\+/,
@@ -101,7 +101,7 @@ export const COMPOSITE_RULES: CompositeRule[] = [
     cwe: 'CWE-22',
     owasp: 'A01:2021 Broken Access Control',
     learnMoreUrl: 'https://cwe.mitre.org/data/definitions/22.html',
-    fileFilter: ['.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs'],
+    fileFilter: JS_TS,
     requiredPatterns: [
       /(?:req\.params|req\.query|req\.body|request\.params|searchParams\.get)/,
       /(?:readFile|writeFile|createReadStream|readdir|unlink|stat|access)(?:Sync)?\s*\(/,
@@ -122,7 +122,7 @@ export const COMPOSITE_RULES: CompositeRule[] = [
     cwe: 'CWE-918',
     owasp: 'A10:2021 Server-Side Request Forgery',
     learnMoreUrl: 'https://cwe.mitre.org/data/definitions/918.html',
-    fileFilter: ['.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs'],
+    fileFilter: JS_TS,
     requiredPatterns: [
       /(?:req\.params|req\.query|req\.body|request\.params|searchParams\.get)/,
       /(?:fetch\s*\(|axios\.|got\(|http\.request|https\.request|urllib)/,

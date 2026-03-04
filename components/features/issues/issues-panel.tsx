@@ -32,9 +32,9 @@ interface IssuesPanelProps {
 }
 
 const SEVERITY_CONFIG: Record<IssueSeverity, { label: string; color: string; bgColor: string; borderColor: string; icon: typeof AlertTriangle }> = {
-  critical: { label: 'Critical', color: 'text-red-400', bgColor: 'bg-red-500/10', borderColor: 'border-red-500/20', icon: ShieldAlert },
-  warning: { label: 'Warning', color: 'text-amber-400', bgColor: 'bg-amber-500/10', borderColor: 'border-amber-500/20', icon: AlertTriangle },
-  info: { label: 'Info', color: 'text-blue-400', bgColor: 'bg-blue-500/10', borderColor: 'border-blue-500/20', icon: Info },
+  critical: { label: 'Critical', color: 'text-red-700 dark:text-red-400', bgColor: 'bg-red-500/10', borderColor: 'border-red-500/20', icon: ShieldAlert },
+  warning: { label: 'Warning', color: 'text-amber-700 dark:text-amber-400', bgColor: 'bg-amber-500/10', borderColor: 'border-amber-500/20', icon: AlertTriangle },
+  info: { label: 'Info', color: 'text-blue-700 dark:text-blue-400', bgColor: 'bg-blue-500/10', borderColor: 'border-blue-500/20', icon: Info },
 }
 
 const CATEGORY_CONFIG: Record<IssueCategory, { label: string; icon: typeof Shield }> = {
@@ -44,11 +44,11 @@ const CATEGORY_CONFIG: Record<IssueCategory, { label: string; icon: typeof Shiel
 }
 
 const GRADE_CONFIG: Record<HealthGrade, { color: string; bg: string; border: string; label: string }> = {
-  A: { color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', label: 'Excellent' },
-  B: { color: 'text-teal-400', bg: 'bg-teal-500/10', border: 'border-teal-500/20', label: 'Good' },
-  C: { color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20', label: 'Fair' },
-  D: { color: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/20', label: 'Poor' },
-  F: { color: 'text-red-400', bg: 'bg-red-500/10', border: 'border-red-500/20', label: 'Critical' },
+  A: { color: 'text-emerald-700 dark:text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', label: 'Excellent' },
+  B: { color: 'text-teal-700 dark:text-teal-400', bg: 'bg-teal-500/10', border: 'border-teal-500/20', label: 'Good' },
+  C: { color: 'text-amber-700 dark:text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20', label: 'Fair' },
+  D: { color: 'text-orange-700 dark:text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/20', label: 'Poor' },
+  F: { color: 'text-red-700 dark:text-red-400', bg: 'bg-red-500/10', border: 'border-red-500/20', label: 'Critical' },
 }
 
 type ViewMode = 'issues' | 'compliance'
@@ -209,9 +209,11 @@ export function IssuesPanel({ codeIndex, onNavigateToFile }: IssuesPanelProps) {
     <TooltipProvider delayDuration={300}>
     <div className="flex flex-col h-full">
       {/* View toggle: Issues / Compliance */}
-      <div className="flex items-center gap-0.5 px-4 pt-3 pb-0">
+      <div className="flex items-center gap-0.5 px-4 pt-3 pb-0" role="tablist" aria-label="View mode">
         <button
           onClick={() => setViewMode('issues')}
+          role="tab"
+          aria-selected={viewMode === 'issues'}
           className={cn(
             'flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors',
             viewMode === 'issues'
@@ -224,6 +226,8 @@ export function IssuesPanel({ codeIndex, onNavigateToFile }: IssuesPanelProps) {
         </button>
         <button
           onClick={() => setViewMode('compliance')}
+          role="tab"
+          aria-selected={viewMode === 'compliance'}
           className={cn(
             'flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors',
             viewMode === 'compliance'
@@ -317,10 +321,10 @@ export function IssuesPanel({ codeIndex, onNavigateToFile }: IssuesPanelProps) {
               )}
             </div>
             <div className="flex gap-3 mt-1">
-              {riskDist.critical > 0 && <span className="text-[9px] text-red-400">{riskDist.critical} critical</span>}
-              {riskDist.high > 0 && <span className="text-[9px] text-orange-400">{riskDist.high} high</span>}
-              {riskDist.medium > 0 && <span className="text-[9px] text-amber-400">{riskDist.medium} medium</span>}
-              {riskDist.low > 0 && <span className="text-[9px] text-blue-400">{riskDist.low} low</span>}
+              {riskDist.critical > 0 && <span className="text-[9px] text-red-400">{riskDist.critical} critical risk</span>}
+              {riskDist.high > 0 && <span className="text-[9px] text-orange-400">{riskDist.high} high risk</span>}
+              {riskDist.medium > 0 && <span className="text-[9px] text-amber-400">{riskDist.medium} medium risk</span>}
+              {riskDist.low > 0 && <span className="text-[9px] text-blue-400">{riskDist.low} low risk</span>}
             </div>
           </div>
         )}
@@ -339,6 +343,7 @@ export function IssuesPanel({ codeIndex, onNavigateToFile }: IssuesPanelProps) {
           {summary.critical > 0 && (
             <button
               onClick={() => setFilter(f => f === 'critical' ? 'all' : 'critical')}
+              aria-pressed={filter === 'critical'}
               className={cn(
                 'rounded-lg border p-2 text-left transition-colors',
                 filter === 'critical' ? 'border-red-500/40 bg-red-500/15' : 'border-red-500/20 bg-red-500/5 hover:bg-red-500/10'
@@ -351,6 +356,7 @@ export function IssuesPanel({ codeIndex, onNavigateToFile }: IssuesPanelProps) {
           {summary.warning > 0 && (
             <button
               onClick={() => setFilter(f => f === 'warning' ? 'all' : 'warning')}
+              aria-pressed={filter === 'warning'}
               className={cn(
                 'rounded-lg border p-2 text-left transition-colors',
                 filter === 'warning' ? 'border-amber-500/40 bg-amber-500/15' : 'border-amber-500/20 bg-amber-500/5 hover:bg-amber-500/10'
@@ -363,6 +369,7 @@ export function IssuesPanel({ codeIndex, onNavigateToFile }: IssuesPanelProps) {
           {summary.info > 0 && (
             <button
               onClick={() => setFilter(f => f === 'info' ? 'all' : 'info')}
+              aria-pressed={filter === 'info'}
               className={cn(
                 'rounded-lg border p-2 text-left transition-colors',
                 filter === 'info' ? 'border-blue-500/40 bg-blue-500/15' : 'border-blue-500/20 bg-blue-500/5 hover:bg-blue-500/10'
@@ -378,6 +385,7 @@ export function IssuesPanel({ codeIndex, onNavigateToFile }: IssuesPanelProps) {
         <div className="flex gap-1.5 flex-wrap">
           <button
             onClick={() => setFilter('all')}
+            aria-pressed={filter === 'all'}
             className={cn(
               'text-[10px] px-2 py-0.5 rounded-full border transition-colors',
               filter === 'all'
@@ -395,6 +403,7 @@ export function IssuesPanel({ codeIndex, onNavigateToFile }: IssuesPanelProps) {
               <button
                 key={cat}
                 onClick={() => setFilter(f => f === cat ? 'all' : cat)}
+                aria-pressed={filter === cat}
                 className={cn(
                   'text-[10px] px-2 py-0.5 rounded-full border transition-colors flex items-center gap-1',
                   filter === cat
@@ -621,7 +630,9 @@ export function IssuesPanel({ codeIndex, onNavigateToFile }: IssuesPanelProps) {
                                       ) : (
                                         <Sparkles className="h-2.5 w-2.5" />
                                       )}
-                                      {validatingIssues.has(issue.id) ? 'Verifying…' : 'Verify with AI'}
+                                      <span role="status" aria-live="polite">
+                                        {validatingIssues.has(issue.id) ? 'Verifying…' : 'Verify with AI'}
+                                      </span>
                                     </button>
                                   )}
                                 </div>

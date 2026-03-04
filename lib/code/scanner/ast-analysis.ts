@@ -188,6 +188,7 @@ export function analyzeAST(ast: ParseResult<File>, file: IndexedFile): CodeIssue
               line: loc.start.line,
               column: loc.start.column,
               suggestion: 'Add error logging or re-throw the error.',
+              cwe: 'CWE-390',
             }))
           }
         }
@@ -368,7 +369,8 @@ export function analyzeAST(ast: ParseResult<File>, file: IndexedFile): CodeIssue
         }
       },
     })
-  } catch {
+  } catch (error) {
+    console.warn('[ast-analysis] AST traversal error:', error)
     // Traversal failure — return whatever issues were collected
   }
 
@@ -488,7 +490,8 @@ export function extractScopeInfo(ast: ParseResult<File>): ScopeInfo {
         }
       },
     })
-  } catch {
+  } catch (error) {
+    console.warn('[ast-analysis] AST traversal error:', error)
     // return what was collected
   }
 
@@ -531,7 +534,8 @@ export function findFunctionBodies(ast: ParseResult<File>): FunctionBody[] {
       FunctionExpression: visitor,
       ArrowFunctionExpression: visitor,
     })
-  } catch {
+  } catch (error) {
+    console.warn('[ast-analysis] AST traversal error:', error)
     // return what was collected
   }
 
@@ -575,7 +579,9 @@ export function isRouteHandler(ast: ParseResult<File>): boolean {
         }
       },
     })
-  } catch { /* return false */ }
+  } catch (error) {
+    console.warn('[ast-analysis] AST traversal error:', error)
+  }
 
   return detected
 }
@@ -617,7 +623,9 @@ export function isExportedFunction(ast: ParseResult<File>, functionName: string)
         }
       },
     })
-  } catch { /* return false */ }
+  } catch (error) {
+    console.warn('[ast-analysis] AST traversal error:', error)
+  }
 
   return found
 }

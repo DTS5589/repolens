@@ -109,7 +109,7 @@
     --surface-secondary: 0 0% 9.4%;
     --text-primary: 0 0% 100%;
     --text-secondary: 0 0% 62.7%;
-    --text-muted: 0 0% 40%;
+    --text-muted: 0 0% 64%;
     --text-accent: 152 100% 50%;
     --interactive-primary: 0 0% 100%;
     --interactive-secondary: 0 0% 40%;
@@ -132,6 +132,12 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+  button,
+  a,
+  [role="tab"],
+  [role="button"] {
+    @apply focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none;
   }
 }
 
