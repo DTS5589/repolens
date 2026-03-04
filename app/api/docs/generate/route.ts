@@ -10,7 +10,7 @@ type DocType = 'architecture' | 'setup' | 'api-reference' | 'file-explanation' |
 
 const messageSchema = z.object({
   role: z.enum(['user', 'assistant', 'tool', 'data']),
-  content: z.string().max(100_000),
+  content: z.string().max(100_000).optional(),
 }).passthrough() // Allow AI SDK's additional fields (parts, toolInvocations, etc.)
 
 const docsRequestSchema = z.object({

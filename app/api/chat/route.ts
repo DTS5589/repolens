@@ -8,7 +8,7 @@ export const maxDuration = 120
 
 const messageSchema = z.object({
   role: z.enum(['user', 'assistant', 'tool', 'data']),
-  content: z.string().max(100_000),
+  content: z.string().max(100_000).optional(),
 }).passthrough() // Allow AI SDK's additional fields (parts, toolInvocations, etc.)
 
 const chatRequestSchema = z.object({
