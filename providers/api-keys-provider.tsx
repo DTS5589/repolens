@@ -71,6 +71,7 @@ interface APIKeysContextType {
   apiKeys: APIKeysState
   models: ProviderModel[]
   isLoadingModels: boolean
+  isHydrated: boolean
   selectedProvider: AIProvider | null
   selectedModel: ProviderModel | null
   setAPIKey: (provider: AIProvider, key: string) => void
@@ -84,24 +85,14 @@ interface APIKeysContextType {
 const APIKeysContext = createContext<APIKeysContextType | null>(null)
 
 const STORAGE_KEY = 'codedoc-api-keys'
+const MODEL_STORAGE_KEY = 'codedoc-selected-model'
 
 export function APIKeysProvider({ children }: { children: ReactNode }) {
-  const [apiKeys, setAPIKeys] = useState<APIKeysState>(() => {
-    if (typeof window === 'undefined') return defaultAPIKeysState
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY)
-      if (stored) {
-        const parsed = JSON.parse(stored)
-        return parsed
-      }
-    } catch {
-      // Invalid stored data, use defaults
-    }
-    return defaultAPIKeysState
-  })
+  const [apiKeys, setAPIKeys] = useState<APIKeysState>(defaultAPIKeysState)
   const [models, setModels] = useState<ProviderModel[]>([])
   const [isLoadingModels, setIsLoadingModels] = useState(false)
   const [selectedModel, setSelectedModel] = useState<ProviderModel | null>(null)
+  const [isHydrated, setIsHydrated] = useState(false)
   const selectedModelRef = useRef<ProviderModel | null>(null)
 
   // Ref to always have current apiKeys for internal use
@@ -111,10 +102,46 @@ export function APIKeysProvider({ children }: { children: ReactNode }) {
   // Keep ref in sync with state so callbacks can read current value without re-creation
   useEffect(() => { selectedModelRef.current = selectedModel }, [selectedModel])
 
-  // Save keys to localStorage when changed
+  // Hydrate state from localStorage after mount (avoids SSR/client mismatch)
   useEffect(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY)
+      if (stored) {
+        setAPIKeys(JSON.parse(stored))
+      }
+    } catch {
+      // Ignore invalid stored data
+    }
+
+    try {
+      const storedModel = localStorage.getItem(MODEL_STORAGE_KEY)
+      if (storedModel) {
+        const parsed = JSON.parse(storedModel) as ProviderModel
+        setSelectedModel(parsed)
+        selectedModelRef.current = parsed
+      }
+    } catch {
+      // Ignore invalid stored model
+    }
+
+    setIsHydrated(true)
+  }, [])
+
+  // Save keys to localStorage when changed (skip before hydration)
+  useEffect(() => {
+    if (!isHydrated) return
     localStorage.setItem(STORAGE_KEY, JSON.stringify(apiKeys))
-  }, [apiKeys])
+  }, [apiKeys, isHydrated])
+
+  // Persist selected model to localStorage
+  useEffect(() => {
+    if (!isHydrated) return
+    if (selectedModel) {
+      localStorage.setItem(MODEL_STORAGE_KEY, JSON.stringify(selectedModel))
+    } else {
+      localStorage.removeItem(MODEL_STORAGE_KEY)
+    }
+  }, [selectedModel, isHydrated])
 
   const setAPIKey = useCallback((provider: AIProvider, key: string) => {
     setAPIKeys(prev => ({
@@ -278,10 +305,11 @@ export function APIKeysProvider({ children }: { children: ReactNode }) {
     }
   }, [fetchModelsInternal])
 
-  // Auto-fetch models on mount for providers with stored keys
+  // Auto-fetch models once hydration is complete for providers with stored keys
   const hasAutoFetched = useRef(false)
 
   useEffect(() => {
+    if (!isHydrated) return
     if (hasAutoFetched.current) return
     hasAutoFetched.current = true
 
@@ -303,7 +331,7 @@ export function APIKeysProvider({ children }: { children: ReactNode }) {
     }
     fetchAll()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []) // Intentionally empty — runs once on mount with sync-loaded apiKeys
+  }, [isHydrated]) // Runs once after hydration completes
 
   const getValidProviders = useCallback((): AIProvider[] => {
     return (Object.keys(apiKeys) as AIProvider[]).filter(
@@ -319,6 +347,7 @@ export function APIKeysProvider({ children }: { children: ReactNode }) {
         apiKeys,
         models,
         isLoadingModels,
+        isHydrated,
         selectedProvider,
         selectedModel,
         setAPIKey,

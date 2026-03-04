@@ -55,11 +55,11 @@ describe('APIKeysProvider', () => {
   })
 
   // -----------------------------------------------------------------------
-  // Sync localStorage load
+  // Async localStorage hydration
   // -----------------------------------------------------------------------
 
-  describe('sync localStorage initialization', () => {
-    it('loads stored keys immediately on first render', () => {
+  describe('async localStorage hydration', () => {
+    it('loads stored keys after hydration effect runs', async () => {
       const stored = makeStoredKeys({
         openai: { key: 'sk-test-key', isValid: true, lastValidated: null },
       })
@@ -70,14 +70,22 @@ describe('APIKeysProvider', () => {
 
       const { result } = renderHook(() => useAPIKeys(), { wrapper })
 
-      // The key should be available on the very first render (sync init, not useEffect)
-      expect(result.current.apiKeys.openai.key).toBe('sk-test-key')
+      // Keys are loaded via useEffect, so they appear after hydration
+      await waitFor(() => {
+        expect(result.current.apiKeys.openai.key).toBe('sk-test-key')
+      })
+      expect(result.current.isHydrated).toBe(true)
     })
 
-    it('uses default empty keys when localStorage has no data', () => {
+    it('uses default empty keys when localStorage has no data', async () => {
       globalThis.fetch = vi.fn().mockResolvedValue(makeModelsResponse([]))
 
       const { result } = renderHook(() => useAPIKeys(), { wrapper })
+
+      // Wait for hydration to complete
+      await waitFor(() => {
+        expect(result.current.isHydrated).toBe(true)
+      })
 
       expect(result.current.apiKeys.openai.key).toBe('')
       expect(result.current.apiKeys.google.key).toBe('')
@@ -85,11 +93,15 @@ describe('APIKeysProvider', () => {
       expect(result.current.apiKeys.openrouter.key).toBe('')
     })
 
-    it('uses defaults when localStorage contains invalid JSON', () => {
+    it('uses defaults when localStorage contains invalid JSON', async () => {
       localStorage.setItem(STORAGE_KEY, '{bad json')
       globalThis.fetch = vi.fn().mockResolvedValue(makeModelsResponse([]))
 
       const { result } = renderHook(() => useAPIKeys(), { wrapper })
+
+      await waitFor(() => {
+        expect(result.current.isHydrated).toBe(true)
+      })
 
       expect(result.current.apiKeys.openai.key).toBe('')
     })
