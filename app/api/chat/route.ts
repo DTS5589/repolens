@@ -1,4 +1,4 @@
-import { streamText, convertToModelMessages, stepCountIs, consumeStream, tool } from 'ai'
+import { streamText, convertToModelMessages, stepCountIs, consumeStream, tool, type UIMessage } from 'ai'
 import * as z from 'zod'
 import { createAIModel, getModelContextWindow } from '@/lib/ai/providers'
 import { createContextCompactor } from '@/lib/ai/context-compactor'
@@ -33,6 +33,7 @@ const chatRequestSchema = z.object({
     structure: z.string().max(200_000),
   }).optional(),
   structuralIndex: z.string().max(500_000).optional(),
+  maxSteps: z.number().int().min(10).max(100).optional(),
 })
 
 export async function POST(req: Request) {
@@ -45,7 +46,8 @@ export async function POST(req: Request) {
         { status: 422, headers: { 'Content-Type': 'application/json' } },
       )
     }
-    const { messages, provider, model, apiKey, repoContext, structuralIndex } = parsed.data
+    const { messages: rawMessages, provider, model, apiKey, repoContext, structuralIndex, maxSteps } = parsed.data
+    const messages = rawMessages as unknown as UIMessage[]
 
     // Client-side tools — no execute function, tool calls stream to client
     const codeTools = {
@@ -168,7 +170,7 @@ No repository is currently connected. You can still answer general programming q
       messages: await convertToModelMessages(messages),
       tools: codeTools,
       prepareStep: createContextCompactor(),
-      stopWhen: stepCountIs(50),
+      stopWhen: stepCountIs(maxSteps ?? 50),
       abortSignal: req.signal,
     })
 

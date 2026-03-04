@@ -1,4 +1,4 @@
-import { streamText, convertToModelMessages, stepCountIs, consumeStream, tool } from 'ai'
+import { streamText, convertToModelMessages, stepCountIs, consumeStream, tool, type UIMessage } from 'ai'
 import * as z from 'zod'
 import { createAIModel, getModelContextWindow } from '@/lib/ai/providers'
 import { createContextCompactor } from '@/lib/ai/context-compactor'
@@ -37,6 +37,7 @@ const docsRequestSchema = z.object({
   }),
   structuralIndex: z.string().max(500_000).optional(),
   targetFile: z.string().nullish(),
+  maxSteps: z.number().int().min(10).max(80).optional(),
 })
 
 /**
@@ -69,14 +70,7 @@ Produce a clear, well-structured **Architecture Overview** document.
 - Reference specific file paths as \`inline code\`
 - Use mermaid diagrams where helpful (wrap in \`\`\`mermaid blocks)
 - In mermaid diagrams, ALWAYS quote node labels containing file paths or slashes: \`A["src/lib/utils.ts"]\` NOT \`A[src/lib/utils.ts]\`. Unquoted \`[/text]\` triggers trapezoid syntax and causes parse errors
-- Cite actual functions, classes, and patterns from code you inspected
-
-## Step Budget
-You have 25 tool-call rounds. Plan efficiently:
-- Use readFiles (batch, up to 10 files) to maximize reads per round
-- Use readFile with startLine/endLine for large files
-- Budget: ~15 rounds reading, ~5 writing, ~5 verifying
-- Prioritize the most important files first -- not every file needs to be read`,
+- Cite actual functions, classes, and patterns from code you inspected`,
 
   'setup': `You are a developer experience expert writing a **Getting Started / Setup Guide**.
 
@@ -97,14 +91,7 @@ You have 25 tool-call rounds. Plan efficiently:
 ## Rules
 - ONLY include setup steps you can verify from the code
 - Put all commands in fenced code blocks
-- If you can't determine something, say "check with the team" rather than guessing
-
-## Step Budget
-You have 25 tool-call rounds. Plan efficiently:
-- Use readFiles (batch, up to 10 files) to maximize reads per round
-- Use readFile with startLine/endLine for large files
-- Budget: ~15 rounds reading, ~5 writing, ~5 verifying
-- Prioritize the most important files first -- not every file needs to be read`,
+- If you can't determine something, say "check with the team" rather than guessing`,
 
   'api-reference': `You are a technical writer creating an **API Reference**.
 
@@ -126,14 +113,7 @@ You have 25 tool-call rounds. Plan efficiently:
 - Group by file or module
 - Use \`typescript\` (or appropriate language) fenced code blocks
 - Focus on PUBLIC API -- skip internal helpers unless important
-- Read every file before documenting its exports
-
-## Step Budget
-You have 25 tool-call rounds. Plan efficiently:
-- Use readFiles (batch, up to 10 files) to maximize reads per round
-- Use readFile with startLine/endLine for large files
-- Budget: ~15 rounds reading, ~5 writing, ~5 verifying
-- Prioritize the most important files first -- not every file needs to be read`,
+- Read every file before documenting its exports`,
 
   'file-explanation': `You are a code educator explaining a specific file in detail.
 
@@ -154,14 +134,7 @@ You have 25 tool-call rounds. Plan efficiently:
 - Read the actual file and its dependencies before explaining
 - Reference specific line content when discussing code
 - Quote short snippets in fenced blocks
-- Explain WHY, not just WHAT
-
-## Step Budget
-You have 25 tool-call rounds. Plan efficiently:
-- Use readFiles (batch, up to 10 files) to maximize reads per round
-- Use readFile with startLine/endLine for large files
-- Budget: ~15 rounds reading, ~5 writing, ~5 verifying
-- Prioritize the most important files first -- not every file needs to be read`,
+- Explain WHY, not just WHAT`,
 
   'custom': `You are a senior developer and technical writer. The user will ask you to generate specific documentation.
 
@@ -175,14 +148,7 @@ You have 25 tool-call rounds. Plan efficiently:
 - Reference specific files, functions, and code
 - Use markdown with clear headings
 - Put code examples in fenced blocks with correct language tags
-- Be thorough but concise
-
-## Step Budget
-You have 25 tool-call rounds. Plan efficiently:
-- Use readFiles (batch, up to 10 files) to maximize reads per round
-- Use readFile with startLine/endLine for large files
-- Budget: ~15 rounds reading, ~5 writing, ~5 verifying
-- Prioritize the most important files first -- not every file needs to be read`,
+- Be thorough but concise`,
 }
 
 export async function POST(req: Request) {
@@ -195,7 +161,8 @@ export async function POST(req: Request) {
         { status: 422, headers: { 'Content-Type': 'application/json' } },
       )
     }
-    const { messages, provider, model, apiKey, docType, repoContext, structuralIndex, targetFile } = parsed.data
+    const { messages: rawMessages, provider, model, apiKey, docType, repoContext, structuralIndex, targetFile, maxSteps } = parsed.data
+    const messages = rawMessages as unknown as UIMessage[]
 
     // Client-side tools — no execute function, tool calls stream to client
     const codeTools = {
@@ -242,6 +209,15 @@ The user is asking specifically about: \`${targetFile}\`
 Start by reading this file with readFile.`
     }
 
+    const stepBudget = maxSteps ?? 40
+    systemPrompt += `\n\n## Step Budget
+You have up to ${stepBudget} tool-call rounds. Plan efficiently:
+- Use readFiles (batch, up to 10 files) to maximize reads per round
+- Use readFile with startLine/endLine for large files
+- Budget: ~60% reading, ~25% writing, ~15% verifying
+- Prioritize the most important files first -- not every file needs to be read
+- If approaching the step limit, prioritize completing your output over reading more files`
+
     systemPrompt += `\n\n## Important
 - You have access to readFile, readFiles, searchFiles, listDirectory, findSymbol, getFileStats, analyzeImports, scanIssues, generateDiagram, and getProjectOverview tools
 - ALWAYS read files before documenting them -- never guess or hallucinate
@@ -257,7 +233,7 @@ Your context window is approximately ${getModelContextWindow(model).toLocaleStri
       messages: await convertToModelMessages(messages),
       tools: codeTools,
       prepareStep: createContextCompactor(),
-      stopWhen: stepCountIs(25), // Allow up to 25 tool-call rounds
+      stopWhen: stepCountIs(maxSteps ?? 40),
       abortSignal: req.signal,
     })
 

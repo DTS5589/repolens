@@ -85,6 +85,7 @@ export interface GeneratedDoc {
   createdAt: Date
   targetFile?: string
   customPrompt?: string
+  maxSteps?: number
 }
 
 /** Extracts all assistant text from chat messages. */
@@ -121,6 +122,7 @@ export interface GenContext {
   docType: DocType
   targetFile: string | null
   customPrompt: string
+  maxSteps?: number
 }
 
 // ---------------------------------------------------------------------------
@@ -240,6 +242,7 @@ export function DocsProvider({ children }: { children: ReactNode }) {
               repoContext: repoCtx,
               structuralIndex,
               targetFile: ctx.targetFile,
+              maxSteps: ctx.maxSteps,
             },
           }
         },

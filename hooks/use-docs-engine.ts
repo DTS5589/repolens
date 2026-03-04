@@ -79,6 +79,7 @@ export function useDocsEngine() {
         createdAt: new Date(),
         targetFile: ctx.targetFile || undefined,
         customPrompt: ctx.customPrompt || undefined,
+        maxSteps: ctx.maxSteps,
       }
 
       setGeneratedDocs(prev => [newDoc, ...prev])
@@ -94,6 +95,7 @@ export function useDocsEngine() {
     preset: (typeof DOC_PRESETS)[number],
     targetFile: string | null,
     customPrompt: string,
+    maxSteps?: number,
   ) => {
     if (isGenerating || isSubmittingRef.current) return
 
@@ -102,6 +104,7 @@ export function useDocsEngine() {
       docType: preset.id,
       targetFile,
       customPrompt,
+      maxSteps,
     }
     genContextRef.current = ctx
     setGenContext(ctx) // also push to provider ref for transport
@@ -132,6 +135,7 @@ export function useDocsEngine() {
       docType: doc.type,
       targetFile: doc.targetFile || null,
       customPrompt: doc.customPrompt || '',
+      maxSteps: doc.maxSteps,
     }
     genContextRef.current = ctx
     setGenContext(ctx)

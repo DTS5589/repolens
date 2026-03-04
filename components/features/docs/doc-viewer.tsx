@@ -15,6 +15,7 @@ import {
   AlertDialogTitle, AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { useAPIKeys, useRepository, useDocs } from '@/providers'
 import type { UIMessage } from 'ai'
@@ -41,6 +42,14 @@ const DOC_PRESET_ICONS: Record<DocType, React.ReactNode> = {
 
 function getPresetIcon(id: DocType): React.ReactNode {
   return DOC_PRESET_ICONS[id] ?? <FileText className="h-5 w-5" />
+}
+
+type QualityLevel = 'fast' | 'balanced' | 'thorough'
+
+const QUALITY_STEPS: Record<QualityLevel, number> = {
+  fast: 20,
+  balanced: 40,
+  thorough: 60,
 }
 
 interface DocViewerProps {
@@ -72,6 +81,7 @@ export function DocViewer({ className }: DocViewerProps) {
   const [showFileSearch, setShowFileSearch] = useState(false)
   const [copied, setCopied] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [qualityLevel, setQualityLevel] = useState<QualityLevel>('balanced')
 
   const isMobile = useIsMobile()
 
@@ -115,7 +125,7 @@ export function DocViewer({ className }: DocViewerProps) {
     }
 
     setSelectedPreset(preset.id)
-    handleGenerate(preset, targetFile, customPrompt)
+    handleGenerate(preset, targetFile, customPrompt, QUALITY_STEPS[qualityLevel])
   }
 
   const onRegenerate = (doc: GeneratedDoc) => {
@@ -324,6 +334,21 @@ export function DocViewer({ className }: DocViewerProps) {
                   <p className="text-xs text-text-muted text-center mb-6">
                     AI reads your code and writes real documentation. Pick a template or write a custom prompt.
                   </p>
+
+                  {/* Quality selector */}
+                  <div className="flex items-center justify-center gap-2 text-sm mb-4">
+                    <span className="text-xs text-muted-foreground">Quality:</span>
+                    <Select value={qualityLevel} onValueChange={(v) => setQualityLevel(v as QualityLevel)}>
+                      <SelectTrigger className="h-7 w-[140px] text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="fast">⚡ Fast (20 steps)</SelectItem>
+                        <SelectItem value="balanced">⚖️ Balanced (40)</SelectItem>
+                        <SelectItem value="thorough">🔬 Thorough (60)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
 
                   {error && !isGenerating && (
                     <div role="alert" className="bg-destructive/10 border border-destructive/20 rounded-lg p-3 mb-4">
