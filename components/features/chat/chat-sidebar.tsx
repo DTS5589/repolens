@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useRef, useEffect } from "react"
 import { useChat } from "@ai-sdk/react"
-import { DefaultChatTransport } from "ai"
+import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls } from "ai"
 import { Button } from "@/components/ui/button"
 import { ChatMessage } from "./chat-message"
 import { ChatInput } from "./chat-input"
@@ -11,7 +11,9 @@ import { cn } from "@/lib/utils"
 import { useAPIKeys, useRepository } from "@/providers"
 import { buildFileTreeString } from "@/lib/github/fetcher"
 import { downloadFile } from "@/lib/export"
-import { truncateFileContents } from "@/lib/ai/truncate-payload"
+import { buildStructuralIndex } from "@/lib/ai/structural-index"
+import { executeToolLocally } from "@/lib/ai/client-tool-executor"
+import type { CodeIndex } from "@/lib/code/code-index"
 
 export function ChatSidebar({ className }: { className?: string }) {
   const { selectedModel, apiKeys, getValidProviders } = useAPIKeys()
@@ -31,16 +33,9 @@ export function ChatSidebar({ className }: { className?: string }) {
     }
   }, [repo, files])
 
-  // Build file contents map from indexed files
-  const fileContentsMap = useMemo(() => {
-    const map: Record<string, string> = {}
-    if (codeIndex?.files) {
-      for (const [path, file] of codeIndex.files) {
-        if (file.content) map[path] = file.content
-      }
-    }
-    return map
-  }, [codeIndex])
+  // Ref to avoid stale closure in onToolCall
+  const codeIndexRef = useRef<CodeIndex | null>(codeIndex)
+  useEffect(() => { codeIndexRef.current = codeIndex }, [codeIndex])
 
   // Create a stable transport — always available so the Chat instance
   // created by useChat is never initialised with transport: undefined.
@@ -49,9 +44,37 @@ export function ChatSidebar({ className }: { className?: string }) {
     [],
   )
 
-  const { messages, sendMessage, status, error } = useChat({
+  const { messages, sendMessage, addToolOutput, status, error } = useChat({
     transport,
     id: 'codedoc-chat',
+
+    onToolCall: async ({ toolCall }) => {
+      if (toolCall.dynamic) return
+
+      try {
+        const result = executeToolLocally(
+          toolCall.toolName,
+          toolCall.input as Record<string, unknown>,
+          codeIndexRef.current,
+        )
+        addToolOutput({
+          // AI SDK expects a literal tool name type, but dynamic tool names require this cast
+          tool: toolCall.toolName as never,
+          toolCallId: toolCall.toolCallId,
+          output: result,
+        })
+      } catch (err) {
+        addToolOutput({
+          state: 'output-error' as const,
+          // AI SDK expects a literal tool name type, but dynamic tool names require this cast
+          tool: toolCall.toolName as never,
+          toolCallId: toolCall.toolCallId,
+          errorText: err instanceof Error ? err.message : 'Tool execution failed',
+        })
+      }
+    },
+
+    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
   })
 
   const isLoading = status === 'streaming' || status === 'submitted'
@@ -62,7 +85,7 @@ export function ChatSidebar({ className }: { className?: string }) {
     const currentInput = input.trim()
     setInput("")
 
-    const { included: truncatedFiles } = truncateFileContents(fileContentsMap)
+    const structuralIndex = buildStructuralIndex(codeIndex)
 
     sendMessage(
       { text: currentInput },
@@ -72,7 +95,7 @@ export function ChatSidebar({ className }: { className?: string }) {
           model: selectedModel.id,
           apiKey: apiKeys[selectedModel.provider].key,
           repoContext,
-          fileContents: truncatedFiles,
+          structuralIndex,
         },
       },
     )

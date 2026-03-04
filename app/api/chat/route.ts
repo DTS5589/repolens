@@ -1,7 +1,19 @@
-import { streamText, convertToModelMessages, stepCountIs, consumeStream } from 'ai'
+import { streamText, convertToModelMessages, stepCountIs, consumeStream, tool } from 'ai'
 import * as z from 'zod'
 import { createAIModel } from '@/lib/ai/providers'
-import { createCodeTools, createAdvancedTools } from '@/lib/ai/tools'
+import { createContextCompactor } from '@/lib/ai/context-compactor'
+import {
+  readFileSchema,
+  readFilesSchema,
+  searchFilesSchema,
+  listDirectorySchema,
+  findSymbolSchema,
+  getFileStatsSchema,
+  analyzeImportsSchema,
+  scanIssuesSchema,
+  generateDiagramSchema,
+  getProjectOverviewSchema,
+} from '@/lib/ai/tool-schemas'
 
 export const maxDuration = 120
 
@@ -15,7 +27,7 @@ const chatRequestSchema = z.object({
     description: z.string(),
     structure: z.string(),
   }).optional(),
-  fileContents: z.record(z.string(), z.string()).optional(),
+  structuralIndex: z.string().optional(),
 })
 
 export async function POST(req: Request) {
@@ -28,15 +40,20 @@ export async function POST(req: Request) {
         { status: 422, headers: { 'Content-Type': 'application/json' } },
       )
     }
-    const { messages, provider, model, apiKey, repoContext, fileContents } = parsed.data
+    const { messages, provider, model, apiKey, repoContext, structuralIndex } = parsed.data
 
-    // Build file content map for tool access
-    const fileMap = new Map(Object.entries(fileContents || {}))
-
-    // Shared + advanced tools for codebase exploration, analysis, and generation
+    // Client-side tools — no execute function, tool calls stream to client
     const codeTools = {
-      ...createCodeTools(fileMap),
-      ...createAdvancedTools(fileMap),
+      readFile: tool({ description: 'Read the full contents of a file. Always read files before making claims about their code.', inputSchema: readFileSchema }),
+      readFiles: tool({ description: 'Read multiple files at once (max 10). More efficient than calling readFile repeatedly.', inputSchema: readFilesSchema }),
+      searchFiles: tool({ description: 'Search for files by path pattern or search for text content across all files. Returns matching file paths and line matches. Set isRegex=true to use regular expression patterns (e.g. "export\\s+function\\s+handle" to find exported functions starting with handle).', inputSchema: searchFilesSchema }),
+      listDirectory: tool({ description: 'List files and subdirectories in a specific directory. Useful to explore folder structure.', inputSchema: listDirectorySchema }),
+      findSymbol: tool({ description: 'Find function, class, interface, type, or enum definitions across the codebase by name. Returns file path and line number.', inputSchema: findSymbolSchema }),
+      getFileStats: tool({ description: 'Get statistics for a file: line count, language, imports, and exports.', inputSchema: getFileStatsSchema }),
+      analyzeImports: tool({ description: 'Analyze import relationships for a file. Shows what it imports and what other files import it.', inputSchema: analyzeImportsSchema }),
+      scanIssues: tool({ description: 'Run the code quality and security scanner on a specific file. Returns issues found with severity.', inputSchema: scanIssuesSchema }),
+      generateDiagram: tool({ description: 'Generate a Mermaid diagram of the codebase. Types: summary, topology, import-graph, class-diagram, entry-points, module-usage, treemap, external-deps, focus-diagram.', inputSchema: generateDiagramSchema }),
+      getProjectOverview: tool({ description: 'Get a comprehensive overview of the project: file count, languages, folder structure, and key patterns.', inputSchema: getProjectOverviewSchema }),
     }
 
     // Build system prompt
@@ -50,9 +67,10 @@ export async function POST(req: Request) {
 - Provide specific file paths, line references, and code snippets from the actual codebase.
 
 ## Your Capabilities
-You have 9 tools to explore the codebase:
+You have 10 tools to explore the codebase:
 - **readFile** — Read any file in full. Use this before discussing any code.
-- **searchFiles** — Search for text patterns or file names across the entire codebase.
+- **readFiles** — Read multiple files at once (up to 10) for efficiency.
+- **searchFiles** — Search for text patterns or file names across the entire codebase. Supports regex patterns with isRegex=true.
 - **listDirectory** — Browse the folder structure.
 - **findSymbol** — Find function, class, interface, type, or enum definitions by name.
 - **getFileStats** — Get line count, language, imports, and exports for a file.
@@ -99,18 +117,17 @@ Before outputting a diagram, mentally verify:
 ## Connected Repository
 **Name:** ${repoContext.name}
 **Description:** ${repoContext.description || 'No description'}
-**Total files indexed:** ${fileMap.size}
+
+## Structural Index
+${structuralIndex || 'Not available'}
 
 ## File Tree
 \`\`\`
 ${repoContext.structure}
 \`\`\`
 
-## Large Repository Note
-For very large repositories, some files may not be available in the initial context due to payload size limits. If readFile returns nothing for a file, let the user know and suggest they ask about specific files or directories.
-
 ## Important
-- You have 9 tools — use them to read and explore real code before answering
+- You have 10 tools — use them to read and explore real code before answering
 - NEVER describe a file you haven't read — use readFile first
 - ALWAYS reference actual files from the codebase`
     } else {
@@ -124,6 +141,7 @@ No repository is currently connected. You can still answer general programming q
       system: systemPrompt,
       messages: await convertToModelMessages(messages),
       tools: codeTools,
+      prepareStep: createContextCompactor(),
       stopWhen: stepCountIs(50),
       abortSignal: req.signal,
     })

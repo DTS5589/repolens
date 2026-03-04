@@ -1,7 +1,13 @@
-import { streamText, convertToModelMessages, stepCountIs, consumeStream } from 'ai'
+import { streamText, convertToModelMessages, stepCountIs, consumeStream, tool } from 'ai'
 import * as z from 'zod'
 import { createAIModel } from '@/lib/ai/providers'
-import { createCodeTools } from '@/lib/ai/tools'
+import { createContextCompactor } from '@/lib/ai/context-compactor'
+import {
+  readFileSchema,
+  readFilesSchema,
+  searchFilesSchema,
+  listDirectorySchema,
+} from '@/lib/ai/tool-schemas'
 
 export const maxDuration = 120
 
@@ -18,7 +24,7 @@ const docsRequestSchema = z.object({
     description: z.string(),
     structure: z.string(),
   }),
-  fileContents: z.record(z.string(), z.string()),
+  structuralIndex: z.string().optional(),
   targetFile: z.string().nullish(),
 })
 
@@ -143,13 +149,15 @@ export async function POST(req: Request) {
         { status: 422, headers: { 'Content-Type': 'application/json' } },
       )
     }
-    const { messages, provider, model, apiKey, docType, repoContext, fileContents, targetFile } = parsed.data
+    const { messages, provider, model, apiKey, docType, repoContext, structuralIndex, targetFile } = parsed.data
 
-    // Build the file content map for tool access
-    const fileMap = new Map(Object.entries(fileContents || {}))
-
-    // Shared code-browsing tools
-    const codeTools = createCodeTools(fileMap)
+    // Client-side tools — no execute function, tool calls stream to client
+    const codeTools = {
+      readFile: tool({ description: 'Read the full contents of a file. Always read files before making claims about their code.', inputSchema: readFileSchema }),
+      readFiles: tool({ description: 'Read multiple files at once (max 10). More efficient than calling readFile repeatedly.', inputSchema: readFilesSchema }),
+      searchFiles: tool({ description: 'Search for files by path pattern or search for text content across all files. Set isRegex=true for regex patterns.', inputSchema: searchFilesSchema }),
+      listDirectory: tool({ description: 'List files and subdirectories in a specific directory.', inputSchema: listDirectorySchema }),
+    }
 
     // Build system prompt
     let systemPrompt = DOC_SYSTEM_PROMPTS[docType] || DOC_SYSTEM_PROMPTS['custom']
@@ -157,7 +165,9 @@ export async function POST(req: Request) {
     systemPrompt += `\n\n## Repository
 **Name:** ${repoContext.name}
 **Description:** ${repoContext.description || 'No description'}
-**Total files indexed:** ${fileMap.size}
+
+## Structural Index
+${structuralIndex || 'Not available'}
 
 ## File Tree
 \`\`\`
@@ -170,11 +180,8 @@ The user is asking specifically about: \`${targetFile}\`
 Start by reading this file with readFile.`
     }
 
-    systemPrompt += `\n\n## Large Repository Note
-For very large repositories, some files may not be available in the initial context due to payload size limits. If readFile returns nothing for a file, note it and continue with the files that are available.
-
-## Important
-- You have access to readFile, searchFiles, and listDirectory tools
+    systemPrompt += `\n\n## Important
+- You have access to readFile, readFiles, searchFiles, and listDirectory tools
 - ALWAYS read files before documenting them -- never guess or hallucinate
 - Read at least the key files for the doc type before writing
 - Your final response should be the complete documentation in markdown`
@@ -184,6 +191,7 @@ For very large repositories, some files may not be available in the initial cont
       system: systemPrompt,
       messages: await convertToModelMessages(messages),
       tools: codeTools,
+      prepareStep: createContextCompactor(),
       stopWhen: stepCountIs(25), // Allow up to 25 tool-call rounds
       abortSignal: req.signal,
     })

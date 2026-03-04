@@ -11,12 +11,13 @@ import {
   type ReactNode,
 } from 'react'
 import { useChat } from '@ai-sdk/react'
-import { DefaultChatTransport } from 'ai'
+import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls } from 'ai'
 import type { UIMessage } from 'ai'
 import { useAPIKeys, useRepository } from '@/providers'
 import { buildFileTreeString } from '@/lib/github/fetcher'
-import { flattenFiles } from '@/lib/code/code-index'
-import { truncateFileContents } from '@/lib/ai/truncate-payload'
+import { buildStructuralIndex } from '@/lib/ai/structural-index'
+import { executeToolLocally } from '@/lib/ai/client-tool-executor'
+import type { CodeIndex } from '@/lib/code/code-index'
 
 // ---------------------------------------------------------------------------
 // Types & constants (moved from doc-viewer.tsx)
@@ -192,16 +193,6 @@ export function DocsProvider({ children }: { children: ReactNode }) {
     }
   }, [repo, files])
 
-  const fileContentsMap = useMemo(() => {
-    const map: Record<string, string> = {}
-    if (codeIndex?.files) {
-      for (const [path, file] of codeIndex.files) {
-        if (file.content) map[path] = file.content
-      }
-    }
-    return map
-  }, [codeIndex])
-
   // --- Transport ---
   // IMPORTANT: The ai-sdk Chat instance is created once in useRef and only
   // recreated when the `id` changes — NOT when `transport` changes. If we
@@ -214,13 +205,13 @@ export function DocsProvider({ children }: { children: ReactNode }) {
   const hasValidKeyRef = useRef(hasValidKey)
   const apiKeysRef = useRef(apiKeys)
   const repoContextRef = useRef(repoContext)
-  const fileContentsMapRef = useRef(fileContentsMap)
+  const codeIndexRef = useRef<CodeIndex | null>(codeIndex)
 
   useEffect(() => { selectedModelRef.current = selectedModel }, [selectedModel])
   useEffect(() => { hasValidKeyRef.current = hasValidKey }, [hasValidKey])
   useEffect(() => { apiKeysRef.current = apiKeys }, [apiKeys])
   useEffect(() => { repoContextRef.current = repoContext }, [repoContext])
-  useEffect(() => { fileContentsMapRef.current = fileContentsMap }, [fileContentsMap])
+  useEffect(() => { codeIndexRef.current = codeIndex }, [codeIndex])
 
   // Stable transport — never undefined, reads from refs at request time
   const transport = useMemo(
@@ -237,9 +228,7 @@ export function DocsProvider({ children }: { children: ReactNode }) {
             throw new Error('Model or repository not ready for doc generation')
           }
 
-          const { included: truncatedFiles } = truncateFileContents(
-            fileContentsMapRef.current,
-          )
+          const structuralIndex = buildStructuralIndex(codeIndexRef.current)
 
           return {
             body: {
@@ -249,7 +238,7 @@ export function DocsProvider({ children }: { children: ReactNode }) {
               apiKey: keys[model.provider].key,
               docType: ctx.docType,
               repoContext: repoCtx,
-              fileContents: truncatedFiles,
+              structuralIndex,
               targetFile: ctx.targetFile,
             },
           }
@@ -259,9 +248,37 @@ export function DocsProvider({ children }: { children: ReactNode }) {
   )
 
   // --- useChat (lives in provider so state survives unmount) ---
-  const { messages, sendMessage, status, setMessages, stop, error } = useChat({
+  const { messages, sendMessage, addToolOutput, status, setMessages, stop, error } = useChat({
     transport,
     id: 'docs-generator',
+
+    onToolCall: async ({ toolCall }) => {
+      if (toolCall.dynamic) return
+
+      try {
+        const result = executeToolLocally(
+          toolCall.toolName,
+          toolCall.input as Record<string, unknown>,
+          codeIndexRef.current,
+        )
+        addToolOutput({
+          // AI SDK expects a literal tool name type, but dynamic tool names require this cast
+          tool: toolCall.toolName as never,
+          toolCallId: toolCall.toolCallId,
+          output: result,
+        })
+      } catch (err) {
+        addToolOutput({
+          state: 'output-error' as const,
+          // AI SDK expects a literal tool name type, but dynamic tool names require this cast
+          tool: toolCall.toolName as never,
+          toolCallId: toolCall.toolCallId,
+          errorText: err instanceof Error ? err.message : 'Tool execution failed',
+        })
+      }
+    },
+
+    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
   })
 
   const isGenerating = status === 'streaming' || status === 'submitted'
