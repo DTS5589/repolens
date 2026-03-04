@@ -170,7 +170,10 @@ The user is asking specifically about: \`${targetFile}\`
 Start by reading this file with readFile.`
     }
 
-    systemPrompt += `\n\n## Important
+    systemPrompt += `\n\n## Large Repository Note
+For very large repositories, some files may not be available in the initial context due to payload size limits. If readFile returns nothing for a file, note it and continue with the files that are available.
+
+## Important
 - You have access to readFile, searchFiles, and listDirectory tools
 - ALWAYS read files before documenting them -- never guess or hallucinate
 - Read at least the key files for the doc type before writing

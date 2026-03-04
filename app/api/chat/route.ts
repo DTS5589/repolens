@@ -106,6 +106,9 @@ Before outputting a diagram, mentally verify:
 ${repoContext.structure}
 \`\`\`
 
+## Large Repository Note
+For very large repositories, some files may not be available in the initial context due to payload size limits. If readFile returns nothing for a file, let the user know and suggest they ask about specific files or directories.
+
 ## Important
 - You have 9 tools — use them to read and explore real code before answering
 - NEVER describe a file you haven't read — use readFile first

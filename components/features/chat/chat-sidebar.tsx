@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils"
 import { useAPIKeys, useRepository } from "@/providers"
 import { buildFileTreeString } from "@/lib/github/fetcher"
 import { downloadFile } from "@/lib/export"
+import { truncateFileContents } from "@/lib/ai/truncate-payload"
 
 export function ChatSidebar({ className }: { className?: string }) {
   const { selectedModel, apiKeys, getValidProviders } = useAPIKeys()
@@ -60,7 +61,9 @@ export function ChatSidebar({ className }: { className?: string }) {
 
     const currentInput = input.trim()
     setInput("")
-    
+
+    const { included: truncatedFiles } = truncateFileContents(fileContentsMap)
+
     sendMessage(
       { text: currentInput },
       {
@@ -69,7 +72,7 @@ export function ChatSidebar({ className }: { className?: string }) {
           model: selectedModel.id,
           apiKey: apiKeys[selectedModel.provider].key,
           repoContext,
-          fileContents: fileContentsMap,
+          fileContents: truncatedFiles,
         },
       },
     )

@@ -16,6 +16,7 @@ import type { UIMessage } from 'ai'
 import { useAPIKeys, useRepository } from '@/providers'
 import { buildFileTreeString } from '@/lib/github/fetcher'
 import { flattenFiles } from '@/lib/code/code-index'
+import { truncateFileContents } from '@/lib/ai/truncate-payload'
 
 // ---------------------------------------------------------------------------
 // Types & constants (moved from doc-viewer.tsx)
@@ -236,6 +237,10 @@ export function DocsProvider({ children }: { children: ReactNode }) {
             throw new Error('Model or repository not ready for doc generation')
           }
 
+          const { included: truncatedFiles } = truncateFileContents(
+            fileContentsMapRef.current,
+          )
+
           return {
             body: {
               messages,
@@ -244,7 +249,7 @@ export function DocsProvider({ children }: { children: ReactNode }) {
               apiKey: keys[model.provider].key,
               docType: ctx.docType,
               repoContext: repoCtx,
-              fileContents: fileContentsMapRef.current,
+              fileContents: truncatedFiles,
               targetFile: ctx.targetFile,
             },
           }
