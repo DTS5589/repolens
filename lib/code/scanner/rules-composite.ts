@@ -3,7 +3,7 @@
 
 import type { CodeIndex } from '../code-index'
 import type { CompositeRule, CodeIssue } from './types'
-import { SKIP_VENDORED } from './constants'
+import { JS_TS, PY, SKIP_VENDORED } from './constants'
 
 // ---------------------------------------------------------------------------
 // Composite file-level rules
@@ -127,6 +127,330 @@ export const COMPOSITE_RULES: CompositeRule[] = [
     ],
     sinkPattern: /(?:fetch\s*\(|axios\.|got\(|http\.request|https\.request)/,
     mitigations: [/allowlist|whitelist|allowedHosts|validUrl|isValidUrl|URL_ALLOWLIST/i],
+    confidence: 'medium',
+  },
+
+  // -----------------------------------------------------------------------
+  // CSRF (CWE-352)
+  // -----------------------------------------------------------------------
+
+  // Express POST/PUT/PATCH/DELETE without CSRF protection
+  {
+    id: 'composite-csrf-missing-express',
+    category: 'security',
+    severity: 'warning',
+    title: 'CSRF: State-Changing Route Without CSRF Protection',
+    description:
+      'This file defines Express POST/PUT/PATCH/DELETE route handlers but no CSRF protection middleware (csrf, csurf, csrfProtection) was detected. State-changing endpoints without CSRF tokens allow attackers to forge requests from external sites that execute with the victim\'s authenticated session.',
+    suggestion:
+      'Add CSRF middleware: npm install csurf, then app.use(csrf({ cookie: true })) before route handlers. Include the token in forms or as a request header.',
+    cwe: 'CWE-352',
+    owasp: 'A01:2021 Broken Access Control',
+    learnMoreUrl: 'https://cwe.mitre.org/data/definitions/352.html',
+    fileFilter: JS_TS,
+    requiredPatterns: [
+      /app\.(post|put|patch|delete)\s*\(/,
+    ],
+    sinkPattern: /app\.(post|put|patch|delete)\s*\(/,
+    mitigations: [/csrf|csurf|_csrf|csrfProtection/i],
+    confidence: 'medium',
+  },
+  // Django class-based view without CSRF protection
+  {
+    id: 'composite-csrf-missing-django-view',
+    category: 'security',
+    severity: 'warning',
+    title: 'CSRF: Django View Without CSRF Protection',
+    description:
+      'This file defines Django class-based view methods (post/put/patch/delete) without CSRF protection. If CsrfViewMiddleware is disabled or @csrf_exempt is used, state-changing requests can be forged.',
+    suggestion:
+      'Ensure django.middleware.csrf.CsrfViewMiddleware is in MIDDLEWARE settings. Use @csrf_protect decorator if middleware is selectively disabled.',
+    cwe: 'CWE-352',
+    owasp: 'A01:2021 Broken Access Control',
+    learnMoreUrl: 'https://cwe.mitre.org/data/definitions/352.html',
+    fileFilter: PY,
+    requiredPatterns: [
+      /def\s+(post|put|patch|delete)\s*\(self/,
+    ],
+    sinkPattern: /def\s+(post|put|patch|delete)\s*\(self/,
+    mitigations: [/csrf|CsrfViewMiddleware|@csrf_protect/i],
+    confidence: 'medium',
+  },
+
+  // -----------------------------------------------------------------------
+  // Missing Authentication (CWE-862)
+  // -----------------------------------------------------------------------
+
+  // Express routes without auth middleware
+  {
+    id: 'composite-missing-auth-express-route',
+    category: 'security',
+    severity: 'warning',
+    title: 'Missing Authentication: Express Route Without Auth Middleware',
+    description:
+      'This file defines Express route handlers using router.get/post/put/delete but no authentication middleware (auth, passport, jwt.verify, requireAuth) was detected. Routes without authentication allow unauthenticated access to potentially sensitive functionality.',
+    suggestion:
+      'Add authentication middleware to routes: router.get("/resource", requireAuth, handler). Use passport.authenticate(), jwt.verify(), or a custom isAuthenticated middleware.',
+    cwe: 'CWE-862',
+    owasp: 'A01:2021 Broken Access Control',
+    learnMoreUrl: 'https://cwe.mitre.org/data/definitions/862.html',
+    fileFilter: JS_TS,
+    requiredPatterns: [
+      /router\.(get|post|put|delete)\s*\(/,
+    ],
+    sinkPattern: /router\.(get|post|put|delete)\s*\(/,
+    mitigations: [/auth|authenticate|isAuthenticated|passport|requireAuth|ensureAuth|isLoggedIn|verifyToken|jwt\.verify|requireLogin/i],
+    confidence: 'low',
+  },
+
+  // -----------------------------------------------------------------------
+  // File Upload (CWE-434)
+  // -----------------------------------------------------------------------
+
+  // Upload handling without type/size validation
+  {
+    id: 'composite-file-upload-no-validation',
+    category: 'security',
+    severity: 'warning',
+    title: 'File Upload: No Type or Size Validation',
+    description:
+      'This file handles file uploads (multer, formidable, busboy) but no file type, extension, or size validation was detected. Without validation, attackers can upload executable files, oversized files to cause DoS, or files with dangerous content types.',
+    suggestion:
+      'Add file validation: check mimetype against an allowlist, validate file extensions, enforce size limits. Example with multer: multer({ limits: { fileSize: 5_000_000 }, fileFilter: validateFile })',
+    cwe: 'CWE-434',
+    owasp: 'A04:2021 Insecure Design',
+    learnMoreUrl: 'https://cwe.mitre.org/data/definitions/434.html',
+    fileFilter: JS_TS,
+    requiredPatterns: [
+      /multer|formidable|busboy|upload|file\.(path|name|buffer|stream)/,
+    ],
+    sinkPattern: /multer|formidable|busboy|upload|file\.(path|name|buffer|stream)/,
+    mitigations: [/\.(mimetype|ext|extension|size|limit|fileFilter|allowedTypes|validat|accept)/i],
+    confidence: 'medium',
+  },
+
+  // -----------------------------------------------------------------------
+  // Mass Assignment (CWE-915)
+  // -----------------------------------------------------------------------
+
+  // ORM create/update with raw req.body
+  {
+    id: 'composite-mass-assignment-orm',
+    category: 'security',
+    severity: 'warning',
+    title: 'Mass Assignment: ORM Operation with Raw Request Body',
+    description:
+      'This file passes req.body or req.query directly into an ORM create/update operation. Attackers can inject extra fields (e.g. isAdmin: true, role: "admin") that get persisted to the database, escalating privileges or corrupting data.',
+    suggestion:
+      'Whitelist allowed fields explicitly: const { name, email } = req.body; Model.create({ name, email }). Use lodash.pick() or a validation schema (Zod, Joi) to filter input.',
+    cwe: 'CWE-915',
+    owasp: 'A04:2021 Insecure Design',
+    learnMoreUrl: 'https://cwe.mitre.org/data/definitions/915.html',
+    fileFilter: JS_TS,
+    requiredPatterns: [
+      /\.(create|update|findOneAndUpdate|updateOne|insertOne)\s*\(.*req\.(body|query)/,
+    ],
+    sinkPattern: /\.(create|update|findOneAndUpdate|updateOne|insertOne)\s*\(/,
+    mitigations: [/\.(select|pick|omit|whitelist|allowedFields|sanitize)/i],
+    confidence: 'medium',
+  },
+  // Sequelize-specific mass assignment
+  {
+    id: 'composite-mass-assignment-sequelize',
+    category: 'security',
+    severity: 'warning',
+    title: 'Mass Assignment: Sequelize Operation with Raw Request Body',
+    description:
+      'This file passes req.body directly into a Sequelize create/update/bulkCreate operation. Without specifying allowed fields, attackers can inject extra columns into the database.',
+    suggestion:
+      'Use the "fields" or "attributes" option to whitelist columns: Model.create(req.body, { fields: ["name", "email"] })',
+    cwe: 'CWE-915',
+    owasp: 'A04:2021 Insecure Design',
+    learnMoreUrl: 'https://cwe.mitre.org/data/definitions/915.html',
+    fileFilter: JS_TS,
+    requiredPatterns: [
+      /\.(create|update|bulkCreate)\s*\(.*req\.body/,
+    ],
+    sinkPattern: /\.(create|update|bulkCreate)\s*\(/,
+    mitigations: [/fields\s*:|attributes\s*:/i],
+    confidence: 'medium',
+  },
+
+  // -----------------------------------------------------------------------
+  // IDOR (CWE-639)
+  // -----------------------------------------------------------------------
+
+  // Direct object lookup from request params without ownership check
+  {
+    id: 'composite-idor-direct-lookup',
+    category: 'security',
+    severity: 'warning',
+    title: 'IDOR: Direct Object Lookup from Request Parameters',
+    description:
+      'This file uses req.params or req.query values directly in database lookups (findById, findByPk, findOne) without verifying the requesting user owns or has access to the resource. Attackers can enumerate IDs to access other users\' data.',
+    suggestion:
+      'Add an ownership or permission check: const item = await Model.findById(id); if (item.userId !== req.user.id) return res.status(403).json({ error: "Forbidden" })',
+    cwe: 'CWE-639',
+    owasp: 'A01:2021 Broken Access Control',
+    learnMoreUrl: 'https://cwe.mitre.org/data/definitions/639.html',
+    fileFilter: JS_TS,
+    requiredPatterns: [
+      /\.(findById|findByPk|findOne)\s*\(.*req\.(params|query)/,
+    ],
+    sinkPattern: /\.(findById|findByPk|findOne)\s*\(/,
+    mitigations: [/authorize|checkPermission|checkOwner|belongsTo|isOwner|canAccess|req\.user/i],
+    confidence: 'low',
+  },
+
+  // -----------------------------------------------------------------------
+  // Race Condition TOCTOU (CWE-367)
+  // -----------------------------------------------------------------------
+
+  // Sync file existence check followed by sync file operation
+  {
+    id: 'composite-toctou-file-check',
+    category: 'security',
+    severity: 'info',
+    title: 'Race Condition: TOCTOU File Check (Sync)',
+    description:
+      'This file uses synchronous file existence checks (existsSync, accessSync, statSync) AND synchronous file operations (readFileSync, writeFileSync, etc.). Between the check and the use, another process can modify the file system, leading to a time-of-check to time-of-use (TOCTOU) race condition.',
+    suggestion:
+      'Use a try/catch around the file operation directly instead of checking first. Alternatively, use file locking (proper-lockfile, lockfile) for critical sections.',
+    cwe: 'CWE-367',
+    owasp: 'A04:2021 Insecure Design',
+    learnMoreUrl: 'https://cwe.mitre.org/data/definitions/367.html',
+    fileFilter: JS_TS,
+    requiredPatterns: [
+      /(existsSync|accessSync|statSync)\s*\(/,
+      /(readFileSync|writeFileSync|unlinkSync|renameSync)\s*\(/,
+    ],
+    sinkPattern: /(readFileSync|writeFileSync|unlinkSync|renameSync)\s*\(/,
+    mitigations: [/lock|mutex|semaphore|flock/i],
+    confidence: 'medium',
+  },
+  // Async file existence check followed by async file operation
+  {
+    id: 'composite-toctou-async-file',
+    category: 'security',
+    severity: 'info',
+    title: 'Race Condition: TOCTOU File Check (Async)',
+    description:
+      'This file uses asynchronous file existence checks (exists, access, stat) AND asynchronous file operations (readFile, writeFile, etc.). The async gap between check and use is even more susceptible to TOCTOU race conditions than synchronous operations.',
+    suggestion:
+      'Perform the file operation directly inside a try/catch instead of checking existence first. Use file locking for concurrent access scenarios.',
+    cwe: 'CWE-367',
+    owasp: 'A04:2021 Insecure Design',
+    learnMoreUrl: 'https://cwe.mitre.org/data/definitions/367.html',
+    fileFilter: JS_TS,
+    requiredPatterns: [
+      /\b(exists|access|stat)\s*\(/,
+      /\b(readFile|writeFile|unlink|rename)\s*\(/,
+    ],
+    sinkPattern: /\b(readFile|writeFile|unlink|rename)\s*\(/,
+    mitigations: [/lock|mutex|semaphore/i],
+    confidence: 'low',
+  },
+
+  // -----------------------------------------------------------------------
+  // WebSocket (CWE-1385)
+  // -----------------------------------------------------------------------
+
+  // WebSocket server without authentication
+  {
+    id: 'composite-websocket-no-auth',
+    category: 'security',
+    severity: 'warning',
+    title: 'WebSocket: No Authentication Detected',
+    description:
+      'This file creates a WebSocket server but no authentication mechanism (verifyClient, token validation, JWT) was detected. Without authentication, any client can connect and interact with the WebSocket, potentially accessing sensitive real-time data or triggering server-side actions.',
+    suggestion:
+      'Implement verifyClient callback for ws, or validate a token/session in the connection handler: wss.on("connection", (ws, req) => { if (!authenticate(req)) ws.close() })',
+    cwe: 'CWE-1385',
+    owasp: 'A01:2021 Broken Access Control',
+    learnMoreUrl: 'https://cwe.mitre.org/data/definitions/1385.html',
+    fileFilter: JS_TS,
+    requiredPatterns: [
+      /new\s+WebSocket|WebSocketServer|ws\s*\(/,
+    ],
+    sinkPattern: /new\s+WebSocket|WebSocketServer|ws\s*\(/,
+    mitigations: [/verifyClient|authenticate|authorization|token|jwt/i],
+    confidence: 'medium',
+  },
+
+  // -----------------------------------------------------------------------
+  // Unvalidated Redirect (CWE-601)
+  // -----------------------------------------------------------------------
+
+  // Redirect using user-controlled input
+  {
+    id: 'composite-open-redirect-response',
+    category: 'security',
+    severity: 'warning',
+    title: 'Unvalidated Redirect: User Input in Redirect URL',
+    description:
+      'This file uses res.redirect() AND reads from request input (req.query, req.params, req.body). If the redirect URL is constructed from user input without validation, attackers can redirect users to malicious sites for phishing.',
+    suggestion:
+      'Validate redirect URLs against a whitelist of allowed destinations. Use relative URLs or verify the hostname: const url = new URL(target, baseUrl); if (!allowedHosts.includes(url.hostname)) reject.',
+    cwe: 'CWE-601',
+    owasp: 'A01:2021 Broken Access Control',
+    learnMoreUrl: 'https://cwe.mitre.org/data/definitions/601.html',
+    fileFilter: JS_TS,
+    requiredPatterns: [
+      /res\.redirect\s*\(/,
+      /req\.(query|params|body)/,
+    ],
+    sinkPattern: /res\.redirect\s*\(/,
+    mitigations: [/whitelist|allowedUrl|validUrl|startsWith.*https|url\.parse|new URL/i],
+    confidence: 'medium',
+  },
+
+  // -----------------------------------------------------------------------
+  // Missing Error Handling (CWE-390)
+  // -----------------------------------------------------------------------
+
+  // Async functions without try-catch or .catch()
+  {
+    id: 'composite-async-no-try-catch',
+    category: 'reliability',
+    severity: 'info',
+    title: 'Missing Error Handling: Async Function Without Try-Catch',
+    description:
+      'This file contains async functions but no try-catch blocks or .catch() handlers were detected. Unhandled promise rejections in async functions can crash the process (Node.js) or cause silent failures.',
+    suggestion:
+      'Wrap async function bodies in try/catch, or attach .catch() handlers to promise chains. Use a global error handler as a safety net: process.on("unhandledRejection", handler)',
+    cwe: 'CWE-390',
+    learnMoreUrl: 'https://cwe.mitre.org/data/definitions/390.html',
+    fileFilter: JS_TS,
+    requiredPatterns: [
+      /async\s+function|async\s*\(/,
+    ],
+    sinkPattern: /async\s+function|async\s*\(/,
+    mitigations: [/try\s*\{|\.catch\s*\(|catchError|errorHandler|createErrorHandler/i],
+    confidence: 'low',
+  },
+
+  // -----------------------------------------------------------------------
+  // Sensitive Data in URL (CWE-598)
+  // -----------------------------------------------------------------------
+
+  // Sensitive data passed as URL query parameter
+  {
+    id: 'composite-sensitive-data-in-url',
+    category: 'security',
+    severity: 'warning',
+    title: 'Sensitive Data in URL: Query Parameter Exposure',
+    description:
+      'This file constructs URLs with sensitive data (password, token, secret, API key) as query parameters. Query parameters are logged in server access logs, browser history, referrer headers, and proxy logs, exposing credentials to unauthorized parties.',
+    suggestion:
+      'Send sensitive data in request headers (Authorization header) or POST body instead of URL query parameters.',
+    cwe: 'CWE-598',
+    owasp: 'A02:2021 Cryptographic Failures',
+    learnMoreUrl: 'https://cwe.mitre.org/data/definitions/598.html',
+    fileFilter: JS_TS,
+    requiredPatterns: [
+      /\?(.*&)?(password|token|secret|key|api_key|apikey|auth)=/,
+    ],
+    sinkPattern: /\?(.*&)?(password|token|secret|key|api_key|apikey|auth)=/,
     confidence: 'medium',
   },
 ]

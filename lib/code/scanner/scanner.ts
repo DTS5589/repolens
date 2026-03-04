@@ -12,6 +12,7 @@ import { BAD_PRACTICE_RULES, RELIABILITY_RULES } from './rules-quality'
 import { FRAMEWORK_RULES } from './rules-framework'
 import { COMPOSITE_RULES, scanCompositeRules } from './rules-composite'
 import { scanStructuralIssues } from './structural-scanner'
+import { scanSupplyChain } from './supply-chain-scanner'
 import { classifyLine, computeBlockCommentLines } from './context-classifier'
 import { isLikelyRealSecret } from './entropy'
 
@@ -199,7 +200,19 @@ export function scanIssues(
     }
   }
 
-  // 4. Structural context cross-reference (when import graph is available)
+  // 4. Supply chain rules (package.json, lockfiles, GitHub Actions, Python deps)
+  const supplyChainIssues = scanSupplyChain(scanCodeIndex)
+  const supplyChainRuleIds = new Set(supplyChainIssues.map(i => i.ruleId))
+  rulesEvaluated += supplyChainRuleIds.size
+  for (const issue of supplyChainIssues) {
+    if (isPartialScan && !filesToScan.has(issue.file)) continue
+    if (!seenIds.has(issue.id)) {
+      seenIds.add(issue.id)
+      issues.push(issue)
+    }
+  }
+
+  // 5. Structural context cross-reference (when import graph is available)
   if (analysis) {
     for (const issue of issues) {
       const importers = analysis.graph.reverseEdges.get(issue.file)
