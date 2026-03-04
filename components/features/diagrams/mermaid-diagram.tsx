@@ -2,15 +2,21 @@
 
 import { useEffect, useRef, useState, useCallback, useImperativeHandle, type Ref } from 'react'
 import mermaid from 'mermaid'
+import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { AlertTriangle, Code } from 'lucide-react'
+import { MermaidToolbar } from './mermaid-toolbar'
+import { MermaidFullscreenDialog } from './mermaid-fullscreen-dialog'
 
-// Initialize mermaid with dark theme
-mermaid.initialize({
+// ---------------------------------------------------------------------------
+// Theme configurations
+// ---------------------------------------------------------------------------
+
+const DARK_THEME_CONFIG = {
   startOnLoad: false,
-  theme: 'dark',
-  securityLevel: 'strict',
-  suppressErrors: true,
+  theme: 'dark' as const,
+  securityLevel: 'strict' as const,
+  logLevel: 5 as const,
   themeVariables: {
     primaryColor: '#3b82f6',
     primaryTextColor: '#f8fafc',
@@ -27,9 +33,40 @@ mermaid.initialize({
   },
   flowchart: {
     htmlLabels: true,
-    curve: 'basis',
+    curve: 'basis' as const,
   },
-})
+}
+
+const LIGHT_THEME_CONFIG = {
+  startOnLoad: false,
+  theme: 'default' as const,
+  securityLevel: 'strict' as const,
+  logLevel: 5 as const,
+  themeVariables: {
+    primaryColor: '#3b82f6',
+    primaryTextColor: '#1e293b',
+    primaryBorderColor: '#2563eb',
+    lineColor: '#94a3b8',
+    secondaryColor: '#e2e8f0',
+    tertiaryColor: '#f1f5f9',
+    background: '#ffffff',
+    mainBkg: '#f8fafc',
+    nodeBorder: '#cbd5e1',
+    clusterBkg: '#f1f5f9',
+    titleColor: '#1e293b',
+    edgeLabelBackground: '#f8fafc',
+  },
+  flowchart: {
+    htmlLabels: true,
+    curve: 'basis' as const,
+  },
+}
+
+// Initialize mermaid with dark theme
+mermaid.initialize(DARK_THEME_CONFIG)
+
+/** Lock to prevent concurrent theme-switches from corrupting global mermaid state. */
+let themeRenderLock = false
 
 // ---------------------------------------------------------------------------
 // Error parsing utility — extracts structured info from mermaid error strings
@@ -114,6 +151,20 @@ export function MermaidDiagram({ chart, className, onNodeClick, onShowRawCode, r
     const [svgContent, setSvgContent] = useState<string>('')
     const renderIdRef = useRef(0)
 
+    // Feature state
+    const [isFullscreen, setIsFullscreen] = useState(false)
+    const [previewTheme, setPreviewTheme] = useState<'dark' | 'light'>('dark')
+    const [darkSvg, setDarkSvg] = useState('')
+    const [lightSvg, setLightSvg] = useState('')
+
+    // Keep darkSvg in sync with the primary svgContent
+    useEffect(() => {
+      setDarkSvg(svgContent)
+      // Invalidate cached light SVG when source changes
+      setLightSvg('')
+      setPreviewTheme('dark')
+    }, [svgContent])
+
     // Expose SVG element to parent via ref
     useImperativeHandle(ref, () => ({
       getSvgElement: () => containerRef.current?.querySelector('svg') ?? null,
@@ -186,6 +237,113 @@ export function MermaidDiagram({ chart, className, onNodeClick, onShowRawCode, r
       }
     }, [svgContent, attachClickHandlers])
 
+    // -------------------------------------------------------------------
+    // Feature handlers
+    // -------------------------------------------------------------------
+
+    const handleToggleTheme = useCallback(async () => {
+      if (themeRenderLock) return
+      const newTheme = previewTheme === 'dark' ? 'light' : 'dark'
+
+      if (newTheme === 'light' && !lightSvg) {
+        try {
+          themeRenderLock = true
+          mermaid.initialize(LIGHT_THEME_CONFIG)
+          const id = `mermaid_light_${Date.now()}`
+          const sanitizedChart = sanitizeMermaidSource(chart)
+          const { svg } = await mermaid.render(id, sanitizedChart)
+          setLightSvg(svg)
+          // Clean up orphaned render element
+          document.getElementById(id)?.remove()
+        } catch (err) {
+          console.error('Failed to render light theme:', err)
+          toast.error('Failed to render light theme preview')
+          return
+        } finally {
+          // Always restore dark theme for future renders
+          mermaid.initialize(DARK_THEME_CONFIG)
+          themeRenderLock = false
+        }
+      }
+
+      setPreviewTheme(newTheme)
+    }, [previewTheme, lightSvg, chart])
+
+    const handleCopyImage = useCallback(async () => {
+      const activeSvg = previewTheme === 'dark' ? darkSvg : lightSvg
+      if (!activeSvg) return
+
+      try {
+        // Parse the SVG string to ensure proper namespace attributes
+        const parser = new DOMParser()
+        const doc = parser.parseFromString(activeSvg, 'image/svg+xml')
+        const svgElement = doc.querySelector('svg')
+        if (!svgElement) throw new Error('No SVG element found')
+
+        // Ensure xmlns is present to avoid rendering issues in Image
+        if (!svgElement.getAttribute('xmlns')) {
+          svgElement.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+        }
+
+        const svgData = new XMLSerializer().serializeToString(svgElement)
+
+        // Encode as base64 data URL to avoid cross-origin canvas tainting.
+        // Blob URLs can taint the canvas when the SVG contains foreignObject
+        // elements, but data URLs are treated as same-origin.
+        const svgBase64 = btoa(unescape(encodeURIComponent(svgData)))
+        const dataUrl = `data:image/svg+xml;base64,${svgBase64}`
+
+        const img = new Image()
+        await new Promise<void>((resolve, reject) => {
+          img.onload = () => {
+            try {
+              const canvas = document.createElement('canvas')
+              const scale = 2
+              canvas.width = img.naturalWidth * scale
+              canvas.height = img.naturalHeight * scale
+              const ctx = canvas.getContext('2d')
+              if (!ctx) throw new Error('Could not get canvas context')
+              ctx.scale(scale, scale)
+              ctx.drawImage(img, 0, 0)
+
+              canvas.toBlob(async (blob) => {
+                if (!blob) {
+                  reject(new Error('Failed to create image blob'))
+                  return
+                }
+                try {
+                  await navigator.clipboard.write([
+                    new ClipboardItem({ 'image/png': blob }),
+                  ])
+                  resolve()
+                } catch (clipErr) {
+                  reject(clipErr)
+                }
+              }, 'image/png')
+            } catch (drawErr) {
+              reject(drawErr)
+            }
+          }
+          img.onerror = () => reject(new Error('Failed to load SVG as image'))
+          img.src = dataUrl
+        })
+      } catch (err) {
+        console.error('Failed to copy image:', err)
+        toast.error('Failed to copy diagram as image')
+      }
+    }, [previewTheme, darkSvg, lightSvg])
+
+    const handleCopySource = useCallback(async () => {
+      try {
+        await navigator.clipboard.writeText(chart)
+      } catch (err) {
+        console.error('Failed to copy source:', err)
+        toast.error('Failed to copy diagram source')
+      }
+    }, [chart])
+
+    const activeSvgContent = previewTheme === 'dark' ? darkSvg : (lightSvg || darkSvg)
+
     if (error) {
       const parsed = parseMermaidError(error)
 
@@ -220,10 +378,34 @@ export function MermaidDiagram({ chart, className, onNodeClick, onShowRawCode, r
     }
 
     return (
-      <div
-        ref={containerRef}
-        className={cn('flex items-center justify-center mermaid-container', className)}
-        dangerouslySetInnerHTML={{ __html: svgContent }}
-      />
+      <>
+        <div className={cn('group relative', className)}>
+          {activeSvgContent && (
+            <MermaidToolbar
+              onFullscreen={() => setIsFullscreen(true)}
+              onToggleTheme={handleToggleTheme}
+              onCopyImage={handleCopyImage}
+              onCopySource={handleCopySource}
+              isDarkPreview={previewTheme === 'dark'}
+            />
+          )}
+          <div
+            ref={containerRef}
+            className={cn('flex items-center justify-center mermaid-container',
+              previewTheme === 'light' && 'bg-white rounded-md'
+            )}
+            dangerouslySetInnerHTML={{ __html: activeSvgContent }}
+          />
+        </div>
+        <MermaidFullscreenDialog
+          isOpen={isFullscreen}
+          onOpenChange={setIsFullscreen}
+          svgContent={activeSvgContent}
+          isDarkPreview={previewTheme === 'dark'}
+          onToggleTheme={handleToggleTheme}
+          onCopyImage={handleCopyImage}
+          onCopySource={handleCopySource}
+        />
+      </>
     )
   }

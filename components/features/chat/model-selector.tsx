@@ -45,7 +45,7 @@ export function ModelSelector({ className, onOpenSettings }: ModelSelectorProps)
           )}
         >
           <BrainCircuit className={cn(
-            "h-4 w-4",
+            "h-4 w-4 shrink-0",
             hasModels ? "text-status-success" : "text-text-muted"
           )} />
           {selectedModel ? selectedModel.name : "Select model"}
