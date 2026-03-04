@@ -2,6 +2,9 @@ import { describe, it, expect } from 'vitest'
 import { createEmptyIndex, indexFile } from '@/lib/code/code-index'
 import {
   buildStructuralIndex,
+  extractExports,
+  extractImports,
+  extractSignatures,
   extractSignature,
   getLanguagePatterns,
   inferLanguage,
@@ -294,13 +297,13 @@ describe('Python top-level constant extraction', () => {
     const pyFile = parsed.find(e => e.path === 'config.py')
     expect(pyFile).toBeDefined()
 
-    const symbols = pyFile!.symbols as string[]
-    expect(symbols).toBeDefined()
-    expect(symbols.some(s => s.startsWith('const:') && s.includes('MAX_RETRIES'))).toBe(true)
-    expect(symbols.some(s => s.startsWith('const:') && s.includes('DEFAULT_TIMEOUT'))).toBe(true)
-    expect(symbols.some(s => s.startsWith('const:') && s.includes('API_BASE_URL'))).toBe(true)
+    const signatures = pyFile!.signatures as string[]
+    expect(signatures).toBeDefined()
+    expect(signatures.some(s => s.startsWith('const:') && s.includes('MAX_RETRIES'))).toBe(true)
+    expect(signatures.some(s => s.startsWith('const:') && s.includes('DEFAULT_TIMEOUT'))).toBe(true)
+    expect(signatures.some(s => s.startsWith('const:') && s.includes('API_BASE_URL'))).toBe(true)
     // The function should also be extracted
-    expect(symbols.some(s => s.startsWith('fn:') && s.includes('connect'))).toBe(true)
+    expect(signatures.some(s => s.startsWith('fn:') && s.includes('connect'))).toBe(true)
   })
 
   it('does not match lowercase variable assignments as constants', () => {
@@ -322,12 +325,12 @@ describe('Python top-level constant extraction', () => {
     const pyFile = parsed.find(e => e.path === 'script.py')
     expect(pyFile).toBeDefined()
 
-    const symbols = pyFile!.symbols as string[]
-    expect(symbols).toBeDefined()
+    const signatures = pyFile!.signatures as string[]
+    expect(signatures).toBeDefined()
     // Only UPPER_CASE should match
-    expect(symbols.some(s => s.includes('local_var'))).toBe(false)
-    expect(symbols.some(s => s.includes('another_var'))).toBe(false)
-    expect(symbols.some(s => s.startsWith('const:') && s.includes('MAX_SIZE'))).toBe(true)
+    expect(signatures.some(s => s.includes('local_var'))).toBe(false)
+    expect(signatures.some(s => s.includes('another_var'))).toBe(false)
+    expect(signatures.some(s => s.startsWith('const:') && s.includes('MAX_SIZE'))).toBe(true)
   })
 
   it('treats Python constants as exports (top-level defs)', () => {
@@ -377,11 +380,11 @@ describe('Rust type alias extraction', () => {
     const rsFile = parsed.find(e => e.path === 'src/lib.rs')
     expect(rsFile).toBeDefined()
 
-    const symbols = rsFile!.symbols as string[]
-    expect(symbols).toBeDefined()
-    expect(symbols.some(s => s.startsWith('type:') && s.includes('Result'))).toBe(true)
-    expect(symbols.some(s => s.startsWith('type:') && s.includes('BoxedFuture'))).toBe(true)
-    expect(symbols.some(s => s.startsWith('fn:') && s.includes('run'))).toBe(true)
+    const signatures = rsFile!.signatures as string[]
+    expect(signatures).toBeDefined()
+    expect(signatures.some(s => s.startsWith('type:') && s.includes('Result'))).toBe(true)
+    expect(signatures.some(s => s.startsWith('type:') && s.includes('BoxedFuture'))).toBe(true)
+    expect(signatures.some(s => s.startsWith('fn:') && s.includes('run'))).toBe(true)
   })
 
   it('extracts private (non-pub) type aliases', () => {
@@ -401,10 +404,10 @@ describe('Rust type alias extraction', () => {
     const rsFile = parsed.find(e => e.path === 'src/internal.rs')
     expect(rsFile).toBeDefined()
 
-    const symbols = rsFile!.symbols as string[]
-    expect(symbols).toBeDefined()
-    expect(symbols.some(s => s.startsWith('type:') && s.includes('NodeId'))).toBe(true)
-    expect(symbols.some(s => s.startsWith('type:') && s.includes('Callback'))).toBe(true)
+    const signatures = rsFile!.signatures as string[]
+    expect(signatures).toBeDefined()
+    expect(signatures.some(s => s.startsWith('type:') && s.includes('NodeId'))).toBe(true)
+    expect(signatures.some(s => s.startsWith('type:') && s.includes('Callback'))).toBe(true)
   })
 
   it('treats pub type aliases as Rust exports', () => {
@@ -429,6 +432,304 @@ describe('Rust type alias extraction', () => {
     expect(exports).toContain('AppResult')
     // Non-pub should NOT appear in exports
     expect(exports).not.toContain('InternalId')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// extractExports
+// ---------------------------------------------------------------------------
+
+describe('extractExports', () => {
+  it('extracts named exports from a TypeScript file', () => {
+    let index = createEmptyIndex()
+    index = indexFile(
+      index,
+      'src/utils.ts',
+      [
+        "import { z } from 'zod'",
+        '',
+        'export function greet(name: string): string {',
+        '  return `Hello, ${name}`',
+        '}',
+        '',
+        'export const add = (a: number, b: number): number => a + b',
+        '',
+        'export class Calculator {}',
+      ].join('\n'),
+      'typescript',
+    )
+    const file = index.files.get('src/utils.ts')!
+    const exports = extractExports(file)
+    expect(exports).toContain('greet')
+    expect(exports).toContain('add')
+    expect(exports).toContain('Calculator')
+  })
+
+  it('extracts re-exports from JS/TS files', () => {
+    let index = createEmptyIndex()
+    index = indexFile(
+      index,
+      'src/index.ts',
+      [
+        "export { greet, Calculator } from './utils'",
+        "export { User } from './types'",
+      ].join('\n'),
+      'typescript',
+    )
+    const file = index.files.get('src/index.ts')!
+    const exports = extractExports(file)
+    expect(exports).toContain('greet')
+    expect(exports).toContain('Calculator')
+    expect(exports).toContain('User')
+  })
+
+  it('extracts top-level defs as exports from Python files', () => {
+    let index = createEmptyIndex()
+    index = indexFile(
+      index,
+      'module.py',
+      [
+        'def hello():',
+        '    pass',
+        '',
+        'class MyClass:',
+        '    pass',
+        '',
+        'MAX_SIZE = 100',
+      ].join('\n'),
+      'python',
+    )
+    const file = index.files.get('module.py')!
+    const exports = extractExports(file)
+    expect(exports).toContain('hello')
+    expect(exports).toContain('MyClass')
+    expect(exports).toContain('MAX_SIZE')
+  })
+
+  it('returns deduplicated export names', () => {
+    let index = createEmptyIndex()
+    index = indexFile(
+      index,
+      'src/dup.ts',
+      [
+        'export function foo() {}',
+        "export { foo } from './other'",
+      ].join('\n'),
+      'typescript',
+    )
+    const file = index.files.get('src/dup.ts')!
+    const exports = extractExports(file)
+    const fooCount = exports.filter(e => e === 'foo').length
+    expect(fooCount).toBe(1)
+  })
+
+  it('extracts pub items as exports from Rust files', () => {
+    let index = createEmptyIndex()
+    index = indexFile(
+      index,
+      'src/lib.rs',
+      [
+        'pub fn run() {}',
+        'pub struct Config {}',
+        'fn private_fn() {}',
+      ].join('\n'),
+      'rust',
+    )
+    const file = index.files.get('src/lib.rs')!
+    const exports = extractExports(file)
+    expect(exports).toContain('run')
+    expect(exports).toContain('Config')
+    expect(exports).not.toContain('private_fn')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// extractImports
+// ---------------------------------------------------------------------------
+
+describe('extractImports', () => {
+  it('extracts import paths from TypeScript files', () => {
+    let index = createEmptyIndex()
+    index = indexFile(
+      index,
+      'src/app.ts',
+      [
+        "import { z } from 'zod'",
+        "import { User } from './types'",
+        "import React from 'react'",
+      ].join('\n'),
+      'typescript',
+    )
+    const file = index.files.get('src/app.ts')!
+    const imports = extractImports(file)
+    expect(imports).toContain('zod')
+    expect(imports).toContain('./types')
+    expect(imports).toContain('react')
+  })
+
+  it('extracts import paths from Python files', () => {
+    let index = createEmptyIndex()
+    index = indexFile(
+      index,
+      'main.py',
+      [
+        'from flask import Flask',
+        'import os',
+        'from utils.helpers import parse',
+      ].join('\n'),
+      'python',
+    )
+    const file = index.files.get('main.py')!
+    const imports = extractImports(file)
+    expect(imports).toContain('flask')
+    expect(imports).toContain('os')
+    expect(imports).toContain('utils.helpers')
+  })
+
+  it('extracts use statements from Rust files', () => {
+    let index = createEmptyIndex()
+    index = indexFile(
+      index,
+      'src/main.rs',
+      [
+        'use std::collections::HashMap;',
+        'use crate::config::Config;',
+      ].join('\n'),
+      'rust',
+    )
+    const file = index.files.get('src/main.rs')!
+    const imports = extractImports(file)
+    expect(imports).toContain('std::collections::HashMap')
+    expect(imports).toContain('crate::config::Config')
+  })
+
+  it('returns empty array for files with no imports', () => {
+    let index = createEmptyIndex()
+    index = indexFile(
+      index,
+      'src/empty.ts',
+      'export const x = 1',
+      'typescript',
+    )
+    const file = index.files.get('src/empty.ts')!
+    const imports = extractImports(file)
+    expect(imports).toEqual([])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// extractSignatures
+// ---------------------------------------------------------------------------
+
+describe('extractSignatures', () => {
+  it('extracts function and class signatures from TypeScript', () => {
+    let index = createEmptyIndex()
+    index = indexFile(
+      index,
+      'src/utils.ts',
+      [
+        'export function greet(name: string): string {',
+        '  return `Hello, ${name}`',
+        '}',
+        '',
+        'export class Calculator {',
+        '  sum(a: number, b: number) { return a + b }',
+        '}',
+      ].join('\n'),
+      'typescript',
+    )
+    const file = index.files.get('src/utils.ts')!
+    const sigs = extractSignatures(file)
+    expect(sigs.some(s => s.startsWith('fn:') && s.includes('greet'))).toBe(true)
+    expect(sigs.some(s => s.startsWith('class:') && s.includes('Calculator'))).toBe(true)
+  })
+
+  it('extracts interface and type signatures', () => {
+    let index = createEmptyIndex()
+    index = indexFile(
+      index,
+      'src/types.ts',
+      [
+        'export interface User {',
+        '  id: string',
+        '}',
+        '',
+        'export type UserId = string',
+        '',
+        'export enum Role {',
+        "  Admin = 'admin',",
+        '}',
+      ].join('\n'),
+      'typescript',
+    )
+    const file = index.files.get('src/types.ts')!
+    const sigs = extractSignatures(file)
+    expect(sigs.some(s => s.startsWith('iface:') && s.includes('User'))).toBe(true)
+    expect(sigs.some(s => s.startsWith('type:') && s.includes('UserId'))).toBe(true)
+    expect(sigs.some(s => s.startsWith('enum:') && s.includes('Role'))).toBe(true)
+  })
+
+  it('extracts Python function and class signatures', () => {
+    let index = createEmptyIndex()
+    index = indexFile(
+      index,
+      'app.py',
+      [
+        'def process(data):',
+        '    pass',
+        '',
+        'class Handler:',
+        '    pass',
+        '',
+        'MAX_RETRIES = 5',
+      ].join('\n'),
+      'python',
+    )
+    const file = index.files.get('app.py')!
+    const sigs = extractSignatures(file)
+    expect(sigs.some(s => s.startsWith('fn:') && s.includes('process'))).toBe(true)
+    expect(sigs.some(s => s.startsWith('class:') && s.includes('Handler'))).toBe(true)
+    expect(sigs.some(s => s.startsWith('const:') && s.includes('MAX_RETRIES'))).toBe(true)
+  })
+
+  it('extracts Rust fn and struct signatures', () => {
+    let index = createEmptyIndex()
+    index = indexFile(
+      index,
+      'src/lib.rs',
+      [
+        'pub fn run(config: &Config) -> Result<()> {',
+        '    todo!()',
+        '}',
+        '',
+        'pub struct Server {',
+        '    port: u16,',
+        '}',
+      ].join('\n'),
+      'rust',
+    )
+    const file = index.files.get('src/lib.rs')!
+    const sigs = extractSignatures(file)
+    expect(sigs.some(s => s.startsWith('fn:') && s.includes('run'))).toBe(true)
+    expect(sigs.some(s => s.startsWith('struct:') && s.includes('Server'))).toBe(true)
+  })
+
+  it('returns deduplicated signatures', () => {
+    let index = createEmptyIndex()
+    index = indexFile(
+      index,
+      'src/dupe.ts',
+      [
+        'export function foo() {}',
+        '// export function foo() {} — commented out but regex may still match',
+      ].join('\n'),
+      'typescript',
+    )
+    const file = index.files.get('src/dupe.ts')!
+    const sigs = extractSignatures(file)
+    const fooSigs = sigs.filter(s => s.includes('foo'))
+    // Should be deduplicated via Set
+    expect(new Set(fooSigs).size).toBe(fooSigs.length)
   })
 })
 

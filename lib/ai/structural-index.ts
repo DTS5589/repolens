@@ -1,12 +1,12 @@
 import type { CodeIndex, IndexedFile } from '@/lib/code/code-index'
 
-interface FileMetadata {
+export interface RichFileMetadata {
   path: string
   language: string
   lineCount: number
   exports?: string[]
   imports?: string[]
-  symbols?: string[]
+  signatures?: string[]
 }
 
 // Regex patterns for extracting symbol definitions
@@ -25,9 +25,9 @@ const EXPORT_REGEX = /^export\s+(?:default\s+)?(?:async\s+)?(?:function|class|co
 const MAX_INDEX_BYTES = 300_000
 
 /** Per-file structural extraction limits. */
-const MAX_EXPORTS_PER_FILE = 30
+const MAX_EXPORTS_PER_FILE = 50
 const MAX_IMPORTS_PER_FILE = 15
-const MAX_SYMBOLS_PER_FILE = 20
+const MAX_SIGNATURES_PER_FILE = 20
 
 /**
  * Build a compact structural index string from CodeIndex for inclusion in
@@ -45,10 +45,10 @@ export function buildStructuralIndex(
   if (!codeIndex?.files || codeIndex.files.size === 0) return ''
 
   const maxBytes = options?.maxIndexBytes ?? MAX_INDEX_BYTES
-  const metadata: FileMetadata[] = []
+  const metadata: RichFileMetadata[] = []
 
   for (const [path, file] of codeIndex.files) {
-    const entry: FileMetadata = {
+    const entry: RichFileMetadata = {
       path,
       language: file.language || inferLanguage(path),
       lineCount: file.lineCount,
@@ -56,34 +56,43 @@ export function buildStructuralIndex(
 
     // Extract structural info for code files (skip non-code like JSON, markdown, etc.)
     if (isCodeFile(path)) {
-      const extracted = extractStructure(file)
-      if (extracted.exports.length > 0) entry.exports = extracted.exports
-      if (extracted.imports.length > 0) entry.imports = extracted.imports
-      if (extracted.symbols.length > 0) entry.symbols = extracted.symbols
+      const exports = extractExports(file)
+      const imports = extractImports(file)
+      const signatures = extractSignatures(file)
+
+      // Truncation guard: cap exports and append "...(N more)" message
+      if (exports.length > MAX_EXPORTS_PER_FILE) {
+        const total = exports.length
+        entry.exports = [
+          ...exports.slice(0, MAX_EXPORTS_PER_FILE),
+          `...(${total - MAX_EXPORTS_PER_FILE} more)`,
+        ]
+      } else if (exports.length > 0) {
+        entry.exports = exports
+      }
+
+      if (imports.length > 0) entry.imports = imports.slice(0, MAX_IMPORTS_PER_FILE)
+      if (signatures.length > 0) entry.signatures = signatures.slice(0, MAX_SIGNATURES_PER_FILE)
     }
 
+    // All files appear in the index; zero-export files have just path/language/lineCount
     metadata.push(entry)
   }
 
-  // Filter out code files with no structural info (no exports, imports, or symbols)
-  const filtered = metadata.filter(
-    entry => !isCodeFile(entry.path) || entry.exports || entry.imports || entry.symbols,
-  )
-
-  let result = JSON.stringify(filtered)
+  let result = JSON.stringify(metadata)
   if (result.length <= maxBytes) return result
 
-  // Progressive trimming: drop symbols → imports → exports,
+  // Progressive trimming: drop signatures → imports → exports,
   // starting from files with fewest exports
-  const sortedByExports = [...filtered].sort(
+  const sortedByExports = [...metadata].sort(
     (a, b) => (a.exports?.length ?? 0) - (b.exports?.length ?? 0),
   )
 
-  for (const field of ['symbols', 'imports', 'exports'] as const) {
+  for (const field of ['signatures', 'imports', 'exports'] as const) {
     for (const entry of sortedByExports) {
       if (entry[field]) {
         delete entry[field]
-        result = JSON.stringify(filtered)
+        result = JSON.stringify(metadata)
         if (result.length <= maxBytes) return result
       }
     }
@@ -214,35 +223,14 @@ export function getExportRegex(language: string): RegExp | null {
   }
 }
 
-/** Extract exports, imports, and symbol definitions from a file. */
-function extractStructure(file: IndexedFile): {
-  exports: string[]
-  imports: string[]
-  symbols: string[]
-} {
+/** Extract exported symbol names from a file. */
+export function extractExports(file: IndexedFile): string[] {
   const language = inferLanguage(file.path)
   const symbolPatterns = getLanguagePatterns(language)
-  const importRegex = getImportRegex(language)
   const exportRegex = getExportRegex(language)
-
   const exports: string[] = []
-  const imports: string[] = []
-  const symbols = new Set<string>()
 
-  // Extract imports
-  if (importRegex) {
-    importRegex.lastIndex = 0
-    let m: RegExpExecArray | null
-    while ((m = importRegex.exec(file.content)) !== null) {
-      // Some language regexes have multiple capture groups (e.g. Python)
-      const importName = m[1] || m[2]
-      if (importName) imports.push(importName.trim())
-    }
-  }
-
-  // Extract exports + symbols line-by-line
   for (const line of file.lines) {
-    // Named exports
     if (exportRegex) {
       const exportMatch = exportRegex.exec(line)
       if (exportMatch) {
@@ -256,16 +244,6 @@ function extractStructure(file: IndexedFile): {
         if (sm && !line.startsWith(' ') && !line.startsWith('\t')) {
           exports.push(sm[1])
         }
-      }
-    }
-
-    // Symbol definitions (exported or not)
-    for (const pat of symbolPatterns) {
-      pat.regex.lastIndex = 0
-      let sm: RegExpExecArray | null
-      while ((sm = pat.regex.exec(line)) !== null) {
-        const sig = extractSignature(line, sm[1], pat.kind)
-        symbols.add(`${pat.kind}:${sig}`)
       }
     }
   }
@@ -283,11 +261,46 @@ function extractStructure(file: IndexedFile): {
     }
   }
 
-  return {
-    exports: [...new Set(exports)].slice(0, MAX_EXPORTS_PER_FILE),
-    imports: imports.slice(0, MAX_IMPORTS_PER_FILE),
-    symbols: [...symbols].slice(0, MAX_SYMBOLS_PER_FILE),
+  return [...new Set(exports)]
+}
+
+/** Extract import source paths from a file. */
+export function extractImports(file: IndexedFile): string[] {
+  const language = inferLanguage(file.path)
+  const importRegex = getImportRegex(language)
+  const imports: string[] = []
+
+  if (importRegex) {
+    importRegex.lastIndex = 0
+    let m: RegExpExecArray | null
+    while ((m = importRegex.exec(file.content)) !== null) {
+      // Some language regexes have multiple capture groups (e.g. Python)
+      const importName = m[1] || m[2]
+      if (importName) imports.push(importName.trim())
+    }
   }
+
+  return imports
+}
+
+/** Extract symbol signatures (function, class, type definitions) from a file. */
+export function extractSignatures(file: IndexedFile): string[] {
+  const language = inferLanguage(file.path)
+  const symbolPatterns = getLanguagePatterns(language)
+  const symbols = new Set<string>()
+
+  for (const line of file.lines) {
+    for (const pat of symbolPatterns) {
+      pat.regex.lastIndex = 0
+      let sm: RegExpExecArray | null
+      while ((sm = pat.regex.exec(line)) !== null) {
+        const sig = extractSignature(line, sm[1], pat.kind)
+        symbols.add(`${pat.kind}:${sig}`)
+      }
+    }
+  }
+
+  return [...symbols]
 }
 
 /** Check if a file is a code file worth extracting structure from. */

@@ -197,6 +197,53 @@ describe('executeToolLocally — searchFiles with isRegex', () => {
     )
     // Should not throw; result may have 0 matches but no error property
     expect(result).toHaveProperty('matchCount')
+    expect(result.warning).toContain('Invalid regex')
+  })
+
+  it('falls back for ReDoS-length regex (> 200 chars)', () => {
+    const index = buildMockIndex()
+    const longPattern = 'a'.repeat(201)
+    const result = JSON.parse(
+      executeToolLocally('searchFiles', { query: longPattern, isRegex: true }, index),
+    )
+    expect(result).toHaveProperty('matchCount')
+    expect(result.warning).toContain('200 characters')
+  })
+
+  it('uses regex for path matching when isRegex is true', () => {
+    const index = buildMockIndex()
+    // Regex that matches paths containing "types" or "utils"
+    const result = JSON.parse(
+      executeToolLocally('searchFiles', { query: 'types|utils', isRegex: true }, index),
+    )
+    expect(result.matchCount).toBeGreaterThanOrEqual(2)
+    const pathMatches = result.results.filter(
+      (r: { matchType: string }) => r.matchType === 'path',
+    )
+    expect(pathMatches.length).toBeGreaterThanOrEqual(2)
+    const matchedPaths = pathMatches.map((r: { path: string }) => r.path)
+    expect(matchedPaths.some((p: string) => p.includes('types'))).toBe(true)
+    expect(matchedPaths.some((p: string) => p.includes('utils'))).toBe(true)
+  })
+
+  it('regex path matching is case-insensitive', () => {
+    const index = buildMockIndex()
+    const result = JSON.parse(
+      executeToolLocally('searchFiles', { query: 'UTILS', isRegex: true }, index),
+    )
+    const pathMatches = result.results.filter(
+      (r: { matchType: string }) => r.matchType === 'path',
+    )
+    expect(pathMatches.length).toBeGreaterThan(0)
+    expect(pathMatches[0].path).toContain('utils')
+  })
+
+  it('no warning field when regex is valid and short', () => {
+    const index = buildMockIndex()
+    const result = JSON.parse(
+      executeToolLocally('searchFiles', { query: 'greet', isRegex: true }, index),
+    )
+    expect(result.warning).toBeUndefined()
   })
 })
 

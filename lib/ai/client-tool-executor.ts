@@ -170,19 +170,39 @@ function executeSearchFiles(
   const limit = input.maxResults ?? 15
   const paths = allPaths(codeIndex)
   const results: Array<{ path: string; matchType: 'path' | 'content'; matches?: Array<{ line: number; content: string; context?: string[] }>; totalMatches?: number }> = []
+  let warning: string | undefined
 
-  // Path matching: case-insensitive substring match against file paths
+  // Determine matching strategy with ReDoS protection
+  let pathRegex: RegExp | null = null
+  let useRegex = input.isRegex === true
+
+  if (useRegex) {
+    if (input.query.length > 200) {
+      warning = 'Regex pattern exceeds 200 characters, falling back to text search'
+      useRegex = false
+    } else {
+      try {
+        pathRegex = new RegExp(input.query, 'i')
+      } catch {
+        warning = 'Invalid regex, falling back to text search'
+        useRegex = false
+      }
+    }
+  }
+
+  // Path matching: regex or case-insensitive substring
   const queryLower = input.query.toLowerCase()
   for (const path of paths) {
     if (results.length >= limit) break
-    if (path.toLowerCase().includes(queryLower)) {
+    const isMatch = pathRegex ? pathRegex.test(path) : path.toLowerCase().includes(queryLower)
+    if (isMatch) {
       results.push({ path, matchType: 'path' })
     }
   }
 
   // Content matching: delegate to searchIndex for accurate regex/substring search
   if (results.length < limit) {
-    const searchResults = searchIndex(codeIndex, input.query, { regex: input.isRegex })
+    const searchResults = searchIndex(codeIndex, input.query, { regex: useRegex })
     const pathsAlreadyMatched = new Set(results.map(r => r.path))
 
     for (const sr of searchResults) {
@@ -225,7 +245,7 @@ function executeSearchFiles(
     return (b.totalMatches ?? 0) - (a.totalMatches ?? 0)
   })
 
-  return { totalFiles: paths.length, matchCount: results.length, results }
+  return { totalFiles: paths.length, matchCount: results.length, results, ...(warning ? { warning } : {}) }
 }
 
 function executeListDirectory(
