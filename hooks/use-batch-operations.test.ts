@@ -1,9 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import type { CodeIndex } from '@/lib/code/code-index'
 import type { CodeIssue } from '@/lib/code/scanner/types'
 import type { FixSuggestion, ValidationResult } from '@/lib/code/scanner'
-import { useBatchOperations } from './use-batch-operations'
+import { useBatchOperations, type BatchOperationsOptions } from './use-batch-operations'
+import type { APIKeysState } from '@/types/types'
 
 function createCodeIndex(files?: Map<string, { content: string }>): CodeIndex {
   const fileMap = new Map<string, { path: string; name: string; content: string; lines: string[]; lineCount: number }>()
@@ -62,20 +63,32 @@ function createValidationResult(issueId: string): ValidationResult {
   }
 }
 
+const EMPTY_API_KEYS: APIKeysState = {
+  openai: { key: '', isValid: null, lastValidated: null },
+  google: { key: '', isValid: null, lastValidated: null },
+  anthropic: { key: '', isValid: null, lastValidated: null },
+  openrouter: { key: '', isValid: null, lastValidated: null },
+}
+
+const MOCK_API_KEYS: APIKeysState = {
+  ...EMPTY_API_KEYS,
+  openai: { key: 'sk-test', isValid: null, lastValidated: null },
+}
+
 describe('useBatchOperations', () => {
-  let setFixCache: ReturnType<typeof vi.fn>
-  let setShowFix: ReturnType<typeof vi.fn>
-  let setValidationResults: ReturnType<typeof vi.fn>
-  let generateFix: ReturnType<typeof vi.fn>
-  let validateFinding: ReturnType<typeof vi.fn>
+  let setFixCache: Mock<BatchOperationsOptions['setFixCache']>
+  let setShowFix: Mock<BatchOperationsOptions['setShowFix']>
+  let setValidationResults: Mock<BatchOperationsOptions['setValidationResults']>
+  let generateFix: Mock<BatchOperationsOptions['generateFix']>
+  let validateFinding: Mock<BatchOperationsOptions['validateFinding']>
   let codeIndex: CodeIndex
 
   beforeEach(() => {
-    setFixCache = vi.fn()
-    setShowFix = vi.fn()
-    setValidationResults = vi.fn()
-    generateFix = vi.fn()
-    validateFinding = vi.fn()
+    setFixCache = vi.fn<BatchOperationsOptions['setFixCache']>()
+    setShowFix = vi.fn<BatchOperationsOptions['setShowFix']>()
+    setValidationResults = vi.fn<BatchOperationsOptions['setValidationResults']>()
+    generateFix = vi.fn<BatchOperationsOptions['generateFix']>()
+    validateFinding = vi.fn<BatchOperationsOptions['validateFinding']>()
     codeIndex = createCodeIndex(
       new Map([['src/utils.ts', { content: 'const x = eval("test")' }]]),
     )
@@ -86,15 +99,15 @@ describe('useBatchOperations', () => {
       useBatchOperations({
         codeIndex,
         selectedProvider: 'openai',
-        selectedModel: { id: 'gpt-4' },
-        apiKeys: { openai: { key: 'sk-test' } },
+        selectedModel: { id: 'gpt-4', name: 'GPT-4', provider: 'openai' },
+        apiKeys: MOCK_API_KEYS,
         generateFix,
         validateFinding,
         setFixCache,
         setShowFix,
         setValidationResults,
         ...overrides,
-      }),
+      } as BatchOperationsOptions),
     )
   }
 
@@ -120,18 +133,18 @@ describe('useBatchOperations', () => {
       expect(result.current.hasValidApiKey).toBe(true)
     })
 
-    it('hasValidApiKey is false when provider is undefined', () => {
-      const { result } = renderBatchHook({ selectedProvider: undefined })
+    it('hasValidApiKey is false when provider is null', () => {
+      const { result } = renderBatchHook({ selectedProvider: null })
       expect(result.current.hasValidApiKey).toBe(false)
     })
 
-    it('hasValidApiKey is false when model is undefined', () => {
-      const { result } = renderBatchHook({ selectedModel: undefined })
+    it('hasValidApiKey is false when model is null', () => {
+      const { result } = renderBatchHook({ selectedModel: null })
       expect(result.current.hasValidApiKey).toBe(false)
     })
 
     it('hasValidApiKey is false when API key is missing', () => {
-      const { result } = renderBatchHook({ apiKeys: {} })
+      const { result } = renderBatchHook({ apiKeys: EMPTY_API_KEYS })
       expect(result.current.hasValidApiKey).toBe(false)
     })
   })
@@ -221,8 +234,8 @@ describe('useBatchOperations', () => {
       expect(validateFinding).toHaveBeenCalledTimes(2)
     })
 
-    it('does nothing when selectedProvider is undefined', async () => {
-      const { result } = renderBatchHook({ selectedProvider: undefined })
+    it('does nothing when selectedProvider is null', async () => {
+      const { result } = renderBatchHook({ selectedProvider: null })
       await act(async () => {
         await result.current.batchValidate([createIssue({ severity: 'critical' })])
       })
@@ -230,7 +243,7 @@ describe('useBatchOperations', () => {
     })
 
     it('does nothing when no API key available', async () => {
-      const { result } = renderBatchHook({ apiKeys: {} })
+      const { result } = renderBatchHook({ apiKeys: EMPTY_API_KEYS })
       await act(async () => {
         await result.current.batchValidate([createIssue({ severity: 'critical' })])
       })

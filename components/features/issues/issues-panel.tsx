@@ -66,7 +66,7 @@ export function IssuesPanel({ codeIndex, onNavigateToFile }: IssuesPanelProps) {
     hasValidApiKey,
   } = useBatchOperations({
     codeIndex,
-    selectedProvider: selectedProvider ?? undefined,
+    selectedProvider,
     selectedModel,
     apiKeys,
     generateFix,

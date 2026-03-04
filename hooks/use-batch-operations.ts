@@ -3,6 +3,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import type { CodeIndex } from '@/lib/code/code-index'
 import type { CodeIssue, FixSuggestion, ValidationResult } from '@/lib/code/issue-scanner'
+import type { AIProvider, ProviderModel, APIKeysState } from '@/types/types'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -15,11 +16,11 @@ export interface BatchProgress {
   inProgress: boolean
 }
 
-interface BatchOperationsOptions {
+export interface BatchOperationsOptions {
   codeIndex: CodeIndex
-  selectedProvider: string | undefined
-  selectedModel: { id: string } | undefined
-  apiKeys: Record<string, { key: string } | undefined>
+  selectedProvider: AIProvider | null
+  selectedModel: ProviderModel | null
+  apiKeys: APIKeysState
   generateFix: (issue: CodeIssue, fileContent: string) => FixSuggestion | null
   validateFinding: (
     issue: CodeIssue,
