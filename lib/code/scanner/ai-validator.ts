@@ -258,7 +258,7 @@ const SECRET_PREFIXES = ['sk-', 'sk_live_', 'sk_test_', 'pk_live_', 'pk_test_', 
 export function scrubSecrets(code: string): string {
   // Redact values assigned with = or : that look like secrets (long base64/hex, known prefixes)
   let scrubbed = code.replace(
-    /(['"`])([A-Za-z0-9+/=_-]{20,})\1/g,
+    /(['"`])([A-Za-z0-9+/=_-]{12,})\1/g,
     (match, quote, value: string) => {
       if (SECRET_PREFIXES.some(prefix => value.startsWith(prefix))) {
         return `${quote}[REDACTED]${quote}`
@@ -285,6 +285,12 @@ export function scrubSecrets(code: string): string {
   scrubbed = scrubbed.replace(
     /:([^:@\s]{8,})@/g,
     ':[REDACTED]@',
+  )
+
+  // Redact unquoted key=value assignments that look like secrets
+  scrubbed = scrubbed.replace(
+    /\b(api[_-]?key|api[_-]?secret|secret[_-]?key|access[_-]?token|auth[_-]?token|private[_-]?key|client[_-]?secret|password|passwd|pwd)\s*=\s*([^\s'"`;,){\]]{8,})/gi,
+    '$1=[REDACTED]',
   )
 
   return scrubbed

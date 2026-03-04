@@ -7,6 +7,13 @@ import { JS_TS, PY, SKIP_VENDORED } from './constants'
 import { isExampleOrDocsFile, hasInlineSuppression } from './context-classifier'
 
 // ---------------------------------------------------------------------------
+// Shared regex constants for command injection composite rules
+// ---------------------------------------------------------------------------
+
+const CHILD_PROCESS_IMPORT = /(?:require\s*\(\s*['"]child_process['"]\)|from\s+['"]child_process['"]|from\s+['"]node:child_process['"])/
+const CMD_INJECTION_MITIGATIONS = [/execFile|shell-quote|shell-escape|shellescape/]
+
+// ---------------------------------------------------------------------------
 // Composite file-level rules
 // ---------------------------------------------------------------------------
 
@@ -24,11 +31,11 @@ export const COMPOSITE_RULES: CompositeRule[] = [
     learnMoreUrl: 'https://cwe.mitre.org/data/definitions/78.html',
     fileFilter: JS_TS,
     requiredPatterns: [
-      /(?:require\s*\(\s*['"]child_process['"]\)|from\s+['"]child_process['"]|from\s+['"]node:child_process['"])/,
+      CHILD_PROCESS_IMPORT,
       /\bexec(?:Sync)?\s*\(\s*[a-zA-Z_$]/,  // exec called with a variable, not a string literal
     ],
     sinkPattern: /\bexec(?:Sync)?\s*\(\s*[a-zA-Z_$]/,
-    mitigations: [/execFile|shell-quote|shell-escape|shellescape/],
+    mitigations: CMD_INJECTION_MITIGATIONS,
     confidence: 'medium',
   },
   // child_process + util.format (the exact node-pdf-image pattern)
@@ -44,11 +51,11 @@ export const COMPOSITE_RULES: CompositeRule[] = [
     learnMoreUrl: 'https://cwe.mitre.org/data/definitions/78.html',
     fileFilter: JS_TS,
     requiredPatterns: [
-      /(?:require\s*\(\s*['"]child_process['"]\)|from\s+['"]child_process['"]|from\s+['"]node:child_process['"])/,
+      CHILD_PROCESS_IMPORT,
       /util\.format\s*\(/,
     ],
     sinkPattern: /util\.format\s*\(/,
-    mitigations: [/execFile|shell-quote|shell-escape|shellescape/],
+    mitigations: CMD_INJECTION_MITIGATIONS,
     confidence: 'medium',
   },
   // child_process + string concatenation for command building
@@ -64,11 +71,11 @@ export const COMPOSITE_RULES: CompositeRule[] = [
     learnMoreUrl: 'https://cwe.mitre.org/data/definitions/78.html',
     fileFilter: JS_TS,
     requiredPatterns: [
-      /(?:require\s*\(\s*['"]child_process['"]\)|from\s+['"]child_process['"]|from\s+['"]node:child_process['"])/,
+      CHILD_PROCESS_IMPORT,
       /(?:command|cmd)\s*(?:=|\+=)\s*.*\+/,
     ],
     sinkPattern: /(?:command|cmd)\s*(?:=|\+=)\s*.*\+/,
-    mitigations: [/execFile|shell-quote|shell-escape|shellescape/],
+    mitigations: CMD_INJECTION_MITIGATIONS,
     confidence: 'medium',
   },
   // Python: os.system/os.popen with string formatting
@@ -439,30 +446,6 @@ export const COMPOSITE_RULES: CompositeRule[] = [
     confidence: 'low',
   },
 
-  // -----------------------------------------------------------------------
-  // Sensitive Data in URL (CWE-598)
-  // -----------------------------------------------------------------------
-
-  // Sensitive data passed as URL query parameter
-  {
-    id: 'composite-sensitive-data-in-url',
-    category: 'security',
-    severity: 'warning',
-    title: 'Sensitive Data in URL: Query Parameter Exposure',
-    description:
-      'This file constructs URLs with sensitive data (password, token, secret, API key) as query parameters. Query parameters are logged in server access logs, browser history, referrer headers, and proxy logs, exposing credentials to unauthorized parties.',
-    suggestion:
-      'Send sensitive data in request headers (Authorization header) or POST body instead of URL query parameters.',
-    cwe: 'CWE-598',
-    owasp: 'A02:2021 Cryptographic Failures',
-    learnMoreUrl: 'https://cwe.mitre.org/data/definitions/598.html',
-    fileFilter: JS_TS,
-    requiredPatterns: [
-      /\?(.*&)?(password|token|secret|key|api_key|apikey|auth)=/,
-    ],
-    sinkPattern: /\?(.*&)?(password|token|secret|key|api_key|apikey|auth)=/,
-    confidence: 'medium',
-  },
 ]
 
 // ---------------------------------------------------------------------------

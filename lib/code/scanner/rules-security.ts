@@ -1375,4 +1375,28 @@ export const SECURITY_RULES: ScanRule[] = [
     excludePattern: /test|mock|fixture|example|theme|preference|locale|language/i,
     confidence: 'medium',
   },
+
+  // -----------------------------------------------------------------------
+  // Sensitive Data in URL (CWE-598)
+  // -----------------------------------------------------------------------
+
+  {
+    id: 'sensitive-data-in-url',
+    category: 'security',
+    severity: 'warning',
+    title: 'Sensitive Data in URL: Query Parameter Exposure',
+    description:
+      'A URL with sensitive data (password, token, secret, API key) as a query parameter was detected. Query parameters are logged in server access logs, browser history, referrer headers, and proxy logs, exposing credentials to unauthorized parties.',
+    suggestion:
+      'Send sensitive data in request headers (Authorization header) or POST body instead of URL query parameters.',
+    cwe: 'CWE-598',
+    owasp: 'A02:2021 Cryptographic Failures',
+    learnMoreUrl: 'https://cwe.mitre.org/data/definitions/598.html',
+    pattern: '\\?(.*&)?(password|token|secret|key|api_key|apikey|auth)=',
+    patternOptions: { regex: true, caseSensitive: false },
+    fileFilter: JS_TS,
+    excludeFiles: /rules-security|rules-security-lang|rules-quality|rules-framework|rules-composite|test|fixture|__tests__|e2e|spec/i,
+    excludePattern: /example|mock|test|fixture|placeholder|TODO/i,
+    confidence: 'medium',
+  },
 ]

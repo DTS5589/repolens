@@ -459,6 +459,20 @@ function findTaintedInExpression(
     }
   }
 
+  if (t.isConditionalExpression(node)) {
+    return findTaintedInExpression(node.consequent, state)
+      ?? findTaintedInExpression(node.alternate, state)
+  }
+
+  if (t.isLogicalExpression(node)) {
+    return findTaintedInExpression(node.left, state)
+      ?? findTaintedInExpression(node.right, state)
+  }
+
+  if (t.isAwaitExpression(node)) {
+    return findTaintedInExpression(node.argument, state)
+  }
+
   return null
 }
 

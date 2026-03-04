@@ -56,7 +56,8 @@ export async function POST(req: Request) {
   try {
     const rawContext = getCodeContext(fileContent, issue.line)
     const context = scrubSecrets(rawContext)
-    const { system, user } = buildValidationPrompt(issue as CodeIssue, context)
+    const scrubbedIssue = { ...issue, snippet: scrubSecrets(issue.snippet) } as CodeIssue
+    const { system, user } = buildValidationPrompt(scrubbedIssue, context)
 
     const aiModel = createAIModel(provider, modelId, apiKey)
 
@@ -72,14 +73,13 @@ export async function POST(req: Request) {
 
     return Response.json(result)
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : 'AI validation failed'
+    console.error('[validate] AI validation failed for issue', issue.id, error)
     return Response.json(
       {
         issueId: issue.id,
         verdict: 'uncertain',
         confidence: 'low',
-        reasoning: `Server-side AI validation failed: ${message}`,
+        reasoning: 'Server-side AI validation failed. Please try again.',
       },
       { status: 200 },
     )

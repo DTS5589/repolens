@@ -25,6 +25,9 @@ import { scoreIssue, scoreProject, getRiskDistribution, buildCvssVector } from '
 
 const MAX_PER_RULE = 15
 
+/** File entry type extracted from CodeIndex. */
+type FileEntry = CodeIndex['files'] extends Map<string, infer V> ? V : never
+
 // Combined rule set (all regex-based rules)
 const RULES: ScanRule[] = [
   ...SECURITY_RULES,
@@ -114,7 +117,6 @@ function runRegexRules(ctx: ScanContext): RegexRulesResult {
     let ruleCount = 0
 
     // Build ruleCodeIndex by merging relevant extension groups (avoids per-rule full filter)
-    type FileEntry = typeof filesToScan extends Map<string, infer V> ? V : never
     let ruleCodeIndex: typeof scanCodeIndex
     if (rule.fileFilter && rule.fileFilter.length > 0) {
       const mergedFiles = new Map<string, FileEntry>()
@@ -359,6 +361,70 @@ function computeHealthGrades(issues: CodeIssue[], sloc: number): HealthGrades {
 }
 
 // ---------------------------------------------------------------------------
+// D7: Deduplication helper — resolves AST vs regex overlapping findings
+// ---------------------------------------------------------------------------
+
+function deduplicateIssues(
+  issues: CodeIssue[],
+  scanCodeIndex: CodeIndex,
+  ruleOverflow: Map<string, number>,
+): void {
+  // AST empty-catch wins over regex empty-catch for same file+line
+  const astEmptyCatchKeys = new Set(
+    issues.filter(i => i.ruleId === 'ast-empty-catch').map(i => `${i.file}:${i.line}`)
+  )
+  if (astEmptyCatchKeys.size > 0) {
+    for (let i = issues.length - 1; i >= 0; i--) {
+      const issue = issues[i]
+      if (issue.ruleId === 'empty-catch' && astEmptyCatchKeys.has(`${issue.file}:${issue.line}`)) {
+        issues.splice(i, 1)
+      }
+    }
+  }
+
+  // Prefer regex eval-usage (has CWE, suppression, MAX_PER_RULE metadata)
+  // over ast-eval-usage at the same file+line.
+  const regexEvalKeys = new Set(
+    issues.filter(i => i.ruleId === 'eval-usage').map(i => `${i.file}:${i.line}`)
+  )
+  if (regexEvalKeys.size > 0) {
+    for (let i = issues.length - 1; i >= 0; i--) {
+      const issue = issues[i]
+      if (issue.ruleId === 'ast-eval-usage' && regexEvalKeys.has(`${issue.file}:${issue.line}`)) {
+        issues.splice(i, 1)
+      }
+    }
+  }
+
+  // Normalize remaining ast-eval-usage (AST-only findings) to eval-usage
+  // and apply MAX_PER_RULE cap + inline suppression.
+  const existingEvalCount = issues.filter(i => i.ruleId === 'eval-usage').length
+  let normalizedEvalCount = existingEvalCount
+  for (let i = issues.length - 1; i >= 0; i--) {
+    const issue = issues[i]
+    if (issue.ruleId !== 'ast-eval-usage') continue
+    issue.ruleId = 'eval-usage'
+    issue.id = issue.id.replace('ast-eval-usage', 'eval-usage')
+    if (!issue.cwe) issue.cwe = 'CWE-94'
+    // Apply inline suppression check for normalized issues
+    const indexedFile = scanCodeIndex.files.get(issue.file)
+    const allLines = indexedFile?.lines
+    const lineContent = allLines && issue.line >= 1 && issue.line <= allLines.length ? allLines[issue.line - 1] : ''
+    const prevLine = allLines && issue.line >= 2 ? allLines[issue.line - 2] : undefined
+    if (hasInlineSuppression(lineContent, prevLine, 'eval-usage', true)) {
+      issues.splice(i, 1)
+      continue
+    }
+    // Apply MAX_PER_RULE cap
+    normalizedEvalCount++
+    if (normalizedEvalCount > MAX_PER_RULE) {
+      ruleOverflow.set('eval-usage', (ruleOverflow.get('eval-usage') || 0) + 1)
+      issues.splice(i, 1)
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Main scan orchestrator
 // ---------------------------------------------------------------------------
 
@@ -382,7 +448,6 @@ export function scanIssues(
   const isPartialScan = changedFiles !== undefined && changedFiles.length > 0
 
   // Build the set of files to scan
-  type FileEntry = typeof codeIndex.files extends Map<string, infer V> ? V : never
   const filesToScan = new Map<string, FileEntry>()
   if (isPartialScan) {
     for (const changed of changedFiles!) {
@@ -444,58 +509,8 @@ export function scanIssues(
     }
   }
 
-  // 2c. Dedup: AST empty-catch wins over regex empty-catch for same file+line
-  const astEmptyCatchKeys = new Set(
-    issues.filter(i => i.ruleId === 'ast-empty-catch').map(i => `${i.file}:${i.line}`)
-  )
-  if (astEmptyCatchKeys.size > 0) {
-    for (let i = issues.length - 1; i >= 0; i--) {
-      const issue = issues[i]
-      if (issue.ruleId === 'empty-catch' && astEmptyCatchKeys.has(`${issue.file}:${issue.line}`)) {
-        issues.splice(i, 1)
-      }
-    }
-  }
-
-  // 2d. Dedup: prefer regex eval-usage (has CWE, suppression, MAX_PER_RULE metadata)
-  // over ast-eval-usage at the same file+line. Normalize remaining AST-only findings.
-  const regexEvalKeys = new Set(
-    issues.filter(i => i.ruleId === 'eval-usage').map(i => `${i.file}:${i.line}`)
-  )
-  if (regexEvalKeys.size > 0) {
-    for (let i = issues.length - 1; i >= 0; i--) {
-      const issue = issues[i]
-      if (issue.ruleId === 'ast-eval-usage' && regexEvalKeys.has(`${issue.file}:${issue.line}`)) {
-        issues.splice(i, 1)
-      }
-    }
-  }
-  // Normalize any remaining ast-eval-usage (AST-only findings) to eval-usage
-  // and apply MAX_PER_RULE cap + inline suppression that the regex scanner already handles
-  const existingEvalCount = issues.filter(i => i.ruleId === 'eval-usage').length
-  let normalizedEvalCount = existingEvalCount
-  for (let i = issues.length - 1; i >= 0; i--) {
-    const issue = issues[i]
-    if (issue.ruleId !== 'ast-eval-usage') continue
-    issue.ruleId = 'eval-usage'
-    issue.id = issue.id.replace('ast-eval-usage', 'eval-usage')
-    if (!issue.cwe) issue.cwe = 'CWE-94'
-    // Apply inline suppression check for normalized issues
-    const indexedFile = scanCodeIndex.files.get(issue.file)
-    const allLines = indexedFile?.lines
-    const lineContent = allLines && issue.line >= 1 && issue.line <= allLines.length ? allLines[issue.line - 1] : ''
-    const prevLine = allLines && issue.line >= 2 ? allLines[issue.line - 2] : undefined
-    if (hasInlineSuppression(lineContent, prevLine, 'eval-usage', true)) {
-      issues.splice(i, 1)
-      continue
-    }
-    // Apply MAX_PER_RULE cap
-    normalizedEvalCount++
-    if (normalizedEvalCount > MAX_PER_RULE) {
-      ruleOverflow.set('eval-usage', (ruleOverflow.get('eval-usage') || 0) + 1)
-      issues.splice(i, 1)
-    }
-  }
+  // 2c–2d. Deduplicate AST vs regex overlapping findings
+  deduplicateIssues(issues, scanCodeIndex, ruleOverflow)
 
   // 3. Composite file-level rules
   const compositeIssues = scanCompositeRules(codeIndex)
