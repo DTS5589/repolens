@@ -184,6 +184,7 @@ describe('getLanguagePatterns', () => {
     const kinds = patterns.map(p => p.kind)
     expect(kinds).toContain('fn')
     expect(kinds).toContain('class')
+    expect(kinds).toContain('const')
   })
 
   it('returns Rust patterns for "rust"', () => {
@@ -192,6 +193,7 @@ describe('getLanguagePatterns', () => {
     const kinds = patterns.map(p => p.kind)
     expect(kinds).toContain('fn')
     expect(kinds).toContain('struct')
+    expect(kinds).toContain('type')
   })
 
   it('returns Go patterns for "go"', () => {
@@ -260,6 +262,174 @@ describe('isCodeFile', () => {
       expect(isCodeFile(`src/file${ext}`)).toBe(false)
     },
   )
+})
+
+// ---------------------------------------------------------------------------
+// SYMBOL_PATTERNS
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Python top-level constant pattern
+// ---------------------------------------------------------------------------
+
+describe('Python top-level constant extraction', () => {
+  it('extracts UPPER_CASE constant assignments as symbols', () => {
+    let index = createEmptyIndex()
+    index = indexFile(
+      index,
+      'config.py',
+      [
+        'MAX_RETRIES = 5',
+        'DEFAULT_TIMEOUT = 30',
+        'API_BASE_URL = "https://example.com"',
+        '',
+        'def connect():',
+        '    pass',
+      ].join('\n'),
+      'python',
+    )
+
+    const result = buildStructuralIndex(index)
+    const parsed = JSON.parse(result) as Array<Record<string, unknown>>
+    const pyFile = parsed.find(e => e.path === 'config.py')
+    expect(pyFile).toBeDefined()
+
+    const symbols = pyFile!.symbols as string[]
+    expect(symbols).toBeDefined()
+    expect(symbols.some(s => s.startsWith('const:') && s.includes('MAX_RETRIES'))).toBe(true)
+    expect(symbols.some(s => s.startsWith('const:') && s.includes('DEFAULT_TIMEOUT'))).toBe(true)
+    expect(symbols.some(s => s.startsWith('const:') && s.includes('API_BASE_URL'))).toBe(true)
+    // The function should also be extracted
+    expect(symbols.some(s => s.startsWith('fn:') && s.includes('connect'))).toBe(true)
+  })
+
+  it('does not match lowercase variable assignments as constants', () => {
+    let index = createEmptyIndex()
+    index = indexFile(
+      index,
+      'script.py',
+      [
+        'local_var = 42',
+        'another_var = "hello"',
+        '',
+        'MAX_SIZE = 100',
+      ].join('\n'),
+      'python',
+    )
+
+    const result = buildStructuralIndex(index)
+    const parsed = JSON.parse(result) as Array<Record<string, unknown>>
+    const pyFile = parsed.find(e => e.path === 'script.py')
+    expect(pyFile).toBeDefined()
+
+    const symbols = pyFile!.symbols as string[]
+    expect(symbols).toBeDefined()
+    // Only UPPER_CASE should match
+    expect(symbols.some(s => s.includes('local_var'))).toBe(false)
+    expect(symbols.some(s => s.includes('another_var'))).toBe(false)
+    expect(symbols.some(s => s.startsWith('const:') && s.includes('MAX_SIZE'))).toBe(true)
+  })
+
+  it('treats Python constants as exports (top-level defs)', () => {
+    let index = createEmptyIndex()
+    index = indexFile(
+      index,
+      'settings.py',
+      ['DEBUG = True', 'VERSION = "1.0.0"'].join('\n'),
+      'python',
+    )
+
+    const result = buildStructuralIndex(index)
+    const parsed = JSON.parse(result) as Array<Record<string, unknown>>
+    const pyFile = parsed.find(e => e.path === 'settings.py')
+    expect(pyFile).toBeDefined()
+
+    const exports = pyFile!.exports as string[]
+    expect(exports).toBeDefined()
+    expect(exports).toContain('DEBUG')
+    expect(exports).toContain('VERSION')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Rust type alias pattern
+// ---------------------------------------------------------------------------
+
+describe('Rust type alias extraction', () => {
+  it('extracts pub type aliases as symbols', () => {
+    let index = createEmptyIndex()
+    index = indexFile(
+      index,
+      'src/lib.rs',
+      [
+        'pub type Result<T> = std::result::Result<T, Error>;',
+        'pub type BoxedFuture = Box<dyn Future<Output = ()>>;',
+        '',
+        'pub fn run() {',
+        '    todo!()',
+        '}',
+      ].join('\n'),
+      'rust',
+    )
+
+    const result = buildStructuralIndex(index)
+    const parsed = JSON.parse(result) as Array<Record<string, unknown>>
+    const rsFile = parsed.find(e => e.path === 'src/lib.rs')
+    expect(rsFile).toBeDefined()
+
+    const symbols = rsFile!.symbols as string[]
+    expect(symbols).toBeDefined()
+    expect(symbols.some(s => s.startsWith('type:') && s.includes('Result'))).toBe(true)
+    expect(symbols.some(s => s.startsWith('type:') && s.includes('BoxedFuture'))).toBe(true)
+    expect(symbols.some(s => s.startsWith('fn:') && s.includes('run'))).toBe(true)
+  })
+
+  it('extracts private (non-pub) type aliases', () => {
+    let index = createEmptyIndex()
+    index = indexFile(
+      index,
+      'src/internal.rs',
+      [
+        'type NodeId = u64;',
+        'type Callback = Box<dyn Fn() -> ()>;',
+      ].join('\n'),
+      'rust',
+    )
+
+    const result = buildStructuralIndex(index)
+    const parsed = JSON.parse(result) as Array<Record<string, unknown>>
+    const rsFile = parsed.find(e => e.path === 'src/internal.rs')
+    expect(rsFile).toBeDefined()
+
+    const symbols = rsFile!.symbols as string[]
+    expect(symbols).toBeDefined()
+    expect(symbols.some(s => s.startsWith('type:') && s.includes('NodeId'))).toBe(true)
+    expect(symbols.some(s => s.startsWith('type:') && s.includes('Callback'))).toBe(true)
+  })
+
+  it('treats pub type aliases as Rust exports', () => {
+    let index = createEmptyIndex()
+    index = indexFile(
+      index,
+      'src/types.rs',
+      [
+        'pub type AppResult<T> = Result<T, AppError>;',
+        'type InternalId = u32;',
+      ].join('\n'),
+      'rust',
+    )
+
+    const result = buildStructuralIndex(index)
+    const parsed = JSON.parse(result) as Array<Record<string, unknown>>
+    const rsFile = parsed.find(e => e.path === 'src/types.rs')
+    expect(rsFile).toBeDefined()
+
+    const exports = rsFile!.exports as string[]
+    expect(exports).toBeDefined()
+    expect(exports).toContain('AppResult')
+    // Non-pub should NOT appear in exports
+    expect(exports).not.toContain('InternalId')
+  })
 })
 
 // ---------------------------------------------------------------------------

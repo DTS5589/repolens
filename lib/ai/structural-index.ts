@@ -149,6 +149,7 @@ export function getLanguagePatterns(language: string): ReadonlyArray<{ regex: Re
       return [
         { regex: /(?:async\s+)?def\s+(\w+)/g, kind: 'fn' },
         { regex: /class\s+(\w+)/g, kind: 'class' },
+        { regex: /^([A-Z]\w*)\s*=/gm, kind: 'const' },
       ]
     case 'rust':
       return [
@@ -157,6 +158,7 @@ export function getLanguagePatterns(language: string): ReadonlyArray<{ regex: Re
         { regex: /(?:pub(?:\([^)]*\))?\s+)?enum\s+(\w+)/g, kind: 'enum' },
         { regex: /(?:pub(?:\([^)]*\))?\s+)?trait\s+(\w+)/g, kind: 'trait' },
         { regex: /impl(?:<[^>]*>)?\s+(?:\w+\s+for\s+)?(\w+)/g, kind: 'impl' },
+        { regex: /(?:pub(?:\([^)]*\))?\s+)?type\s+(\w+)/g, kind: 'type' },
         { regex: /(?:pub(?:\([^)]*\))?\s+)?mod\s+(\w+)/g, kind: 'mod' },
       ]
     case 'go':
