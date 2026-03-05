@@ -54,7 +54,6 @@ export function getAvailableDiagrams(analysis: FullAnalysis): AvailableDiagram[]
     { id: 'entrypoints', label: analysis.detectedFramework ? 'Routes' : 'Entry Points', available: true },
     { id: 'modules', label: hasComponents ? 'Components' : 'Modules', available: hasModules, reason: 'No module usage detected' },
     { id: 'treemap', label: 'Treemap', available: true },
-    { id: 'summary', label: 'Summary', available: analysis.files.size > 0 },
   ]
 
   // Only show the Types diagram when the codebase actually has classes or interfaces

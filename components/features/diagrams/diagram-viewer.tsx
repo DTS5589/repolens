@@ -6,10 +6,11 @@ import { MermaidDiagramSkeleton } from '@/components/features/loading/tab-skelet
 import {
   generateDiagram,
   getAvailableDiagrams,
+  generateProjectSummary,
   type DiagramType,
+  type DiagramViewMode,
   type AnyDiagramResult,
   type TreemapDiagramResult,
-  type SummaryDiagramResult,
   type AvailableDiagram,
 } from '@/lib/diagrams/diagram-data'
 import type { CodeIndex } from '@/lib/code/code-index'
@@ -18,7 +19,7 @@ import { Network, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { FileNode } from '@/types/repository'
 import { TreemapChart } from './treemap-chart'
-import { SummaryDashboard } from './summary-dashboard'
+import { DiagramOverview } from './diagram-overview'
 import { StatsBar } from './stats-bar'
 import { DiagramFloatingControls } from './diagram-floating-controls'
 import { DiagramToolbar } from './diagram-toolbar'
@@ -45,7 +46,7 @@ interface DiagramViewerProps {
 // ---------------------------------------------------------------------------
 
 export function DiagramViewer({ files, codeIndex, className, onNavigateToFile }: DiagramViewerProps) {
-  const [selectedType, setSelectedType] = useState<DiagramType>('topology')
+  const [viewMode, setViewMode] = useState<DiagramViewMode>('overview')
   const { codebaseAnalysis: analysis } = useRepository()
   const mermaidRef = useRef<MermaidDiagramHandle>(null)
   const treemapRef = useRef<SVGSVGElement>(null)
@@ -81,6 +82,17 @@ export function DiagramViewer({ files, codeIndex, className, onNavigateToFile }:
     return getAvailableDiagrams(analysis)
   }, [analysis])
 
+  // Summary data for Overview
+  const summaryData = useMemo(() => {
+    if (!analysis) return null
+    try {
+      const result = generateProjectSummary(analysis, codeIndex)
+      return result.data
+    } catch {
+      return null
+    }
+  }, [analysis, codeIndex])
+
   // Focus mode file search
   const focusSuggestions = useMemo(() => {
     if (!focusQuery || !analysis) return []
@@ -91,8 +103,10 @@ export function DiagramViewer({ files, codeIndex, className, onNavigateToFile }:
   }, [focusQuery, analysis])
 
   // Generate diagram
+  const selectedType = viewMode === 'overview' ? null : viewMode
   const activeDiagramType = focusTarget ? 'focus' as DiagramType : selectedType
   const diagram = useMemo((): AnyDiagramResult | null => {
+    if (!activeDiagramType) return null
     if (!files || files.length === 0 || codeIndex.totalFiles === 0) return null
     if (!analysis && activeDiagramType !== 'treemap') return null
     try {
@@ -104,7 +118,7 @@ export function DiagramViewer({ files, codeIndex, className, onNavigateToFile }:
   }, [files, codeIndex, activeDiagramType, analysis, focusTarget, focusHops])
 
   // Reset pan/zoom on change
-  useEffect(() => { setZoom(1); setPan({ x: 0, y: 0 }) }, [selectedType, focusTarget])
+  useEffect(() => { setZoom(1); setPan({ x: 0, y: 0 }) }, [viewMode, focusTarget])
 
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault()
@@ -145,7 +159,7 @@ export function DiagramViewer({ files, codeIndex, className, onNavigateToFile }:
   }, [activeDiagramType])
 
   const handleNodeClick = useCallback((nodeId: string) => {
-    if (!diagram || diagram.type === 'treemap' || diagram.type === 'summary') return
+    if (!diagram || diagram.type === 'treemap') return
     const pathMap = (diagram as { nodePathMap: Map<string, string> }).nodePathMap
     const filePath = pathMap.get(nodeId)
     if (filePath && onNavigateToFile) onNavigateToFile(filePath)
@@ -154,7 +168,10 @@ export function DiagramViewer({ files, codeIndex, className, onNavigateToFile }:
   const handleTreemapClick = useCallback((path: string) => { onNavigateToFile?.(path) }, [onNavigateToFile])
 
   const handleFocusSelect = useCallback((path: string) => {
-    startTransition(() => { setFocusTarget(path) })
+    startTransition(() => {
+      setViewMode('focus' as DiagramType)
+      setFocusTarget(path)
+    })
     setFocusQuery(path.split('/').pop() || path)
   }, [startTransition])
 
@@ -162,6 +179,7 @@ export function DiagramViewer({ files, codeIndex, className, onNavigateToFile }:
     setFocusTarget(null)
     setFocusQuery('')
     setFocusOpen(false)
+    setViewMode('overview')
   }, [])
 
   if (!files || files.length === 0) {
@@ -180,9 +198,9 @@ export function DiagramViewer({ files, codeIndex, className, onNavigateToFile }:
     )
   }
 
+  const isOverview = viewMode === 'overview' && !focusTarget
   const isTreemap = activeDiagramType === 'treemap'
-  const isSummary = activeDiagramType === 'summary'
-  const isMermaid = !isTreemap && !isSummary && diagram && diagram.type !== 'treemap' && diagram.type !== 'summary'
+  const isMermaid = !isOverview && !isTreemap && diagram && diagram.type !== 'treemap'
   const canExport = !!isMermaid || isTreemap
 
   return (
@@ -190,8 +208,9 @@ export function DiagramViewer({ files, codeIndex, className, onNavigateToFile }:
       {/* Toolbar: diagram tabs + export */}
       <DiagramToolbar
         availableDiagrams={availableDiagrams}
-        selectedType={selectedType}
-        onSelectType={(type) => { startTransition(() => { setSelectedType(type) }); setFocusTarget(null); setFocusQuery('') }}
+        viewMode={viewMode}
+        onSelectType={(type) => { startTransition(() => { setViewMode(type) }); setFocusTarget(null); setFocusQuery('') }}
+        onSelectOverview={() => { startTransition(() => { setViewMode('overview') }); setFocusTarget(null); setFocusQuery('') }}
         focusTarget={focusTarget}
         onClearFocus={clearFocus}
         canExport={canExport}
@@ -223,9 +242,15 @@ export function DiagramViewer({ files, codeIndex, className, onNavigateToFile }:
               <Loader2 className="h-5 w-5 animate-spin text-text-secondary" />
             </div>
           )}
-          {isSummary && diagram?.type === 'summary' ? (
+          {isOverview && analysis && summaryData ? (
             <div ref={containerRef} className={cn('w-full h-full overflow-auto', isPending && 'opacity-60 transition-opacity')}>
-              <SummaryDashboard data={(diagram as SummaryDiagramResult).data} className="h-full" />
+              <DiagramOverview
+                analysis={analysis}
+                availableDiagrams={availableDiagrams}
+                onSelectDiagram={(type) => { startTransition(() => { setViewMode(type) }) }}
+                onFocusFile={handleFocusSelect}
+                summaryData={summaryData}
+              />
             </div>
           ) : (
             <div
@@ -242,7 +267,7 @@ export function DiagramViewer({ files, codeIndex, className, onNavigateToFile }:
                 {diagram ? (
                   isTreemap && diagram.type === 'treemap' ? (
                     <TreemapChart ref={treemapRef} data={(diagram as TreemapDiagramResult).data} width={containerSize.width} height={containerSize.height} onNodeClick={handleTreemapClick} />
-                  ) : diagram.type !== 'treemap' && diagram.type !== 'summary' ? (
+                  ) : diagram.type !== 'treemap' ? (
                     <Suspense fallback={<MermaidDiagramSkeleton />}>
                       <MermaidDiagram ref={mermaidRef} chart={diagram.chart} className="min-h-[400px] p-4" onNodeClick={handleNodeClick} />
                     </Suspense>

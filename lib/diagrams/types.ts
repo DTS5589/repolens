@@ -1,7 +1,6 @@
 // Diagram Types — shared type definitions for all diagram generators
 
 export type DiagramType =
-  | 'summary'
   | 'topology'
   | 'imports'
   | 'classes'
@@ -70,6 +69,9 @@ export interface SummaryDiagramResult {
 }
 
 export type AnyDiagramResult = MermaidDiagramResult | TreemapDiagramResult | SummaryDiagramResult
+
+/** View mode for the diagram panel — either a diagram type or the overview landing */
+export type DiagramViewMode = DiagramType | 'overview'
 
 export interface AvailableDiagram {
   id: DiagramType

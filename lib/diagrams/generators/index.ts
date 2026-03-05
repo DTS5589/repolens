@@ -38,8 +38,6 @@ export function generateDiagram(
   const data = analysis || analyzeCodebase(codeIndex)
 
   switch (type) {
-    case 'summary':
-      return generateProjectSummary(data, codeIndex)
     case 'topology':
       return generateTopologyDiagram(data)
     case 'imports':
@@ -57,6 +55,6 @@ export function generateDiagram(
     case 'focus':
       return generateFocusDiagram(data, focusTarget || '', focusHops || 1)
     default:
-      return generateProjectSummary(data, codeIndex)
+      return generateTopologyDiagram(data)
   }
 }

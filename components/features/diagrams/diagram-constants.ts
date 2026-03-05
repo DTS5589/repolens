@@ -1,5 +1,5 @@
 import {
-  Network, Boxes, Route, Component, SquareStack, Layers, LayoutDashboard,
+  Network, Boxes, Route, Component, SquareStack, Layers,
 } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
@@ -42,5 +42,4 @@ export const ICON_MAP: Record<string, typeof Network> = {
   entrypoints: Route,
   modules: Component,
   treemap: Layers,
-  summary: LayoutDashboard,
 }

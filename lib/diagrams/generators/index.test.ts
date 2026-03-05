@@ -7,12 +7,6 @@ describe('generateDiagram dispatcher', () => {
   const codeIndex = createMockCodeIndex()
   const files = createMockFileTree()
 
-  it('routes "summary" to generateProjectSummary', () => {
-    const result = generateDiagram('summary', codeIndex, files, analysis)
-    expect(result.type).toBe('summary')
-    expect('data' in result).toBe(true)
-  })
-
   it('routes "topology" to generateTopologyDiagram', () => {
     const result = generateDiagram('topology', codeIndex, files, analysis)
     expect(result.type).toBe('topology')
@@ -57,9 +51,9 @@ describe('generateDiagram dispatcher', () => {
     expect('chart' in result).toBe(true)
   })
 
-  it('defaults to summary for unrecognized type', () => {
+  it('defaults to topology for unrecognized type', () => {
     const result = generateDiagram('unknown' as any, codeIndex, files, analysis)
-    expect(result.type).toBe('summary')
+    expect(result.type).toBe('topology')
   })
 
   it('creates analysis from codeIndex if analysis is not provided', () => {
@@ -88,8 +82,8 @@ describe('generateDiagram dispatcher', () => {
       totalLines: 0,
       isIndexing: false,
     }
-    const types: Array<'summary' | 'topology' | 'imports' | 'classes' | 'entrypoints' | 'modules' | 'treemap' | 'externals'> = [
-      'summary', 'topology', 'imports', 'classes', 'entrypoints', 'modules', 'treemap', 'externals',
+    const types: Array<'topology' | 'imports' | 'classes' | 'entrypoints' | 'modules' | 'treemap' | 'externals'> = [
+      'topology', 'imports', 'classes', 'entrypoints', 'modules', 'treemap', 'externals',
     ]
     for (const type of types) {
       const result = generateDiagram(type, emptyIndex, [])
