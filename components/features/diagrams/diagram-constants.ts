@@ -1,5 +1,5 @@
 import {
-  Network, GitBranch, Boxes, Route, Component, SquareStack, Package, Layers,
+  Network, GitBranch, Boxes, Route, Component, SquareStack, Package, Layers, LayoutDashboard,
 } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
@@ -44,4 +44,5 @@ export const ICON_MAP: Record<string, typeof Network> = {
   modules: Component,
   treemap: Layers,
   externals: Package,
+  summary: LayoutDashboard,
 }

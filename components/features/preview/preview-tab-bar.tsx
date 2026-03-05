@@ -60,7 +60,7 @@ export function PreviewTabBar({
               <div className="relative">
                 <Icon className="h-3.5 w-3.5" />
                 {isLocked && (
-                  <Lock className="absolute -bottom-0.5 -right-1 h-2 w-2 text-text-muted" aria-hidden="true" />
+                  <Lock className="absolute -bottom-0.5 -right-1 h-2 w-2 text-destructive" aria-hidden="true" />
                 )}
               </div>
               <span className="hidden sm:inline">{tab.label}</span>

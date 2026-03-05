@@ -58,5 +58,6 @@ export function getAvailableDiagrams(analysis: FullAnalysis): AvailableDiagram[]
     { id: 'modules', label: hasComponents ? 'Components' : 'Modules', available: hasModules, reason: 'No module usage detected' },
     { id: 'treemap', label: 'Treemap', available: true },
     { id: 'externals', label: 'Packages', available: hasExternals, reason: 'No external dependencies found' },
+    { id: 'summary', label: 'Summary', available: analysis.files.size > 0 },
   ]
 }

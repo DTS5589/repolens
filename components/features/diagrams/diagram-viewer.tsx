@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useRef, useCallback, useEffect, lazy, Suspense } from 'react'
+import { useState, useMemo, useRef, useCallback, useEffect, useTransition, lazy, Suspense } from 'react'
 import type { MermaidDiagramHandle } from './mermaid-diagram'
 import { MermaidDiagramSkeleton } from '@/components/features/loading/tab-skeleton'
 import {
@@ -9,6 +9,7 @@ import {
   type DiagramType,
   type AnyDiagramResult,
   type TreemapDiagramResult,
+  type SummaryDiagramResult,
   type AvailableDiagram,
 } from '@/lib/diagrams/diagram-data'
 import type { CodeIndex } from '@/lib/code/code-index'
@@ -17,6 +18,7 @@ import { Network, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { FileNode } from '@/types/repository'
 import { TreemapChart } from './treemap-chart'
+import { SummaryDashboard } from './summary-dashboard'
 import { StatsBar } from './stats-bar'
 import { DiagramFloatingControls } from './diagram-floating-controls'
 import { DiagramToolbar } from './diagram-toolbar'
@@ -46,6 +48,8 @@ export function DiagramViewer({ files, codeIndex, className, onNavigateToFile }:
   const [selectedType, setSelectedType] = useState<DiagramType>('topology')
   const { codebaseAnalysis: analysis } = useRepository()
   const mermaidRef = useRef<MermaidDiagramHandle>(null)
+  const treemapRef = useRef<SVGSVGElement>(null)
+  const [isPending, startTransition] = useTransition()
 
   // Focus mode
   const [focusOpen, setFocusOpen] = useState(false)
@@ -127,14 +131,18 @@ export function DiagramViewer({ files, codeIndex, className, onNavigateToFile }:
   const resetView = useCallback(() => { setZoom(1); setPan({ x: 0, y: 0 }) }, [])
 
   const handleExportSvg = useCallback(() => {
-    const svgEl = mermaidRef.current?.getSvgElement()
-    if (svgEl) exportSvg(svgEl, selectedType)
-  }, [selectedType])
+    const svgEl = activeDiagramType === 'treemap'
+      ? treemapRef.current
+      : mermaidRef.current?.getSvgElement()
+    if (svgEl) exportSvg(svgEl, activeDiagramType)
+  }, [activeDiagramType])
 
   const handleExportPng = useCallback(() => {
-    const svgEl = mermaidRef.current?.getSvgElement()
-    if (svgEl) exportPng(svgEl, selectedType)
-  }, [selectedType])
+    const svgEl = activeDiagramType === 'treemap'
+      ? treemapRef.current
+      : mermaidRef.current?.getSvgElement()
+    if (svgEl) exportPng(svgEl, activeDiagramType)
+  }, [activeDiagramType])
 
   const handleNodeClick = useCallback((nodeId: string) => {
     if (!diagram || diagram.type === 'treemap' || diagram.type === 'summary') return
@@ -146,9 +154,9 @@ export function DiagramViewer({ files, codeIndex, className, onNavigateToFile }:
   const handleTreemapClick = useCallback((path: string) => { onNavigateToFile?.(path) }, [onNavigateToFile])
 
   const handleFocusSelect = useCallback((path: string) => {
-    setFocusTarget(path)
+    startTransition(() => { setFocusTarget(path) })
     setFocusQuery(path.split('/').pop() || path)
-  }, [])
+  }, [startTransition])
 
   const clearFocus = useCallback(() => {
     setFocusTarget(null)
@@ -173,7 +181,9 @@ export function DiagramViewer({ files, codeIndex, className, onNavigateToFile }:
   }
 
   const isTreemap = activeDiagramType === 'treemap'
-  const isMermaid = !isTreemap && diagram && diagram.type !== 'treemap' && diagram.type !== 'summary'
+  const isSummary = activeDiagramType === 'summary'
+  const isMermaid = !isTreemap && !isSummary && diagram && diagram.type !== 'treemap' && diagram.type !== 'summary'
+  const canExport = !!isMermaid || isTreemap
 
   return (
     <div className={cn('flex h-full flex-col', className)}>
@@ -181,10 +191,10 @@ export function DiagramViewer({ files, codeIndex, className, onNavigateToFile }:
       <DiagramToolbar
         availableDiagrams={availableDiagrams}
         selectedType={selectedType}
-        onSelectType={(type) => { setSelectedType(type); setFocusTarget(null); setFocusQuery('') }}
+        onSelectType={(type) => { startTransition(() => { setSelectedType(type) }); setFocusTarget(null); setFocusQuery('') }}
         focusTarget={focusTarget}
         onClearFocus={clearFocus}
-        isMermaid={!!isMermaid}
+        canExport={canExport}
         onExportSvg={handleExportSvg}
         onExportPng={handleExportPng}
       />
@@ -207,35 +217,47 @@ export function DiagramViewer({ files, codeIndex, className, onNavigateToFile }:
       ) : (
         <div className="flex-1 relative overflow-hidden">
           {/* Pannable / zoomable diagram area */}
-          <div
-            ref={containerRef}
-            className="w-full h-full overflow-hidden"
-            onWheel={handleWheel}
-            onMouseDown={handleMouseDown}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
-            onMouseLeave={handleMouseUp}
-            onContextMenu={handleContextMenu}
-          >
-            <div className="w-full h-full" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: 'center center' }}>
-              {diagram ? (
-                isTreemap && diagram.type === 'treemap' ? (
-                  <TreemapChart data={(diagram as TreemapDiagramResult).data} width={containerSize.width} height={containerSize.height} onNodeClick={handleTreemapClick} />
-                ) : diagram.type !== 'treemap' && diagram.type !== 'summary' ? (
-                  <Suspense fallback={<MermaidDiagramSkeleton />}>
-                    <MermaidDiagram ref={mermaidRef} chart={diagram.chart} className="min-h-[400px] p-4" onNodeClick={handleNodeClick} />
-                  </Suspense>
-                ) : null
-              ) : (
-                <div className="flex h-full items-center justify-center">
-                  <div className="flex flex-col items-center gap-3 animate-in fade-in duration-300">
-                    <Network className="h-8 w-8 text-text-muted" />
-                    <p className="text-sm text-text-muted">No diagram data available for this view</p>
-                  </div>
-                </div>
-              )}
+          {/* Pending overlay for transitions */}
+          {isPending && (
+            <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/40 backdrop-blur-[1px] transition-opacity">
+              <Loader2 className="h-5 w-5 animate-spin text-text-secondary" />
             </div>
-          </div>
+          )}
+          {isSummary && diagram?.type === 'summary' ? (
+            <div ref={containerRef} className={cn('w-full h-full overflow-auto', isPending && 'opacity-60 transition-opacity')}>
+              <SummaryDashboard data={(diagram as SummaryDiagramResult).data} className="h-full" />
+            </div>
+          ) : (
+            <div
+              ref={containerRef}
+              className={cn('w-full h-full overflow-hidden', isPending && 'opacity-60 transition-opacity')}
+              onWheel={handleWheel}
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseUp}
+              onContextMenu={handleContextMenu}
+            >
+              <div className="w-full h-full" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: 'center center' }}>
+                {diagram ? (
+                  isTreemap && diagram.type === 'treemap' ? (
+                    <TreemapChart ref={treemapRef} data={(diagram as TreemapDiagramResult).data} width={containerSize.width} height={containerSize.height} onNodeClick={handleTreemapClick} />
+                  ) : diagram.type !== 'treemap' && diagram.type !== 'summary' ? (
+                    <Suspense fallback={<MermaidDiagramSkeleton />}>
+                      <MermaidDiagram ref={mermaidRef} chart={diagram.chart} className="min-h-[400px] p-4" onNodeClick={handleNodeClick} />
+                    </Suspense>
+                  ) : null
+                ) : (
+                  <div className="flex h-full items-center justify-center">
+                    <div className="flex flex-col items-center gap-3 animate-in fade-in duration-300">
+                      <Network className="h-8 w-8 text-text-muted" />
+                      <p className="text-sm text-text-muted">No diagram data available for this view</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Floating controls -- bottom-right corner */}
           <DiagramFloatingControls

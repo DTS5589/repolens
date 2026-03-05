@@ -27,9 +27,9 @@ const AI_TAB_INFO: Record<string, TabInfo> = {
   diagram: {
     title: "AI Diagram Generator",
     description:
-      "Create architecture diagrams, flowcharts, and data models from your codebase. The AI analyzes your code structure and generates Mermaid diagrams.",
+      "Create architecture diagrams, dependency graphs, and treemaps from your codebase. The AI analyzes your code structure and generates interactive visualizations.",
     features: [
-      "7 diagram types including class, sequence, and ERD",
+      "8 diagram types including architecture, imports, classes, and treemap",
       "Interactive Mermaid rendering with zoom and pan",
       "Export to SVG and PNG",
       "Auto-generated from code analysis",
@@ -69,7 +69,7 @@ export function AIFeatureEmptyState({ tabId, onOpenSettings }: AIFeatureEmptySta
           <FeatureIcon className="h-8 w-8 text-primary" />
         </div>
         <div className="absolute -bottom-1 -right-1 flex items-center justify-center w-6 h-6 rounded-full bg-muted border-2 border-background">
-          <Lock className="h-3 w-3 text-muted-foreground" />
+          <Lock className="h-3 w-3 text-destructive" />
         </div>
       </div>
 

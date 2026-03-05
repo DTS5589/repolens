@@ -18,7 +18,7 @@ interface DiagramToolbarProps {
   onSelectType: (type: DiagramType) => void
   focusTarget: string | null
   onClearFocus: () => void
-  isMermaid: boolean
+  canExport: boolean
   onExportSvg: () => void
   onExportPng: () => void
 }
@@ -29,7 +29,7 @@ export function DiagramToolbar({
   onSelectType,
   focusTarget,
   onClearFocus,
-  isMermaid,
+  canExport,
   onExportSvg,
   onExportPng,
 }: DiagramToolbarProps) {
@@ -70,7 +70,7 @@ export function DiagramToolbar({
 
       <div className="flex items-center gap-1.5 shrink-0 ml-2">
         {/* Export dropdown */}
-        {isMermaid && (
+        {canExport && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="sm" className="gap-1.5 h-7 text-xs text-text-secondary hover:text-text-primary">
