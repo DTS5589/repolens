@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, act } from '@testing-library/react'
+import React from 'react'
 import { useApp, AppProvider } from '../app-provider'
 
 // Test helper component that reads context values
@@ -145,5 +146,39 @@ describe('useApp', () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     expect(() => render(<BadConsumer />)).toThrow('useApp must be used within an AppProvider')
     spy.mockRestore()
+  })
+})
+
+describe('AppProvider memoization', () => {
+  it('context value identity is stable across re-renders when deps are unchanged', async () => {
+    const capturedValues: unknown[] = []
+
+    function Spy() {
+      const ctx = useApp()
+      capturedValues.push(ctx)
+      return null
+    }
+
+    function Parent() {
+      const [, setTick] = React.useState(0)
+      return (
+        <>
+          <button data-testid="force-render" onClick={() => setTick(t => t + 1)} />
+          <AppProvider>
+            <Spy />
+          </AppProvider>
+        </>
+      )
+    }
+
+    render(<Parent />)
+
+    // Force parent re-render — AppProvider re-renders but state unchanged
+    await act(async () => {
+      screen.getByTestId('force-render').click()
+    })
+
+    expect(capturedValues.length).toBeGreaterThanOrEqual(2)
+    expect(capturedValues[0]).toBe(capturedValues[1])
   })
 })

@@ -196,19 +196,26 @@ function extractPySymbols(content: string): ExtractedSymbol[] {
   return symbols
 }
 
+/**
+ * Extract symbols from file content based on language.
+ * Standalone function — usable outside of React components.
+ */
+export function extractSymbols(content: string, language?: string): ExtractedSymbol[] {
+  if (isPythonFile(language)) {
+    return extractPySymbols(content)
+  }
+
+  if (isTsJsFile(language)) {
+    return extractTsSymbols(content)
+  }
+
+  // Fallback: try TS patterns for unknown languages
+  return extractTsSymbols(content)
+}
+
 export function useSymbolExtraction(content: string | null | undefined, language: string | undefined): ExtractedSymbol[] {
   return useMemo(() => {
     if (!content) return []
-
-    if (isPythonFile(language)) {
-      return extractPySymbols(content)
-    }
-
-    if (isTsJsFile(language)) {
-      return extractTsSymbols(content)
-    }
-
-    // Fallback: try TS patterns for unknown languages
-    return extractTsSymbols(content)
+    return extractSymbols(content, language)
   }, [content, language])
 }

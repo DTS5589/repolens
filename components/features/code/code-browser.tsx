@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useMemo, useCallback } from "react"
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { Code2 } from "lucide-react"
 import { useRepository, useAPIKeys, useTours, useApp } from "@/providers"
 import type { CodeBrowserProps, SidebarMode, SymbolRange, InlineActionType } from "./types"
@@ -27,7 +27,7 @@ import { TourSidebar } from "./tour-sidebar"
 import { TourPlayerBar } from "./tour-player-bar"
 import { TourStopOverlay } from "./tour-stop-overlay"
 
-export function CodeBrowser({ navigateToFile, onNavigateComplete }: CodeBrowserProps) {
+export function CodeBrowser({ navigateToFile, navigateToLine, onNavigateComplete }: CodeBrowserProps) {
   const { repo, files, codeIndex, updateCodeIndex, indexingProgress: sharedIndexingProgress, modifiedContents, setModifiedContents, getFileContent, codebaseAnalysis } = useRepository()
 
   // Tours
@@ -116,6 +116,18 @@ export function CodeBrowser({ navigateToFile, onNavigateComplete }: CodeBrowserP
     openFile,
     sidebarMode,
   })
+
+  // Navigate to a specific line after file opens (e.g. from global search overlay)
+  const lastNavigateLineRef = useRef<number | null>(null)
+  useEffect(() => {
+    if (navigateToLine && navigateToLine !== lastNavigateLineRef.current && navigateToFile) {
+      lastNavigateLineRef.current = navigateToLine
+      const timer = setTimeout(() => {
+        setHighlightedLine({ path: navigateToFile, line: navigateToLine })
+      }, 150)
+      return () => clearTimeout(timer)
+    }
+  }, [navigateToLine, navigateToFile, setHighlightedLine])
 
   const {
     confirmReplaceAll,

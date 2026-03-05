@@ -6,6 +6,9 @@ vi.mock('next-auth/react', () => ({
   signOut: vi.fn(),
   useSession: vi.fn(),
 }))
+vi.mock('next/image', () => ({
+  default: (props: React.ImgHTMLAttributes<HTMLImageElement>) => <img {...props} />,
+}))
 
 import { useSession } from 'next-auth/react'
 import { UserMenu } from './user-menu'
@@ -24,7 +27,7 @@ describe('UserMenu', () => {
     expect(container.innerHTML).toBe('')
   })
 
-  it('renders the user avatar when githubAvatar is present', () => {
+  it('renders a next/image Image with correct props when githubAvatar is present', () => {
     mockUseSession.mockReturnValue({
       data: {
         user: {
@@ -45,6 +48,8 @@ describe('UserMenu', () => {
       'src',
       'https://avatars.githubusercontent.com/u/1?v=4',
     )
+    expect(avatar).toHaveAttribute('width', '20')
+    expect(avatar).toHaveAttribute('height', '20')
   })
 
   it('renders fallback icon when githubAvatar is absent', () => {

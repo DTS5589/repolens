@@ -75,10 +75,10 @@ export function PreviewTabBar({
           <button
             onClick={onOpenSearch}
             className="flex items-center gap-2 h-7 px-2.5 rounded-md text-xs text-text-muted hover:text-text-secondary bg-foreground/[0.03] border border-foreground/[0.06] hover:border-foreground/10 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            title={`Search files (${isMac ? '⌘' : 'Ctrl+'}K)`}
+            title={`Search (${isMac ? '⌘' : 'Ctrl+'}K)`}
           >
             <Search className="h-3 w-3" />
-            <span className="hidden sm:inline">Search files</span>
+            <span className="hidden sm:inline">Search</span>
             <kbd className="hidden sm:inline text-[10px] text-text-muted/60 bg-foreground/[0.04] px-1 py-0.5 rounded font-mono leading-none">{isMac ? '⌘K' : 'Ctrl+K'}</kbd>
           </button>
         )}

@@ -7,6 +7,10 @@ import userEvent from '@testing-library/user-event'
 // ---------------------------------------------------------------------------
 
 vi.mock('next-auth/react', () => ({ signIn: vi.fn() }))
+vi.mock('next/image', () => ({
+  // eslint-disable-next-line @next/next/no-img-element
+  default: (props: React.ImgHTMLAttributes<HTMLImageElement>) => <img {...props} />,
+}))
 
 import { signIn } from 'next-auth/react'
 
@@ -24,18 +28,30 @@ import {
 // ---------------------------------------------------------------------------
 
 describe('AuthorAvatar', () => {
-  it('renders an image when avatarUrl is provided', () => {
+  it('renders a next/image Image with correct props when avatarUrl is provided', () => {
     render(<AuthorAvatar login="alice" avatarUrl="https://avatar.test/alice" name="Alice Smith" />)
 
     const img = screen.getByRole('img')
     expect(img).toHaveAttribute('src', 'https://avatar.test/alice')
     expect(img).toHaveAttribute('alt', "Alice Smith's avatar")
+    expect(img).toHaveAttribute('width', '24')
+    expect(img).toHaveAttribute('height', '24')
+    expect(img).toHaveAttribute('loading', 'lazy')
   })
 
   it('renders initials when no avatarUrl', () => {
     render(<AuthorAvatar login={null} avatarUrl={null} name="Alice Smith" />)
 
     expect(screen.getByText('AS')).toBeInTheDocument()
+  })
+
+  it('renders User icon fallback when name produces no initials', () => {
+    render(<AuthorAvatar login={null} avatarUrl={null} name="" />)
+
+    // No initials → renders <User /> icon inside the fallback div
+    expect(screen.queryByText(/[A-Z]/)).not.toBeInTheDocument()
+    const fallback = screen.getByLabelText('')
+    expect(fallback).toBeInTheDocument()
   })
 })
 

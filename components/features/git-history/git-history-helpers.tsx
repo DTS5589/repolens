@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo } from "react"
+import Image from "next/image"
 import { LogIn, User } from "lucide-react"
 import { signIn } from "next-auth/react"
 import { Badge } from "@/components/ui/badge"
@@ -34,7 +35,7 @@ export function AuthorAvatar({ login, avatarUrl, name, size = 24 }: AuthorAvatar
 
   if (avatarUrl) {
     return (
-      <img
+      <Image
         src={avatarUrl}
         alt={`${name}'s avatar`}
         width={size}

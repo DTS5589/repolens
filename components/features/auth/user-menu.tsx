@@ -1,6 +1,7 @@
 "use client"
 
 import { signOut, useSession } from "next-auth/react"
+import Image from "next/image"
 import { LogOut, User } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -32,8 +33,7 @@ export function UserMenu() {
           className="h-7 w-7 rounded-full overflow-hidden hover:ring-2 hover:ring-foreground/10"
         >
           {githubAvatar ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
+            <Image
               src={githubAvatar}
               alt={githubUsername ?? "User avatar"}
               className="h-5 w-5 rounded-full"

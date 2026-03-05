@@ -33,6 +33,7 @@ export type SidebarMode = 'explorer' | 'search' | 'outline' | 'tours'
 
 export interface CodeBrowserProps {
   navigateToFile?: string | null
+  navigateToLine?: number | null
   onNavigateComplete?: () => void
 }
 

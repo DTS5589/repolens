@@ -107,6 +107,7 @@ export function NewChangelogView(props: NewChangelogViewProps) {
               </p>
             )}
             <p className="text-xs text-text-muted text-center mb-6">AI reads your commit history and generates a formatted changelog.</p>
+
             <RefRangeSelector refSource={refSource} setRefSource={setRefSource} tags={tags} branches={branches}
               refsLoading={refsLoading} refsError={refsError} refOptions={refOptions}
               fromRef={fromRef} setFromRef={setFromRef} toRef={toRef} setToRef={setToRef} />
@@ -246,6 +247,7 @@ function PresetPicker({ isGenerating, isFetchingCommits, fromRef, toRef, selecte
       {CHANGELOG_PRESETS.map(preset => (
         <div key={preset.id}>
           <button onClick={() => preset.id === 'custom' ? setSelectedPreset('custom') : onGenerate(preset)} disabled={isDisabled}
+            aria-pressed={selectedPreset === preset.id}
             className={cn(
               'w-full flex items-center gap-3 p-3 rounded-lg border transition-all text-left hover:bg-foreground/[0.03] hover:border-foreground/15',
               selectedPreset === preset.id ? 'border-foreground/20 bg-foreground/[0.04]' : 'border-foreground/[0.06] bg-foreground/[0.01]',

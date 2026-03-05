@@ -123,15 +123,13 @@ export function PreviewPanel({ className }: { className?: string }) {
 
   // Global file search
   const [showGlobalSearch, setShowGlobalSearch] = useState(false)
-  const [globalSearchQuery, setGlobalSearchQuery] = useState("")
   const allFlatFiles = useMemo(() => files.length > 0 ? flattenFiles(files) : [], [files])
-  const globalSearchResults = useMemo(() => {
-    if (!globalSearchQuery.trim() || allFlatFiles.length === 0) return []
-    const q = globalSearchQuery.toLowerCase()
-    return allFlatFiles
-      .filter(f => f.path.toLowerCase().includes(q) || f.name.toLowerCase().includes(q))
-      .slice(0, 12)
-  }, [globalSearchQuery, allFlatFiles])
+  const allFilesForOverlay = useMemo(() => {
+    return allFlatFiles.map(f => {
+      const indexed = codeIndex.files.get(f.path)
+      return { path: f.path, name: f.name, lineCount: indexed?.lineCount ?? 0 }
+    })
+  }, [allFlatFiles, codeIndex])
 
   // Keyboard shortcut: Ctrl/Cmd+K to open search
   useEffect(() => {
@@ -142,27 +140,28 @@ export function PreviewPanel({ className }: { className?: string }) {
       }
       if (e.key === 'Escape' && showGlobalSearch) {
         setShowGlobalSearch(false)
-        setGlobalSearchQuery("")
       }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [showGlobalSearch])
 
-  const handleGlobalSearchSelect = (path: string) => {
+  const handleGlobalSearchSelect = useCallback((path: string, line?: number) => {
     setShowGlobalSearch(false)
-    setGlobalSearchQuery("")
-    handleNavigateToFile(path)
-  }
+    handleNavigateToFile(path, line)
+  }, [])
 
   // Navigate to a file from diagrams — switch to code tab
   const [pendingNavigateFile, setPendingNavigateFile] = useState<string | null>(null)
-  const handleNavigateToFile = (path: string) => {
+  const [pendingNavigateLine, setPendingNavigateLine] = useState<number | null>(null)
+  const handleNavigateToFile = useCallback((path: string, line?: number) => {
     setPendingNavigateFile(path)
+    setPendingNavigateLine(line ?? null)
     setActiveTab("code")
-  }
+  }, [])
   const handleNavigateComplete = useCallback(() => {
     setPendingNavigateFile(null)
+    setPendingNavigateLine(null)
   }, [])
 
   return (
@@ -251,7 +250,7 @@ export function PreviewPanel({ className }: { className?: string }) {
         ) : activeTab === "code" ? (
           <FeatureErrorBoundary featureName="Code Browser">
             <Suspense fallback={<CodeTabSkeleton />}>
-              <CodeBrowser key="code-browser" navigateToFile={pendingNavigateFile} onNavigateComplete={handleNavigateComplete} />
+              <CodeBrowser key="code-browser" navigateToFile={pendingNavigateFile} navigateToLine={pendingNavigateLine} onNavigateComplete={handleNavigateComplete} />
             </Suspense>
           </FeatureErrorBoundary>
         ) : activeTab === "deps" ? (
@@ -295,15 +294,13 @@ export function PreviewPanel({ className }: { className?: string }) {
         )}
       </div>
 
-      {/* Global file search overlay */}
+      {/* Global search overlay */}
       {showGlobalSearch && (
         <GlobalSearchOverlay
-          query={globalSearchQuery}
-          onQueryChange={setGlobalSearchQuery}
-          results={globalSearchResults}
-          totalFileCount={allFlatFiles.length}
+          codeIndex={codeIndex}
+          allFiles={allFilesForOverlay}
           onSelect={handleGlobalSearchSelect}
-          onClose={() => { setShowGlobalSearch(false); setGlobalSearchQuery("") }}
+          onClose={() => setShowGlobalSearch(false)}
         />
       )}
     </div>

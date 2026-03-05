@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
-import React from 'react'
+import React, { useState } from 'react'
 
 // Mock the GitHub fetcher module
 vi.mock('@/lib/github/fetcher', () => ({
@@ -99,5 +100,39 @@ describe('loadFileContent (via useRepository)', () => {
 
     // Without a repo connected, it should return null
     expect(content).toBeNull()
+  })
+})
+
+describe('RepositoryProvider memoization', () => {
+  it('context value identity is stable across re-renders when deps are unchanged', async () => {
+    const capturedValues: unknown[] = []
+
+    function Spy() {
+      const ctx = useRepository()
+      capturedValues.push(ctx)
+      return null
+    }
+
+    function Parent() {
+      const [, setTick] = useState(0)
+      return (
+        <>
+          <button data-testid="force-render" onClick={() => setTick(t => t + 1)} />
+          <RepositoryProvider>
+            <Spy />
+          </RepositoryProvider>
+        </>
+      )
+    }
+
+    render(<Parent />)
+
+    // Force parent re-render — provider re-renders but state unchanged
+    await act(async () => {
+      screen.getByTestId('force-render').click()
+    })
+
+    expect(capturedValues.length).toBeGreaterThanOrEqual(2)
+    expect(capturedValues[0]).toBe(capturedValues[1])
   })
 })
