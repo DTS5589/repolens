@@ -9,7 +9,11 @@ export function generateClassDiagram(analysis: FullAnalysis): MermaidDiagramResu
   // Sanitize a name so it's valid as a Mermaid class identifier
   const sanitizeName = (n: string) => n.replace(/[^a-zA-Z0-9_]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '') || 'Unknown'
   // Sanitize property/method text for display inside a class block
-  const sanitizeProp = (p: string) => p.replace(/[{}()<>|~"`;:*#]/g, ' ').replace(/\s+/g, ' ').trim()
+  const sanitizeProp = (p: string) => {
+    let s = p.replace(/[{}()<>\[\]|~"'`?;:*#@$&\\=/]/g, ' ').replace(/\s+/g, ' ').trim()
+    if (s.length > 40) s = s.slice(0, 37) + '...'
+    return s
+  }
 
   // First pass: collect ALL types/classes and score them by importance
   type TypeEntry = {
@@ -99,32 +103,32 @@ export function generateClassDiagram(analysis: FullAnalysis): MermaidDiagramResu
     nodeCount++
     if (t.kind === 'interface') {
       chart += `  class ${t.safeName} {\n    <<interface>>\n`
-      for (const prop of t.properties.slice(0, 8)) {
+      for (const prop of t.properties.slice(0, 6)) {
         const s = sanitizeProp(prop)
         if (s) chart += `    +${s}\n`
       }
       chart += `  }\n`
     } else if (t.kind === 'enum') {
       chart += `  class ${t.safeName} {\n    <<enumeration>>\n`
-      for (const prop of t.properties.slice(0, 8)) {
+      for (const prop of t.properties.slice(0, 6)) {
         const s = sanitizeProp(prop)
         if (s) chart += `    ${s}\n`
       }
       chart += `  }\n`
     } else if (t.kind === 'class') {
       chart += `  class ${t.safeName} {\n`
-      for (const prop of t.properties.slice(0, 6)) {
+      for (const prop of t.properties.slice(0, 5)) {
         const s = sanitizeProp(prop)
         if (s) chart += `    +${s}\n`
       }
-      for (const method of (t.methods || []).slice(0, 6)) {
+      for (const method of (t.methods || []).slice(0, 4)) {
         const s = sanitizeProp(method)
         if (s) chart += `    +${s}\n`
       }
       chart += `  }\n`
     } else {
       chart += `  class ${t.safeName} {\n    <<type>>\n`
-      for (const prop of t.properties.slice(0, 5)) {
+      for (const prop of t.properties.slice(0, 4)) {
         const s = sanitizeProp(prop)
         if (s) chart += `    ${s}\n`
       }

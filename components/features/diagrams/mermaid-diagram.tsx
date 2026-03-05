@@ -183,8 +183,10 @@ export function sanitizeMermaidSource(source: string): string {
   )
 
   // 10. Fix escaped inner quotes in already-quoted labels
+  // NOTE: \n excluded from character classes to prevent cross-line matching
+  // that would merge consecutive node definitions and break :::style syntax.
   s = s.replace(
-    /\["([^"]*)"([^"]+)"([^"]*)"\]/g,
+    /\["([^"\n]*)"([^"\n]+)"([^"\n]*)"\]/g,
     (_, before, middle, after) => `["${before}${middle}${after}"]`
   )
 
