@@ -1,4 +1,4 @@
-import type { GitHubRepo, RepoTree } from "@/types/repository"
+import type { GitHubRepo, RepoTree, GitHubTag, GitHubBranch, GitHubCommit, GitHubComparison } from "@/types/repository"
 import {
   getCached,
   getStale,
@@ -11,10 +11,14 @@ import {
 // TTL constants (milliseconds)
 // ---------------------------------------------------------------------------
 
-const CACHE_TTL_RATE_LIMIT = 30_000   // 30 seconds
+const CACHE_TTL_RATE_LIMIT  = 30_000   // 30 seconds
 const CACHE_TTL_REPO_META  = 300_000  // 5 minutes
 const CACHE_TTL_TREE       = 600_000  // 10 minutes
 const CACHE_TTL_FILE       = 600_000  // 10 minutes
+const CACHE_TTL_TAGS       = 600_000  // 10 minutes
+const CACHE_TTL_BRANCHES   = 300_000  // 5 minutes
+const CACHE_TTL_COMMITS    = 300_000  // 5 minutes
+const CACHE_TTL_COMPARE    = 600_000  // 10 minutes
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -132,6 +136,80 @@ export async function fetchRateLimitViaProxy(): Promise<{
 }
 
 // ---------------------------------------------------------------------------
+// Tags, branches, commits, compare — proxy fetch functions
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch repository tags through the proxy.
+ */
+export async function fetchTagsViaProxy(
+  owner: string,
+  name: string,
+  perPage?: number,
+): Promise<GitHubTag[]> {
+  const key = `tags:${owner}/${name}`
+  const params = new URLSearchParams({
+    owner,
+    name,
+  })
+  if (perPage !== undefined) params.set('per_page', String(perPage))
+  const url = `/api/github/tags?${params.toString()}`
+  return cachedProxyFetch<GitHubTag[]>(key, url, CACHE_TTL_TAGS)
+}
+
+/**
+ * Fetch repository branches through the proxy.
+ */
+export async function fetchBranchesViaProxy(
+  owner: string,
+  name: string,
+  perPage?: number,
+): Promise<GitHubBranch[]> {
+  const key = `branches:${owner}/${name}`
+  const params = new URLSearchParams({
+    owner,
+    name,
+  })
+  if (perPage !== undefined) params.set('per_page', String(perPage))
+  const url = `/api/github/branches?${params.toString()}`
+  return cachedProxyFetch<GitHubBranch[]>(key, url, CACHE_TTL_BRANCHES)
+}
+
+/**
+ * Fetch repository commits through the proxy.
+ */
+export async function fetchCommitsViaProxy(
+  owner: string,
+  name: string,
+  opts?: { sha?: string; since?: string; until?: string; perPage?: number },
+): Promise<GitHubCommit[]> {
+  const params = new URLSearchParams({ owner, name })
+  if (opts?.sha) params.set('sha', opts.sha)
+  if (opts?.since) params.set('since', opts.since)
+  if (opts?.until) params.set('until', opts.until)
+  if (opts?.perPage !== undefined) params.set('per_page', String(opts.perPage))
+
+  const key = `commits:${owner}/${name}:${params.toString()}`
+  const url = `/api/github/commits?${params.toString()}`
+  return cachedProxyFetch<GitHubCommit[]>(key, url, CACHE_TTL_COMMITS)
+}
+
+/**
+ * Fetch comparison between two refs through the proxy.
+ */
+export async function fetchCompareViaProxy(
+  owner: string,
+  name: string,
+  base: string,
+  head: string,
+): Promise<GitHubComparison> {
+  const key = `compare:${owner}/${name}:${base}...${head}`
+  const params = new URLSearchParams({ owner, name, base, head })
+  const url = `/api/github/compare?${params.toString()}`
+  return cachedProxyFetch<GitHubComparison>(key, url, CACHE_TTL_COMPARE)
+}
+
+// ---------------------------------------------------------------------------
 // Cache management — exported for manual invalidation
 // ---------------------------------------------------------------------------
 
@@ -146,4 +224,8 @@ export function invalidateRepoCache(owner: string, repo: string): void {
   invalidatePattern(prefix)
   invalidatePattern(`tree:${owner}/${repo}`)
   invalidatePattern(`file:${owner}/${repo}`)
+  invalidatePattern(`tags:${owner}/${repo}`)
+  invalidatePattern(`branches:${owner}/${repo}`)
+  invalidatePattern(`commits:${owner}/${repo}`)
+  invalidatePattern(`compare:${owner}/${repo}`)
 }

@@ -109,6 +109,52 @@ export interface RepositoryContext {
   error: string | null
 }
 
+export interface GitHubTag {
+  name: string
+  commitSha: string
+  commitUrl: string
+  tarballUrl: string
+  zipballUrl: string
+}
+
+export interface GitHubBranch {
+  name: string
+  commitSha: string
+  isProtected: boolean
+}
+
+export interface GitHubCommit {
+  sha: string
+  message: string
+  authorName: string
+  authorEmail: string
+  authorDate: string
+  committerName: string
+  committerDate: string
+  url: string
+  authorLogin: string | null
+  authorAvatarUrl: string | null
+  parents: Array<{ sha: string }>
+}
+
+export interface GitHubComparisonFile {
+  filename: string
+  status: string
+  additions: number
+  deletions: number
+  changes: number
+  patch?: string
+}
+
+export interface GitHubComparison {
+  status: string
+  aheadBy: number
+  behindBy: number
+  totalCommits: number
+  commits: GitHubCommit[]
+  files: GitHubComparisonFile[]
+}
+
 export interface DependencyNode {
   file: string
   imports: string[]

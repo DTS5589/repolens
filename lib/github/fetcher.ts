@@ -1,6 +1,6 @@
 // GitHub API Fetcher
 
-import type { GitHubRepo, RepoTree, FileNode } from '@/types/repository'
+import type { GitHubRepo, RepoTree, FileNode, GitHubTag, GitHubBranch, GitHubCommit, GitHubComparison } from '@/types/repository'
 import { buildRepoApiUrl, buildTreeApiUrl, buildRawContentUrl } from './parser'
 
 const GITHUB_API_BASE = 'https://api.github.com'
@@ -108,6 +108,196 @@ export async function fetchFileContent(
   }
   
   return response.text()
+}
+
+/**
+ * Build GitHub API headers with optional auth token.
+ */
+function buildHeaders(token?: string): HeadersInit {
+  const headers: HeadersInit = {
+    'Accept': 'application/vnd.github.v3+json',
+  }
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+  return headers
+}
+
+/**
+ * Handle common GitHub API error responses.
+ */
+function handleGitHubError(response: Response, context: string): never {
+  if (response.status === 404) {
+    throw new Error(`${context} not found.`)
+  }
+  if (response.status === 403) {
+    throw new Error('Rate limit exceeded. Please try again later or add a GitHub token.')
+  }
+  if (response.status === 422) {
+    throw new Error(`Invalid request for ${context.toLowerCase()}.`)
+  }
+  throw new Error(`Failed to fetch ${context.toLowerCase()}: ${response.statusText}`)
+}
+
+/**
+ * Fetch repository tags.
+ */
+export async function fetchTags(
+  owner: string,
+  name: string,
+  options: FetchOptions & { perPage?: number; page?: number } = {},
+): Promise<GitHubTag[]> {
+  const headers = buildHeaders(options.token)
+  const perPage = options.perPage ?? 100
+  const page = options.page ?? 1
+
+  const url = `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/tags?per_page=${perPage}&page=${page}`
+  const response = await fetch(url, { headers })
+
+  if (!response.ok) {
+    handleGitHubError(response, 'Tags')
+  }
+
+  const data = await response.json()
+
+  return (data as Array<Record<string, unknown>>).map((tag) => ({
+    name: tag.name as string,
+    commitSha: (tag.commit as Record<string, string>).sha,
+    commitUrl: (tag.commit as Record<string, string>).url,
+    tarballUrl: (tag.tarball_url as string) ?? '',
+    zipballUrl: (tag.zipball_url as string) ?? '',
+  }))
+}
+
+/**
+ * Fetch repository branches.
+ */
+export async function fetchBranches(
+  owner: string,
+  name: string,
+  options: FetchOptions & { perPage?: number; page?: number } = {},
+): Promise<GitHubBranch[]> {
+  const headers = buildHeaders(options.token)
+  const perPage = options.perPage ?? 100
+  const page = options.page ?? 1
+
+  const url = `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/branches?per_page=${perPage}&page=${page}`
+  const response = await fetch(url, { headers })
+
+  if (!response.ok) {
+    handleGitHubError(response, 'Branches')
+  }
+
+  const data = await response.json()
+
+  return (data as Array<Record<string, unknown>>).map((branch) => ({
+    name: branch.name as string,
+    commitSha: (branch.commit as Record<string, string>).sha,
+    isProtected: (branch.protected as boolean) ?? false,
+  }))
+}
+
+/**
+ * Fetch repository commits.
+ */
+export async function fetchCommits(
+  owner: string,
+  name: string,
+  options: FetchOptions & {
+    sha?: string
+    since?: string
+    until?: string
+    perPage?: number
+    page?: number
+  } = {},
+): Promise<GitHubCommit[]> {
+  const headers = buildHeaders(options.token)
+  const perPage = options.perPage ?? 100
+  const page = options.page ?? 1
+
+  const params = new URLSearchParams({
+    per_page: String(perPage),
+    page: String(page),
+  })
+  if (options.sha) params.set('sha', options.sha)
+  if (options.since) params.set('since', options.since)
+  if (options.until) params.set('until', options.until)
+
+  const url = `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/commits?${params.toString()}`
+  const response = await fetch(url, { headers })
+
+  if (!response.ok) {
+    handleGitHubError(response, 'Commits')
+  }
+
+  const data = await response.json()
+  return mapCommits(data as Array<Record<string, unknown>>)
+}
+
+/**
+ * Fetch comparison between two refs (branches, tags, or commits).
+ */
+export async function fetchCompare(
+  owner: string,
+  name: string,
+  base: string,
+  head: string,
+  options: FetchOptions = {},
+): Promise<GitHubComparison> {
+  const headers = buildHeaders(options.token)
+
+  const url = `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`
+  const response = await fetch(url, { headers })
+
+  if (!response.ok) {
+    handleGitHubError(response, 'Comparison')
+  }
+
+  const data = (await response.json()) as Record<string, unknown>
+
+  return {
+    status: data.status as string,
+    aheadBy: data.ahead_by as number,
+    behindBy: data.behind_by as number,
+    totalCommits: data.total_commits as number,
+    commits: mapCommits(data.commits as Array<Record<string, unknown>>),
+    files: ((data.files as Array<Record<string, unknown>>) ?? []).map((file) => ({
+      filename: file.filename as string,
+      status: file.status as string,
+      additions: file.additions as number,
+      deletions: file.deletions as number,
+      changes: file.changes as number,
+      patch: file.patch as string | undefined,
+    })),
+  }
+}
+
+/**
+ * Map raw GitHub commit objects to GitHubCommit[].
+ */
+function mapCommits(raw: Array<Record<string, unknown>>): GitHubCommit[] {
+  return raw.map((item) => {
+    const commit = item.commit as Record<string, unknown>
+    const commitAuthor = commit.author as Record<string, string>
+    const commitCommitter = commit.committer as Record<string, string>
+    const author = item.author as Record<string, string> | null
+
+    return {
+      sha: item.sha as string,
+      message: commit.message as string,
+      authorName: commitAuthor.name,
+      authorEmail: commitAuthor.email,
+      authorDate: commitAuthor.date,
+      committerName: commitCommitter.name,
+      committerDate: commitCommitter.date,
+      url: item.html_url as string,
+      authorLogin: author?.login ?? null,
+      authorAvatarUrl: author?.avatar_url ?? null,
+      parents: ((item.parents as Array<Record<string, string>>) ?? []).map((p) => ({
+        sha: p.sha,
+      })),
+    }
+  })
 }
 
 /**

@@ -20,6 +20,7 @@ import {
   DiagramTabSkeleton,
   CodeTabSkeleton,
   DepsTabSkeleton,
+  ChangelogTabSkeleton,
 } from "@/components/features/loading/tab-skeleton"
 import { FeatureErrorBoundary } from "@/components/ui/feature-error-boundary"
 
@@ -38,6 +39,9 @@ const IssuesPanel = lazy(() =>
 )
 const DepsPanel = lazy(() =>
   import("@/components/features/deps/deps-panel").then(m => ({ default: m.DepsPanel }))
+)
+const ChangelogViewer = lazy(() =>
+  import("@/components/features/changelog/changelog-viewer").then(m => ({ default: m.ChangelogViewer }))
 )
 
 export function PreviewPanel({ className }: { className?: string }) {
@@ -89,7 +93,7 @@ export function PreviewPanel({ className }: { className?: string }) {
   // Shareable URL: sync URL bar when repo or tab changes
   useEffect(() => {
     if (repo) {
-      updateUrlState({ repoUrl: repo.url, view: activeTab as 'repo' | 'issues' | 'docs' | 'diagram' | 'code' | 'deps' })
+      updateUrlState({ repoUrl: repo.url, view: activeTab as 'repo' | 'issues' | 'docs' | 'diagram' | 'code' | 'deps' | 'changelog' })
     } else if (!isConnecting) {
       clearUrlState()
     }
@@ -252,6 +256,12 @@ export function PreviewPanel({ className }: { className?: string }) {
               ) : (
                 <DepsPanel codeIndex={codeIndex} />
               )}
+            </Suspense>
+          </FeatureErrorBoundary>
+        ) : activeTab === "changelog" ? (
+          <FeatureErrorBoundary featureName="Changelog">
+            <Suspense fallback={<ChangelogTabSkeleton />}>
+              <ChangelogViewer />
             </Suspense>
           </FeatureErrorBoundary>
         ) : (

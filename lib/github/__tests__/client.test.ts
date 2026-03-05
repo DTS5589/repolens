@@ -223,13 +223,17 @@ describe('GitHub client — caching integration', () => {
   })
 
   describe('invalidateRepoCache', () => {
-    it('invalidates repo, tree, and file patterns for the given owner/repo', () => {
+    it('invalidates repo, tree, file, tags, branches, commits, and compare patterns for the given owner/repo', () => {
       invalidateRepoCache('facebook', 'react')
 
       expect(cacheMock.invalidatePattern).toHaveBeenCalledWith('repo:facebook/react')
       expect(cacheMock.invalidatePattern).toHaveBeenCalledWith('tree:facebook/react')
       expect(cacheMock.invalidatePattern).toHaveBeenCalledWith('file:facebook/react')
-      expect(cacheMock.invalidatePattern).toHaveBeenCalledTimes(3)
+      expect(cacheMock.invalidatePattern).toHaveBeenCalledWith('tags:facebook/react')
+      expect(cacheMock.invalidatePattern).toHaveBeenCalledWith('branches:facebook/react')
+      expect(cacheMock.invalidatePattern).toHaveBeenCalledWith('commits:facebook/react')
+      expect(cacheMock.invalidatePattern).toHaveBeenCalledWith('compare:facebook/react')
+      expect(cacheMock.invalidatePattern).toHaveBeenCalledTimes(7)
     })
   })
 

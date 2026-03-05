@@ -16,6 +16,13 @@ describe('tab-config', () => {
     expect(ids).toContain('diagram')
     expect(ids).toContain('code')
     expect(ids).toContain('deps')
+    expect(ids).toContain('changelog')
+  })
+
+  it('includes a "changelog" tab', () => {
+    const changelogTab = PREVIEW_TABS.find(t => t.id === 'changelog')
+    expect(changelogTab).toBeDefined()
+    expect(changelogTab!.label).toBe('Changelog')
   })
 
   it('every tab has id, label, and icon', () => {

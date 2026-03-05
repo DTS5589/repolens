@@ -122,6 +122,35 @@ export function MermaidDiagramSkeleton() {
 }
 
 /**
+ * Skeleton fallback for the Changelog tab.
+ * Mimics the sidebar + content area layout (matches DocsTabSkeleton).
+ */
+export function ChangelogTabSkeleton() {
+  return (
+    <div role="status" aria-label="Loading changelog" className="flex h-full">
+      {/* Sidebar */}
+      <div className="w-56 border-r p-4 flex flex-col gap-2">
+        <Skeleton className="h-8 w-full" />
+        {Array.from({ length: 5 }).map((_, i) => (
+          <Skeleton key={i} className="h-5 w-[80%]" />
+        ))}
+      </div>
+      {/* Content area */}
+      <div className="flex-1 p-6 flex flex-col gap-4">
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-10 w-full rounded-lg" />
+        <Skeleton className="h-10 w-full rounded-lg" />
+        <div className="flex flex-col gap-2 mt-2">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-16 w-full rounded-lg" />
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
  * Skeleton fallback for the Deps tab.
  * Mimics the summary cards row + dependency table rows.
  */

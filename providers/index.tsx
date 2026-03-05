@@ -7,6 +7,7 @@ import { AppProvider, useApp } from "./app-provider"
 import { APIKeysProvider, useAPIKeys } from "./api-keys-provider"
 import { RepositoryProvider, useRepository, type LoadingStage } from "./repository-provider"
 import { DocsProvider, useDocs, useDocsChat } from "./docs-provider"
+import { ChangelogProvider, useChangelog, useChangelogChat } from "./changelog-provider"
 import { ToursProvider, useTours } from "./tours-provider"
 
 interface ProvidersProps {
@@ -21,9 +22,11 @@ export function Providers({ children }: ProvidersProps) {
           <RepositoryProvider>
             <ToursProvider>
               <DocsProvider>
-                <AppProvider>
-                  {children}
-                </AppProvider>
+                <ChangelogProvider>
+                  <AppProvider>
+                    {children}
+                  </AppProvider>
+                </ChangelogProvider>
               </DocsProvider>
             </ToursProvider>
           </RepositoryProvider>
@@ -33,6 +36,6 @@ export function Providers({ children }: ProvidersProps) {
   )
 }
 
-export { useApp, useAPIKeys, useRepository, useDocs, useDocsChat, useTours }
+export { useApp, useAPIKeys, useRepository, useDocs, useDocsChat, useChangelog, useChangelogChat, useTours }
 export type { LoadingStage }
 export type { PinnedFile, PinnedContentsResult } from '@/types/types'
