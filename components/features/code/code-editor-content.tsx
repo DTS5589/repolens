@@ -35,6 +35,8 @@ interface CodeEditorContentProps {
   hoveredSymbolRange?: SymbolRange | null
   onAction?: (type: InlineActionType) => void
   hasApiKey?: boolean
+  /** Multi-line range highlight for tour stops */
+  highlightedRange?: { startLine: number; endLine: number } | null
 }
 
 export function CodeEditorContent({
@@ -55,6 +57,7 @@ export function CodeEditorContent({
   hoveredSymbolRange,
   onAction,
   hasApiKey,
+  highlightedRange,
 }: CodeEditorContentProps) {
   const editorRef = useRef<HTMLDivElement>(null)
 
@@ -130,6 +133,7 @@ export function CodeEditorContent({
           hoveredSymbolRange={hoveredSymbolRange}
           onAction={onAction}
           hasApiKey={hasApiKey}
+          highlightedRange={highlightedRange}
         />
       )
     }

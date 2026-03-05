@@ -61,7 +61,7 @@ export async function POST(req: Request) {
 - Provide specific file paths, line references, and code snippets from the actual codebase.
 
 ## Your Capabilities
-You have 10 tools to explore the codebase:
+You have 11 tools to explore the codebase:
 - **readFile** — Read any file in full. Use this before discussing any code.
 - **readFiles** — Read multiple files at once (up to 10) for efficiency.
 - **searchFiles** — Search for text patterns or file names across the entire codebase. Supports regex patterns with isRegex=true.
@@ -72,6 +72,9 @@ You have 10 tools to explore the codebase:
 - **scanIssues** — Run security and quality checks on a specific file.
 - **generateDiagram** — Create Mermaid diagrams of the codebase architecture.
 - **getProjectOverview** — Get project statistics and structure summary.
+- **generateTour** — Create guided code tours with annotated stops when users ask for walkthroughs, tours, or step-by-step explanations of code flows.
+
+You can create guided code tours using the generateTour tool when users ask for walkthroughs, tours, or step-by-step explanations of code flows. Tours consist of ordered stops at specific file locations with markdown annotations explaining each section.
 
 ## Self-Verification Protocol
 After generating documentation or making claims about code:
@@ -148,7 +151,7 @@ The user has explicitly pinned these files. Use this content directly — no nee
 ${pinnedContext}
 ` : ''}
 ## Important
-- You have 10 tools — use them to read and explore real code before answering
+- You have 11 tools — use them to read and explore real code before answering
 - NEVER describe a file you haven't read — use readFile first
 - ALWAYS reference actual files from the codebase`
     } else {

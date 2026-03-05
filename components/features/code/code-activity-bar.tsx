@@ -1,7 +1,7 @@
 "use client"
 
 import { Button } from '@/components/ui/button'
-import { FileText, Search, ListTree } from 'lucide-react'
+import { FileText, Search, ListTree, Route } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { SidebarMode } from './types'
 
@@ -15,6 +15,7 @@ export function CodeActivityBar({ sidebarMode, onModeChange }: CodeActivityBarPr
     { mode: 'explorer', icon: FileText, label: 'Explorer' },
     { mode: 'search', icon: Search, label: 'Search' },
     { mode: 'outline', icon: ListTree, label: 'Outline' },
+    { mode: 'tours', icon: Route, label: 'Tours' },
   ]
 
   return (

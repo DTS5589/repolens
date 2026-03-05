@@ -5,7 +5,8 @@ import type { FileNode } from '@/types/repository'
 
 const DB_NAME = 'repolens-cache'
 const STORE_NAME = 'repos'
-const DB_VERSION = 1
+const TOURS_STORE_NAME = 'tours'
+const DB_VERSION = 2
 const MAX_REPOS = 5
 
 export interface CachedRepo {
@@ -35,6 +36,10 @@ function openDB(): Promise<IDBDatabase> {
       const db = request.result
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         db.createObjectStore(STORE_NAME, { keyPath: 'key' })
+      }
+      if (!db.objectStoreNames.contains(TOURS_STORE_NAME)) {
+        const tourStore = db.createObjectStore(TOURS_STORE_NAME, { keyPath: 'id' })
+        tourStore.createIndex('repoKey', 'repoKey', { unique: false })
       }
     }
 

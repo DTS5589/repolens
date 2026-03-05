@@ -14,6 +14,8 @@ import {
   scanIssuesSchema,
   generateDiagramSchema,
 } from '@/lib/ai/tool-schemas'
+import { generateTourSchema } from '@/lib/ai/tour-schemas'
+import type { Tour, TourStop } from '@/types/tours'
 
 // ---------------------------------------------------------------------------
 // Zod validation helper
@@ -88,6 +90,11 @@ export function executeToolLocally(
     }
     case 'getProjectOverview':
       return JSON.stringify(executeGetProjectOverview(codeIndex))
+    case 'generateTour': {
+      const result = generateTourSchema.safeParse(input)
+      if (!result.success) return JSON.stringify({ error: formatZodError(result.error.issues) })
+      return JSON.stringify(executeGenerateTour(result.data, codeIndex))
+    }
     default:
       return JSON.stringify({ error: `Unknown tool: ${toolName}` })
   }
@@ -660,4 +667,225 @@ function executeGetProjectOverview(
     hasConfig: paths.some(p => p.includes('tsconfig') || p.includes('package.json')),
     entryPoints: paths.filter(p => p.match(/(index|main|app|page)\.(ts|tsx|js|jsx)$/)).slice(0, 10),
   }
+}
+
+// ---------------------------------------------------------------------------
+// generateTour
+// ---------------------------------------------------------------------------
+
+/** Patterns for locating architecturally significant declarations in a file. */
+const DECLARATION_PATTERNS = [
+  // Exported declarations (highest priority)
+  /^export\s+(?:default\s+)?(?:async\s+)?function\s+(\w+)/,
+  /^export\s+(?:default\s+)?class\s+(\w+)/,
+  /^export\s+(?:default\s+)?(?:const|let)\s+(\w+)/,
+  /^export\s+(?:default\s+)?interface\s+(\w+)/,
+  /^export\s+(?:default\s+)?type\s+(\w+)/,
+  /^export\s+(?:default\s+)?enum\s+(\w+)/,
+  // Non-exported declarations (fallback)
+  /^(?:async\s+)?function\s+(\w+)/,
+  /^class\s+(\w+)/,
+  /^(?:const|let)\s+(\w+)\s*=/,
+  /^def\s+(\w+)/,
+]
+
+/** File name patterns that indicate architecturally significant files. */
+const SIGNIFICANT_FILE_PATTERNS = [
+  /readme/i,
+  /^index\.(ts|tsx|js|jsx)$/,
+  /^main\.(ts|tsx|js|jsx)$/,
+  /^app\.(ts|tsx|js|jsx)$/,
+  /^page\.(ts|tsx|js|jsx)$/,
+  /config/i,
+  /^layout\.(ts|tsx|js|jsx)$/,
+  /^route\.(ts|tsx|js|jsx)$/,
+]
+
+/**
+ * Find the first significant declaration in a file and return its line range.
+ * Falls back to lines 1–20 if nothing matches.
+ */
+function findSignificantRange(
+  lines: string[],
+): { startLine: number; endLine: number; title: string } {
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trimStart()
+    for (const pattern of DECLARATION_PATTERNS) {
+      const match = pattern.exec(trimmed)
+      if (match) {
+        const name = match[1] || 'default export'
+        // Capture the declaration + a reasonable amount of body
+        const endLine = Math.min(lines.length, i + 15)
+        return { startLine: i + 1, endLine, title: name }
+      }
+    }
+  }
+  return { startLine: 1, endLine: Math.min(20, lines.length), title: 'File overview' }
+}
+
+/**
+ * Score a file for architectural significance. Higher is more significant.
+ */
+function significanceScore(path: string, file: { lineCount: number; content: string }): number {
+  let score = 0
+  const fileName = path.split('/').pop() || ''
+
+  for (const pattern of SIGNIFICANT_FILE_PATTERNS) {
+    if (pattern.test(fileName)) {
+      score += 10
+      break
+    }
+  }
+
+  // Files with many exports are likely important modules
+  const exportCount = (file.content.match(/^export\s/gm) || []).length
+  score += Math.min(exportCount, 10)
+
+  // Prefer files that aren't tests
+  if (path.includes('.test.') || path.includes('.spec.') || path.includes('__tests__')) {
+    score -= 20
+  }
+
+  // Prefer source files over generated/config
+  if (path.endsWith('.json') || path.endsWith('.lock') || path.endsWith('.md')) {
+    score -= 5
+  }
+
+  return score
+}
+
+/**
+ * Generate a brief annotation for a tour stop describing the file's role.
+ */
+/** Escape characters that have special meaning in markdown. */
+function escapeMd(text: string): string {
+  return text.replace(/[\[\]()_*`]/g, '\\$&')
+}
+
+function generateAnnotation(path: string, lines: string[], title: string): string {
+  const fileName = path.split('/').pop() || path
+  const dir = path.split('/').slice(0, -1).join('/') || '(root)'
+
+  const safeFileName = escapeMd(fileName)
+  const safeDir = escapeMd(dir)
+  const safeTitle = escapeMd(title)
+
+  // Count imports/exports for context
+  const exportCount = lines.filter(l => l.trimStart().startsWith('export ')).length
+  const importCount = lines.filter(l => l.trimStart().startsWith('import ')).length
+
+  let description = `**${safeFileName}** in \`${safeDir}\``
+  if (exportCount > 0) {
+    description += ` — exports ${exportCount} symbol${exportCount > 1 ? 's' : ''}`
+  }
+  if (importCount > 0) {
+    description += `, imports from ${importCount} module${importCount > 1 ? 's' : ''}`
+  }
+  description += '.'
+
+  if (title !== 'File overview') {
+    description += ` This stop highlights the \`${safeTitle}\` declaration.`
+  }
+
+  return description
+}
+
+function executeGenerateTour(
+  input: { repoKey: string; theme?: string; maxStops?: number },
+  codeIndex: CodeIndex,
+): Record<string, unknown> {
+  const maxStops = input.maxStops ?? 8
+  const paths = allPaths(codeIndex)
+
+  if (paths.length === 0) {
+    return { error: 'No files in code index' }
+  }
+
+  // Select files based on theme or architectural significance
+  let candidateFiles: Array<{ path: string; file: IndexedFile }>
+
+  if (input.theme) {
+    // Theme-based: search the index for relevant files
+    const searchResults = searchIndex(codeIndex, input.theme)
+    const matched = new Set<string>()
+
+    candidateFiles = []
+    for (const sr of searchResults) {
+      if (matched.has(sr.file)) continue
+      matched.add(sr.file)
+      const file = codeIndex.files.get(sr.file)
+      if (file) {
+        candidateFiles.push({ path: sr.file, file })
+      }
+    }
+
+    // If theme search yields too few results, supplement with significant files
+    if (candidateFiles.length < maxStops) {
+      for (const [path, file] of codeIndex.files) {
+        if (matched.has(path)) continue
+        if (candidateFiles.length >= maxStops * 2) break
+        candidateFiles.push({ path, file })
+      }
+    }
+  } else {
+    // General tour: rank all files by architectural significance
+    candidateFiles = Array.from(codeIndex.files.entries()).map(([path, file]) => ({
+      path,
+      file,
+    }))
+  }
+
+  // Filter out test files and non-source assets for cleaner tours
+  candidateFiles = candidateFiles.filter(({ path }) => {
+    if (path.includes('.test.') || path.includes('.spec.') || path.includes('__tests__')) return false
+    if (path.endsWith('.lock') || path.endsWith('.map')) return false
+    return true
+  })
+
+  // Score and sort candidates
+  candidateFiles.sort((a, b) => {
+    const scoreA = significanceScore(a.path, a.file)
+    const scoreB = significanceScore(b.path, b.file)
+    return scoreB - scoreA
+  })
+
+  // Take top candidates
+  const selected = candidateFiles.slice(0, maxStops)
+
+  // Build tour stops
+  const stops: TourStop[] = selected.map(({ path, file }) => {
+    const { startLine, endLine, title } = findSignificantRange(file.lines)
+    const annotation = generateAnnotation(path, file.lines, title)
+
+    return {
+      id: crypto.randomUUID(),
+      filePath: path,
+      startLine,
+      endLine,
+      title,
+      annotation,
+    }
+  })
+
+  const tourName = input.theme
+    ? `${input.theme.charAt(0).toUpperCase() + input.theme.slice(1)} Tour`
+    : 'Architecture Tour'
+
+  const tourDescription = input.theme
+    ? `A guided tour focused on ${input.theme} in this codebase.`
+    : 'A guided tour of the key architectural files in this codebase.'
+
+  const now = Date.now()
+
+  const tour: Tour = {
+    id: crypto.randomUUID(),
+    name: tourName,
+    description: tourDescription,
+    repoKey: input.repoKey,
+    stops,
+    createdAt: now,
+    updatedAt: now,
+  }
+
+  return { tour, stopCount: stops.length }
 }

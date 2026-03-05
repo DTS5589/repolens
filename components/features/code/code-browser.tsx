@@ -2,13 +2,14 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from "react"
 import { Code2 } from "lucide-react"
-import { useRepository, useAPIKeys } from "@/providers"
+import { useRepository, useAPIKeys, useTours } from "@/providers"
 import type { CodeBrowserProps, SidebarMode, SymbolRange, InlineActionType } from "./types"
 import { useFileOperations } from "./hooks/use-file-operations"
 import { useSearch } from "./hooks/use-search"
 import { useReplace } from "./hooks/use-replace"
 import { useDownloads } from "./hooks/use-downloads"
 import { scanIssues } from "@/lib/code/issue-scanner"
+import { flattenFiles } from "@/lib/code/code-index"
 import type { CodeIssue } from "@/lib/code/issue-scanner"
 import type { FileIssueCounts } from "./file-tree-node"
 import { SearchSidebar } from "./search-sidebar"
@@ -22,9 +23,28 @@ import { CodeEditorContent } from "./code-editor-content"
 import { CodeTabBar, CodeBreadcrumb } from "./code-tab-bar"
 import { CodeExplorerSidebar } from "./code-explorer-sidebar"
 import { InlineActionPanel } from "./inline-action-panel"
+import { TourSidebar } from "./tour-sidebar"
+import { TourPlayerBar } from "./tour-player-bar"
+import { TourStopOverlay } from "./tour-stop-overlay"
 
 export function CodeBrowser({ navigateToFile, onNavigateComplete }: CodeBrowserProps) {
   const { repo, files, codeIndex, updateCodeIndex, indexingProgress: sharedIndexingProgress, modifiedContents, setModifiedContents, getFileContent, codebaseAnalysis } = useRepository()
+
+  // Tours
+  const {
+    tours,
+    activeTour,
+    activeStopIndex,
+    isPlaying,
+    loadTours,
+    createTour,
+    deleteTour,
+    startTour,
+    stopTour,
+    goToStop,
+    nextStop,
+    prevStop,
+  } = useTours()
 
   // Sidebar state
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>('explorer')
@@ -135,6 +155,40 @@ export function CodeBrowser({ navigateToFile, onNavigateComplete }: CodeBrowserP
   const hasApiKey = getValidProviders().length > 0 && selectedModel !== null
   const [hoveredSymbolRange, setHoveredSymbolRange] = useState<SymbolRange | null>(null)
   const isPanelOpen = inlineResult !== null
+
+  // Load tours when repo changes
+  useEffect(() => {
+    if (repo) {
+      const repoKey = `${repo.owner}/${repo.name}`
+      loadTours(repoKey)
+    }
+  }, [repo, loadTours])
+
+  // Navigate to current tour stop's file when stop changes
+  useEffect(() => {
+    if (!isPlaying || !activeTour || activeTour.stops.length === 0) return
+    const stop = activeTour.stops[activeStopIndex]
+    if (!stop) return
+    // Open the file if it's not already the active tab
+    if (activeTabPath !== stop.filePath) {
+      const fileNode = flattenFiles(files).find(f => f.path === stop.filePath)
+      if (fileNode) openFile(fileNode)
+    }
+  }, [isPlaying, activeTour, activeStopIndex, activeTabPath, openFile, files])
+
+  // Compute highlighted range from active tour stop
+  const tourHighlightedRange = useMemo(() => {
+    if (!isPlaying || !activeTour || activeTour.stops.length === 0) return null
+    const stop = activeTour.stops[activeStopIndex]
+    if (!stop || stop.filePath !== activeTabPath) return null
+    return { startLine: stop.startLine, endLine: stop.endLine }
+  }, [isPlaying, activeTour, activeStopIndex, activeTabPath])
+
+  const handleCreateTour = useCallback((name: string, description: string) => {
+    if (!repo) return
+    const repoKey = `${repo.owner}/${repo.name}`
+    createTour(name, description, repoKey)
+  }, [repo, createTour])
 
   const onLineHover = useCallback(
     (lineNumber: number) => {
@@ -323,7 +377,7 @@ export function CodeBrowser({ navigateToFile, onNavigateComplete }: CodeBrowserP
             expandAllMatches={expandAllMatches}
             setExpandAllMatches={setExpandAllMatches}
           />
-        ) : (
+        ) : sidebarMode === 'outline' ? (
           <SymbolOutline
             symbols={outlineSymbols}
             onSymbolClick={(line) => {
@@ -333,7 +387,16 @@ export function CodeBrowser({ navigateToFile, onNavigateComplete }: CodeBrowserP
             }}
             activeSymbol={highlightedLine?.path === activeTab?.path ? highlightedLine?.line : undefined}
           />
-        )}
+        ) : sidebarMode === 'tours' ? (
+          <TourSidebar
+            tours={tours}
+            activeTour={activeTour}
+            isPlaying={isPlaying}
+            onStartTour={startTour}
+            onDeleteTour={deleteTour}
+            onCreateTour={handleCreateTour}
+          />
+        ) : null}
       </div>
       
       {/* Editor Area */}
@@ -345,6 +408,16 @@ export function CodeBrowser({ navigateToFile, onNavigateComplete }: CodeBrowserP
           onTabClose={closeTab}
           onRevertFile={revertFile}
         />
+        {isPlaying && activeTour && (
+          <TourPlayerBar
+            tour={activeTour}
+            activeStopIndex={activeStopIndex}
+            onPrev={prevStop}
+            onNext={nextStop}
+            onStop={stopTour}
+            onGoToStop={goToStop}
+          />
+        )}
         {activeTab && (
           <CodeBreadcrumb
             path={activeTab.path}
@@ -354,32 +427,42 @@ export function CodeBrowser({ navigateToFile, onNavigateComplete }: CodeBrowserP
           />
         )}
         <div className="flex-1 flex min-h-0">
-          <div className="flex-1 overflow-auto min-w-0">
-            <CodeEditorContent
-              isIndexingComplete={isIndexingComplete}
-              indexingPercent={indexingPercent}
-              indexingCurrent={indexingProgress.current}
-              indexingTotal={indexingProgress.total}
-              activeTab={activeTab ? {
-                path: activeTab.path,
-                content: activeTab.content,
-                language: activeTab.language,
-                isLoading: activeTab.isLoading,
-                error: activeTab.error,
-              } : null}
-              highlightedLine={highlightedLine}
-              onHighlightComplete={() => setHighlightedLine(null)}
-              searchQuery={debouncedSearchQuery}
-              searchOptions={searchOptions}
-              sidebarMode={sidebarMode}
-              issues={activeFileIssues}
-              symbolRanges={symbolRanges}
-              onLineHover={onLineHover}
-              onLineLeave={onLineLeave}
-              hoveredSymbolRange={hoveredSymbolRange}
-              onAction={onAction}
-              hasApiKey={hasApiKey}
-            />
+          <div className="flex-1 overflow-auto min-w-0 flex flex-col">
+            <div className="flex-1 min-h-0">
+              <CodeEditorContent
+                isIndexingComplete={isIndexingComplete}
+                indexingPercent={indexingPercent}
+                indexingCurrent={indexingProgress.current}
+                indexingTotal={indexingProgress.total}
+                activeTab={activeTab ? {
+                  path: activeTab.path,
+                  content: activeTab.content,
+                  language: activeTab.language,
+                  isLoading: activeTab.isLoading,
+                  error: activeTab.error,
+                } : null}
+                highlightedLine={highlightedLine}
+                onHighlightComplete={() => setHighlightedLine(null)}
+                searchQuery={debouncedSearchQuery}
+                searchOptions={searchOptions}
+                sidebarMode={sidebarMode}
+                issues={activeFileIssues}
+                symbolRanges={symbolRanges}
+                onLineHover={onLineHover}
+                onLineLeave={onLineLeave}
+                hoveredSymbolRange={hoveredSymbolRange}
+                onAction={onAction}
+                hasApiKey={hasApiKey}
+                highlightedRange={tourHighlightedRange}
+              />
+            </div>
+            {isPlaying && activeTour && activeTour.stops[activeStopIndex] && (
+              <TourStopOverlay
+                stop={activeTour.stops[activeStopIndex]}
+                stopIndex={activeStopIndex}
+                totalStops={activeTour.stops.length}
+              />
+            )}
           </div>
           <InlineActionPanel
             result={inlineResult}

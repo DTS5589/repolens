@@ -11,6 +11,7 @@ import {
   generateDiagramSchema,
   getProjectOverviewSchema,
 } from './tool-schemas'
+import { generateTourSchema } from './tour-schemas'
 
 /**
  * Shared client-side tool definitions used by both the chat and docs routes.
@@ -61,5 +62,10 @@ export const codeTools = {
     description:
       'Get a comprehensive overview of the project: file count, languages, folder structure, and key patterns.',
     inputSchema: getProjectOverviewSchema,
+  }),
+  generateTour: tool({
+    description:
+      'Generate an annotated guided tour of the codebase. The tour consists of ordered stops, each pointing to a file and line range with a markdown explanation. Optionally focus the tour on a specific theme (e.g., "authentication flow", "data fetching", "error handling"). Returns a structured tour object.',
+    inputSchema: generateTourSchema,
   }),
 }

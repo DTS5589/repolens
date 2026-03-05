@@ -12,17 +12,22 @@ import { Bot, AlertCircle, Download } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Switch } from "@/components/ui/switch"
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip"
-import { useAPIKeys, useRepository } from "@/providers"
+import { useAPIKeys, useRepository, useTours } from "@/providers"
+import { toast } from "sonner"
 import { buildFileTreeString } from "@/lib/github/fetcher"
 import { downloadFile } from "@/lib/export"
 import { buildStructuralIndex } from "@/lib/ai/structural-index"
 import { getMaxIndexBytesForModel } from "@/lib/ai/providers"
 import { handleToolCall } from "@/lib/ai/tool-call-handler"
+import { executeToolLocally } from "@/lib/ai/client-tool-executor"
+import type { ToolCallInfo, AddToolOutputFn } from "@/lib/ai/tool-call-handler"
 import type { CodeIndex } from "@/lib/code/code-index"
+import type { Tour } from "@/types/tours"
 
 export function ChatSidebar({ className }: { className?: string }) {
   const { selectedModel, apiKeys, getValidProviders } = useAPIKeys()
   const { repo, files, codeIndex, pinnedFiles, pinFile, unpinFile, clearPins, getPinnedContents } = useRepository()
+  const { saveTour, startTour } = useTours()
   const [input, setInput] = useState("")
   const [compactionEnabled, setCompactionEnabled] = useState(false)
 
@@ -42,9 +47,50 @@ export function ChatSidebar({ className }: { className?: string }) {
     }
   }, [repo, files])
 
-  // Ref to avoid stale closure in onToolCall
+  // Refs to avoid stale closures
   const codeIndexRef = useRef<CodeIndex | null>(codeIndex)
   useEffect(() => { codeIndexRef.current = codeIndex }, [codeIndex])
+
+  const saveTourRef = useRef(saveTour)
+  useEffect(() => { saveTourRef.current = saveTour }, [saveTour])
+  const startTourRef = useRef(startTour)
+  useEffect(() => { startTourRef.current = startTour }, [startTour])
+
+  // Wrap tool call handler to intercept generateTour results
+  const handleToolCallWithTourCapture = useMemo(() => {
+    return (toolCall: ToolCallInfo, addOutput: AddToolOutputFn, indexRef: React.MutableRefObject<CodeIndex | null>) => {
+      if (toolCall.toolName === 'generateTour' && !toolCall.dynamic) {
+        try {
+          const resultStr = executeToolLocally(
+            toolCall.toolName,
+            toolCall.input as Record<string, unknown>,
+            indexRef.current,
+          )
+          const parsed = JSON.parse(resultStr)
+          if (parsed.tour && !parsed.error) {
+            const tour = parsed.tour as Tour
+            saveTourRef.current(tour)
+            startTourRef.current(tour)
+            toast.success(`Tour created: ${tour.name}`)
+          }
+          addOutput({
+            tool: toolCall.toolName as never,
+            toolCallId: toolCall.toolCallId,
+            output: resultStr,
+          })
+        } catch (err) {
+          addOutput({
+            state: 'output-error' as const,
+            tool: toolCall.toolName as never,
+            toolCallId: toolCall.toolCallId,
+            errorText: err instanceof Error ? err.message : 'Tour generation failed',
+          })
+        }
+        return
+      }
+      handleToolCall(toolCall, addOutput, indexRef)
+    }
+  }, [])
 
   // Create a stable transport — always available so the Chat instance
   // created by useChat is never initialised with transport: undefined.
@@ -57,7 +103,7 @@ export function ChatSidebar({ className }: { className?: string }) {
     transport,
     id: 'codedoc-chat',
 
-    onToolCall: async ({ toolCall }): Promise<void> => handleToolCall(toolCall, addToolOutput, codeIndexRef),
+    onToolCall: async ({ toolCall }): Promise<void> => handleToolCallWithTourCapture(toolCall, addToolOutput, codeIndexRef),
 
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
   })

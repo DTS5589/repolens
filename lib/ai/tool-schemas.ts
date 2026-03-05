@@ -52,3 +52,6 @@ export const generateDiagramSchema = z.object({
 })
 
 export const getProjectOverviewSchema = z.object({})
+
+// Re-export tour schema for convenience
+export { generateTourSchema } from './tour-schemas'

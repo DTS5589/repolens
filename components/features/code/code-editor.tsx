@@ -33,6 +33,8 @@ interface CodeEditorProps {
   onAction?: (type: InlineActionType) => void
   /** Whether the user has a valid API key configured */
   hasApiKey?: boolean
+  /** Multi-line range highlight for tour stops */
+  highlightedRange?: { startLine: number; endLine: number } | null
 }
 
 /** Map severity to dot colour classes (highest wins when multiple on same line). */
@@ -147,7 +149,7 @@ function mergeTokensWithMatches(
 
 /** Code viewer with syntax highlighting, line numbers, search highlighting, and copy support. */
 const CodeEditor = React.forwardRef<HTMLDivElement, CodeEditorProps>(
-  ({ content, language, highlightedLine, searchQuery, searchOptions, onHighlightComplete, issues, onLineHover, onLineLeave, hoveredSymbolRange, onAction, hasApiKey }, ref) => {
+  ({ content, language, highlightedLine, searchQuery, searchOptions, onHighlightComplete, issues, onLineHover, onLineLeave, hoveredSymbolRange, onAction, hasApiKey, highlightedRange }, ref) => {
     const [copied, setCopied] = useState(false)
     const containerRef = useRef<HTMLDivElement>(null)
     const highlightedRowRef = useRef<HTMLTableRowElement>(null)
@@ -304,6 +306,9 @@ const CodeEditor = React.forwardRef<HTMLDivElement, CodeEditorProps>(
               {lines.map((line, i) => {
                 const lineNum = i + 1
                 const isHighlighted = lineNum === highlightedLine
+                const isInTourRange = highlightedRange != null &&
+                  lineNum >= highlightedRange.startLine &&
+                  lineNum <= highlightedRange.endLine
                 const matchCount = lineMatchCounts.get(lineNum)
                 const lineIssues = issuesByLine.get(lineNum)
                 const isHoveredSymbolStart = hoveredSymbolRange !== null &&
@@ -314,10 +319,11 @@ const CodeEditor = React.forwardRef<HTMLDivElement, CodeEditorProps>(
                   <tr
                     key={i}
                     data-line={lineNum}
-                    ref={isHighlighted ? highlightedRowRef : undefined}
+                    ref={isHighlighted || (isInTourRange && lineNum === highlightedRange!.startLine) ? highlightedRowRef : undefined}
                     className={cn(
                       "h-5 leading-5",
                       isHighlighted && "bg-code-selection animate-pulse",
+                      isInTourRange && "bg-blue-500/10 border-l-2 border-blue-500",
                       hoveredSymbolRange &&
                         lineNum >= hoveredSymbolRange.startLine &&
                         lineNum <= hoveredSymbolRange.endLine &&
