@@ -23,6 +23,7 @@ const chatRequestSchema = z.object({
     structure: z.string().max(200_000),
   }).optional(),
   structuralIndex: z.string().max(500_000).optional(),
+  pinnedContext: z.string().max(200_000).optional(),
   maxSteps: z.number().int().min(10).max(100).optional(),
   compactionEnabled: z.boolean().optional(),
 })
@@ -45,7 +46,7 @@ export async function POST(req: Request) {
         JSON.stringify(parsed.error.flatten().fieldErrors),
       )
     }
-    const { messages: rawMessages, provider, model, apiKey, repoContext, structuralIndex, maxSteps, compactionEnabled } = parsed.data
+    const { messages: rawMessages, provider, model, apiKey, repoContext, structuralIndex, pinnedContext, maxSteps, compactionEnabled } = parsed.data
     const messages = rawMessages as unknown as UIMessage[]
     const stepBudget = maxSteps ?? 50
 
@@ -140,6 +141,12 @@ ${structuralIndex || 'Not available'}
 ${repoContext.structure}
 \`\`\`
 
+${pinnedContext ? `
+## Pinned Files (User-Selected Context)
+The user has explicitly pinned these files. Use this content directly — no need to call readFile for these files.
+
+${pinnedContext}
+` : ''}
 ## Important
 - You have 10 tools — use them to read and explore real code before answering
 - NEVER describe a file you haven't read — use readFile first

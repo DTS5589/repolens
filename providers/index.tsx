@@ -32,3 +32,4 @@ export function Providers({ children }: ProvidersProps) {
 
 export { useApp, useAPIKeys, useRepository, useDocs, useDocsChat }
 export type { LoadingStage }
+export type { PinnedFile, PinnedContentsResult } from '@/types/types'

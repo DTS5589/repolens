@@ -6,6 +6,8 @@ import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls } fro
 import { Button } from "@/components/ui/button"
 import { ChatMessage } from "./chat-message"
 import { ChatInput } from "./chat-input"
+import { PinnedContextChips } from "./pinned-context-chips"
+import { PinFilePicker } from "./pin-file-picker"
 import { Bot, AlertCircle, Download } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Switch } from "@/components/ui/switch"
@@ -20,9 +22,12 @@ import type { CodeIndex } from "@/lib/code/code-index"
 
 export function ChatSidebar({ className }: { className?: string }) {
   const { selectedModel, apiKeys, getValidProviders } = useAPIKeys()
-  const { repo, files, codeIndex } = useRepository()
+  const { repo, files, codeIndex, pinnedFiles, pinFile, unpinFile, clearPins, getPinnedContents } = useRepository()
   const [input, setInput] = useState("")
   const [compactionEnabled, setCompactionEnabled] = useState(false)
+
+  // Memoize pinned contents to avoid recomputing every render
+  const pinnedResult = useMemo(() => getPinnedContents(), [getPinnedContents])
 
   const validProviders = getValidProviders()
   const hasValidKey = validProviders.length > 0 && selectedModel
@@ -76,6 +81,7 @@ export function ChatSidebar({ className }: { className?: string }) {
           apiKey: apiKeys[selectedModel.provider].key,
           repoContext,
           structuralIndex,
+          pinnedContext: pinnedResult.content || undefined,
           maxSteps: 50,
           compactionEnabled,
         },
@@ -193,6 +199,24 @@ export function ChatSidebar({ className }: { className?: string }) {
           isLoading={isLoading}
           placeholder={hasValidKey ? "Ask about the codebase..." : "Add API key to chat"}
           disabled={!hasValidKey}
+          pinnedChips={
+            <PinnedContextChips
+              pinnedFiles={pinnedFiles}
+              onUnpin={unpinFile}
+              onClearAll={clearPins}
+              totalBytes={pinnedResult.totalBytes}
+            />
+          }
+          pinPicker={
+            repo ? (
+              <PinFilePicker
+                codeIndex={codeIndex}
+                pinnedFiles={pinnedFiles}
+                onPin={pinFile}
+                onUnpin={unpinFile}
+              />
+            ) : undefined
+          }
         />
       </div>
     </aside>

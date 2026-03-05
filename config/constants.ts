@@ -21,6 +21,18 @@ export const UI_CONFIG = {
     TEXTAREA_MIN_HEIGHT: 96, // 24 * 4 = 96px
 } as const
 
+// Pinned context configuration
+export const PINNED_CONTEXT_CONFIG = {
+  /** Maximum number of pin entries (files + directories count individually). */
+  MAX_PINNED_FILES: 20,
+  /** Maximum total byte size of assembled pinned content sent to the API. */
+  MAX_PINNED_BYTES: 100_000, // 100 KB
+  /** Maximum byte size of a single file to include. Files exceeding this are skipped with a warning. */
+  MAX_SINGLE_FILE_BYTES: 50_000, // 50 KB
+  /** Prefix header in the system prompt for pinned content. */
+  SYSTEM_PROMPT_HEADER: '## Pinned Files (User-Selected Context)',
+} as const
+
 // Status types for file explorer
 export const FILE_STATUS = {
     GENERATED: 'generated',

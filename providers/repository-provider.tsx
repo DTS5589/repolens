@@ -2,6 +2,8 @@
 
 import { createContext, useContext, useState, useCallback, useRef, useEffect, type ReactNode, type Dispatch, type SetStateAction } from "react"
 import type { GitHubRepo, FileNode, ParsedFile, RepositoryContext } from "@/types/repository"
+import type { PinnedFile, PinnedContentsResult } from "@/types/types"
+import { PINNED_CONTEXT_CONFIG } from "@/config/constants"
 import { parseGitHubUrl } from "@/lib/github/parser"
 import { fetchRepoMetadata, fetchRepoTree, buildFileTree, fetchFileContent } from "@/lib/github/fetcher"
 import type { CodeIndex } from "@/lib/code/code-index"
@@ -43,6 +45,18 @@ interface RepositoryContextType extends RepositoryContext {
   isCacheHit: boolean
   /** Current loading stage for multi-step progress UI. */
   loadingStage: LoadingStage
+  /** Map of pinned file/directory paths for chat context. */
+  pinnedFiles: Map<string, PinnedFile>
+  /** Pin a file or directory to the chat context. */
+  pinFile: (path: string, type?: 'file' | 'directory') => void
+  /** Unpin a file or directory from the chat context. */
+  unpinFile: (path: string) => void
+  /** Clear all pinned files. */
+  clearPins: () => void
+  /** Check if a path is currently pinned. */
+  isPinned: (path: string) => boolean
+  /** Assemble pinned file contents for system prompt injection. */
+  getPinnedContents: () => PinnedContentsResult
 }
 
 const RepositoryContextDefault: RepositoryContext = {
@@ -70,6 +84,7 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
   const [failedFiles, setFailedFiles] = useState<Array<{ path: string; error: string }>>([])
   const [isCacheHit, setIsCacheHit] = useState(false)
   const [loadingStage, setLoadingStage] = useState<LoadingStage>('idle')
+  const [pinnedFiles, setPinnedFiles] = useState<Map<string, PinnedFile>>(new Map())
 
   // Helper: get file content from modifiedContents first, then codeIndex
   const getFileContent = useCallback((path: string): string | null => {
@@ -179,6 +194,7 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
     setFailedFiles([])
     setIsCacheHit(false)
     setLoadingStage('idle')
+    setPinnedFiles(new Map())
   }, [])
   
   const updateCodeIndex = useCallback((index: CodeIndex) => {
@@ -214,6 +230,93 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
     }
     return findNode(files, path)
   }, [files])
+
+  const pinFile = useCallback((path: string, type: 'file' | 'directory' = 'file') => {
+    setPinnedFiles(prev => {
+      if (prev.has(path)) return prev
+      if (prev.size >= PINNED_CONTEXT_CONFIG.MAX_PINNED_FILES) {
+        console.warn(`Pin limit reached (${PINNED_CONTEXT_CONFIG.MAX_PINNED_FILES}). Cannot pin "${path}".`)
+        return prev
+      }
+      const next = new Map(prev)
+      next.set(path, { path, type })
+      return next
+    })
+  }, [])
+
+  const unpinFile = useCallback((path: string) => {
+    setPinnedFiles(prev => {
+      if (!prev.has(path)) return prev
+      const next = new Map(prev)
+      next.delete(path)
+      return next
+    })
+  }, [])
+
+  const clearPins = useCallback(() => {
+    setPinnedFiles(new Map())
+  }, [])
+
+  const isPinned = useCallback((path: string): boolean => {
+    return pinnedFiles.has(path)
+  }, [pinnedFiles])
+
+  const getPinnedContents = useCallback((): PinnedContentsResult => {
+    const { MAX_SINGLE_FILE_BYTES, MAX_PINNED_BYTES } = PINNED_CONTEXT_CONFIG
+    const resolvedPaths = new Set<string>()
+    const skipped: string[] = []
+    let content = ''
+    let totalBytes = 0
+    let fileCount = 0
+
+    for (const [, pin] of pinnedFiles) {
+      if (pin.type === 'file') {
+        if (resolvedPaths.has(pin.path)) continue
+        resolvedPaths.add(pin.path)
+
+        const file = codeIndex.files.get(pin.path)
+        if (!file) continue
+
+        if (file.content.length > MAX_SINGLE_FILE_BYTES) {
+          skipped.push(pin.path)
+          continue
+        }
+        if (totalBytes + file.content.length > MAX_PINNED_BYTES) {
+          skipped.push(pin.path)
+          continue
+        }
+
+        const ext = pin.path.split('.').pop() ?? ''
+        content += `### \`${pin.path}\`\n\`\`\`${ext}\n${file.content}\n\`\`\`\n\n`
+        totalBytes += file.content.length
+        fileCount++
+      } else {
+        // Directory: expand all files with matching prefix
+        const prefix = pin.path.endsWith('/') ? pin.path : `${pin.path}/`
+        for (const [filePath, file] of codeIndex.files) {
+          if (!filePath.startsWith(prefix)) continue
+          if (resolvedPaths.has(filePath)) continue
+          resolvedPaths.add(filePath)
+
+          if (file.content.length > MAX_SINGLE_FILE_BYTES) {
+            skipped.push(filePath)
+            continue
+          }
+          if (totalBytes + file.content.length > MAX_PINNED_BYTES) {
+            skipped.push(filePath)
+            continue
+          }
+
+          const ext = filePath.split('.').pop() ?? ''
+          content += `### \`${filePath}\`\n\`\`\`${ext}\n${file.content}\n\`\`\`\n\n`
+          totalBytes += file.content.length
+          fileCount++
+        }
+      }
+    }
+
+    return { content, fileCount, totalBytes, skipped }
+  }, [pinnedFiles, codeIndex])
 
   // B5: Compute codebaseAnalysis once when indexing completes
   useEffect(() => {
@@ -251,6 +354,12 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
         failedFiles,
         isCacheHit,
         loadingStage,
+        pinnedFiles,
+        pinFile,
+        unpinFile,
+        clearPins,
+        isPinned,
+        getPinnedContents,
       }}
     >
       {children}

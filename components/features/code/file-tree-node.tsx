@@ -1,6 +1,6 @@
 import { useMemo } from "react"
 import {
-  ChevronRight, ChevronDown, File, Folder, FolderOpen, Download,
+  ChevronRight, ChevronDown, File, Folder, FolderOpen, Download, Pin,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { getLanguageColor } from "@/lib/code/language-colors"
@@ -27,6 +27,10 @@ interface FileTreeNodeProps {
   codeIndex?: CodeIndex
   /** Map from file path to issue severity counts. */
   issueCountByFile?: Map<string, FileIssueCounts>
+  /** Whether a path is pinned to chat context. */
+  isPinned?: (path: string) => boolean
+  /** Toggle pin/unpin for a file or directory. */
+  onPinToggle?: (path: string, type: 'file' | 'directory') => void
 }
 
 /** Format a line count for compact display (e.g. 1200 → "1.2k"). */
@@ -134,6 +138,8 @@ export function FileTreeNode({
   depth,
   codeIndex,
   issueCountByFile,
+  isPinned,
+  onPinToggle,
 }: FileTreeNodeProps) {
   return (
     <>
@@ -200,6 +206,31 @@ export function FileTreeNode({
                 )}
               </span>
 
+              {onPinToggle && (
+                <button
+                  className={cn(
+                    "p-0.5 rounded hover:bg-foreground/10 transition-opacity shrink-0",
+                    isPinned?.(node.path)
+                      ? "opacity-100 text-accent-primary"
+                      : "opacity-0 group-hover/tree-item:opacity-100 text-text-muted hover:text-text-primary",
+                  )}
+                  aria-label={isPinned?.(node.path) ? `Unpin ${node.name}` : `Pin ${node.name}`}
+                  aria-pressed={isPinned?.(node.path) ?? false}
+                  title={isPinned?.(node.path) ? `Unpin ${node.name}` : `Pin ${node.name}`}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onPinToggle(node.path, node.type === 'directory' ? 'directory' : 'file')
+                  }}
+                >
+                  <Pin
+                    className={cn(
+                      "h-3.5 w-3.5",
+                      isPinned?.(node.path) && "fill-current",
+                    )}
+                  />
+                </button>
+              )}
+
               <button
                 className="p-0.5 rounded opacity-0 group-hover/tree-item:opacity-100 text-text-muted hover:text-text-primary hover:bg-foreground/10 transition-opacity shrink-0"
                 title={node.type === 'directory' ? `Download ${node.name} as ZIP` : `Download ${node.name}`}
@@ -224,6 +255,8 @@ export function FileTreeNode({
                 depth={depth + 1}
                 codeIndex={codeIndex}
                 issueCountByFile={issueCountByFile}
+                isPinned={isPinned}
+                onPinToggle={onPinToggle}
               />
             )}
           </div>

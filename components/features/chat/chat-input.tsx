@@ -1,4 +1,4 @@
-import { type KeyboardEvent, useRef } from 'react'
+import { type KeyboardEvent, type ReactNode, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { ArrowUp } from 'lucide-react'
@@ -13,6 +13,10 @@ interface ChatInputProps {
   placeholder?: string
   className?: string
   disabled?: boolean
+  /** Slot rendered above the textarea (e.g. pinned context chips). */
+  pinnedChips?: ReactNode
+  /** Slot rendered next to ModelSelector in the bottom bar (e.g. pin file picker). */
+  pinPicker?: ReactNode
 }
 
 export function ChatInput({
@@ -22,7 +26,9 @@ export function ChatInput({
   isLoading = false,
   placeholder = 'Ask about the codebase...',
   className,
-  disabled = false
+  disabled = false,
+  pinnedChips,
+  pinPicker,
 }: ChatInputProps) {
   const formRef = useRef<HTMLFormElement>(null)
 
@@ -42,6 +48,7 @@ export function ChatInput({
 
   return (
     <form ref={formRef} onSubmit={handleSubmit} className={cn('relative rounded-lg border border-interactive-border bg-surface', disabled && 'opacity-60', className)}>
+      {pinnedChips}
       <Textarea
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -52,7 +59,10 @@ export function ChatInput({
         disabled={isDisabled}
       />
       <div className="flex items-center justify-between px-2 pb-2">
-        <ModelSelector />
+        <div className="flex items-center gap-1">
+          <ModelSelector />
+          {pinPicker}
+        </div>
         <div className="flex items-center gap-1">
           <Button
             type="submit"

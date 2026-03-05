@@ -9,6 +9,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { FileTreeNode, type FileIssueCounts } from './file-tree-node'
+import { useRepository } from '@/providers'
 import type { FileNode } from '@/types/repository'
 import type { CodeIndex } from '@/lib/code/code-index'
 import type { OpenTab } from './types'
@@ -46,6 +47,16 @@ export function CodeExplorerSidebar({
   onRevertFile,
   onDownloadFile2,
 }: CodeExplorerSidebarProps) {
+  const { isPinned, pinFile, unpinFile } = useRepository()
+
+  const handlePinToggle = (path: string, type: 'file' | 'directory') => {
+    if (isPinned(path)) {
+      unpinFile(path)
+    } else {
+      pinFile(path, type)
+    }
+  }
+
   return (
     <>
       {/* Explorer Header */}
@@ -83,6 +94,8 @@ export function CodeExplorerSidebar({
             depth={0}
             codeIndex={codeIndex}
             issueCountByFile={issueCountByFile}
+            isPinned={isPinned}
+            onPinToggle={handlePinToggle}
           />
         </div>
       </div>

@@ -45,6 +45,25 @@ export interface ModelResponseItem {
   contextLength?: number
 }
 
+// Pinned file types for chat context pinning
+export interface PinnedFile {
+  /** Absolute path within the repository (e.g. "src/lib/utils.ts"). */
+  path: string
+  /** Whether the user pinned a file directly or a directory (resolved at content-assembly time). */
+  type: 'file' | 'directory'
+}
+
+export interface PinnedContentsResult {
+  /** Formatted content string for system prompt injection. */
+  content: string
+  /** Number of files successfully included. */
+  fileCount: number
+  /** Total byte size of assembled content. */
+  totalBytes: number
+  /** Paths of files excluded due to size limits. */
+  skipped: string[]
+}
+
 // UI Component types
 export interface ResizableLayoutProps {
     defaultSidebarWidth?: number
