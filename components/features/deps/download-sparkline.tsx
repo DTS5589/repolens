@@ -1,0 +1,87 @@
+"use client"
+
+import { useId, useMemo } from 'react'
+import {
+  AreaChart,
+  Area,
+  ResponsiveContainer,
+  Tooltip as RechartsTooltip,
+} from 'recharts'
+import type { DownloadPoint } from '@/lib/deps/types'
+
+const numberFormatter = new Intl.NumberFormat('en-US', { notation: 'compact' })
+
+interface DownloadSparklineProps {
+  data: DownloadPoint[]
+  width?: number
+  height?: number
+  className?: string
+}
+
+interface SparklinePayload {
+  day: string
+  downloads: number
+}
+
+function CustomTooltip({
+  active,
+  payload,
+}: {
+  active?: boolean
+  payload?: Array<{ payload: SparklinePayload }>
+}) {
+  if (!active || !payload?.[0]) return null
+  const { day, downloads } = payload[0].payload
+  return (
+    <div className="rounded border bg-popover px-2 py-1 text-xs text-popover-foreground shadow-sm">
+      <span className="font-medium">{numberFormatter.format(downloads)}</span>
+      <span className="ml-1.5 text-muted-foreground">{day}</span>
+    </div>
+  )
+}
+
+export function DownloadSparkline({
+  data,
+  width = 120,
+  height = 40,
+  className,
+}: DownloadSparklineProps) {
+  const id = useId()
+  const gradientId = `sparkFill-${id}`
+
+  const chartData = useMemo(
+    () => data.map(d => ({ day: d.day, downloads: d.downloads })),
+    [data],
+  )
+
+  if (chartData.length === 0) {
+    return <span className="text-xs text-muted-foreground">—</span>
+  }
+
+  return (
+    <div className={className} style={{ width, height }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <AreaChart data={chartData} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
+          <defs>
+            <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
+              <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0.05} />
+            </linearGradient>
+          </defs>
+          <RechartsTooltip
+            content={<CustomTooltip />}
+            cursor={false}
+          />
+          <Area
+            type="monotone"
+            dataKey="downloads"
+            stroke="hsl(var(--primary))"
+            strokeWidth={1.5}
+            fill={`url(#${gradientId})`}
+            isAnimationActive={false}
+          />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
+  )
+}

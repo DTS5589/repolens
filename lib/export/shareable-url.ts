@@ -5,7 +5,7 @@
  * Legacy format:    `/?repo=https://github.com/owner/repo&view=docs`
  */
 
-type ViewId = 'repo' | 'issues' | 'docs' | 'diagram' | 'code'
+type ViewId = 'repo' | 'issues' | 'docs' | 'diagram' | 'code' | 'deps'
 
 interface ShareableState {
   /** GitHub repository URL (e.g. "https://github.com/owner/repo") */

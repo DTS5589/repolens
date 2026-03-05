@@ -19,6 +19,7 @@ import {
   DocsTabSkeleton,
   DiagramTabSkeleton,
   CodeTabSkeleton,
+  DepsTabSkeleton,
 } from "@/components/features/loading/tab-skeleton"
 import { FeatureErrorBoundary } from "@/components/ui/feature-error-boundary"
 
@@ -34,6 +35,9 @@ const DiagramViewer = lazy(() =>
 )
 const IssuesPanel = lazy(() =>
   import("@/components/features/issues/issues-panel").then(m => ({ default: m.IssuesPanel }))
+)
+const DepsPanel = lazy(() =>
+  import("@/components/features/deps/deps-panel").then(m => ({ default: m.DepsPanel }))
 )
 
 export function PreviewPanel({ className }: { className?: string }) {
@@ -85,7 +89,7 @@ export function PreviewPanel({ className }: { className?: string }) {
   // Shareable URL: sync URL bar when repo or tab changes
   useEffect(() => {
     if (repo) {
-      updateUrlState({ repoUrl: repo.url, view: activeTab as 'repo' | 'issues' | 'docs' | 'diagram' | 'code' })
+      updateUrlState({ repoUrl: repo.url, view: activeTab as 'repo' | 'issues' | 'docs' | 'diagram' | 'code' | 'deps' })
     } else if (!isConnecting) {
       clearUrlState()
     }
@@ -228,6 +232,26 @@ export function PreviewPanel({ className }: { className?: string }) {
           <FeatureErrorBoundary featureName="Code Browser">
             <Suspense fallback={<CodeTabSkeleton />}>
               <CodeBrowser key="code-browser" navigateToFile={pendingNavigateFile} onNavigateComplete={handleNavigateComplete} />
+            </Suspense>
+          </FeatureErrorBoundary>
+        ) : activeTab === "deps" ? (
+          <FeatureErrorBoundary featureName="Dependency Health">
+            <Suspense fallback={<DepsTabSkeleton />}>
+              {codeIndex && codeIndex.totalFiles > 0 ? (
+                <DepsPanel codeIndex={codeIndex} />
+              ) : repo ? (
+                <div className="flex items-center justify-center h-full">
+                  <LoadingProgress
+                    stage={loadingStage}
+                    progress={indexingProgress}
+                    isCacheHit={isCacheHit}
+                    error={repoError}
+                    repoName={repo.fullName}
+                  />
+                </div>
+              ) : (
+                <DepsPanel codeIndex={codeIndex} />
+              )}
             </Suspense>
           </FeatureErrorBoundary>
         ) : (

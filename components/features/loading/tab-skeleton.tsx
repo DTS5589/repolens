@@ -120,3 +120,46 @@ export function MermaidDiagramSkeleton() {
     </div>
   )
 }
+
+/**
+ * Skeleton fallback for the Deps tab.
+ * Mimics the summary cards row + dependency table rows.
+ */
+export function DepsTabSkeleton() {
+  return (
+    <div role="status" aria-label="Loading dependencies" className="flex h-full flex-col gap-4 p-4">
+      {/* Summary cards */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="rounded-lg border p-4 flex items-center gap-3">
+            <Skeleton className="h-8 w-8 rounded-md" />
+            <div className="flex-1 space-y-1.5">
+              <Skeleton className="h-3 w-16" />
+              <Skeleton className="h-5 w-10" />
+            </div>
+          </div>
+        ))}
+      </div>
+      {/* Table toolbar */}
+      <div className="flex items-center gap-3">
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-8 w-28" />
+        <div className="flex-1" />
+        <Skeleton className="h-4 w-16" />
+      </div>
+      {/* Table rows */}
+      {Array.from({ length: 10 }).map((_, i) => (
+        <div key={i} className="flex items-center gap-3 border-b pb-2">
+          <Skeleton className="h-4 w-32" />
+          <Skeleton className="h-4 w-12 rounded-full" />
+          <Skeleton className="h-4 w-16" />
+          <Skeleton className="h-4 w-16" />
+          <Skeleton className="h-4 w-20" />
+          <Skeleton className="h-4 w-14" />
+          <Skeleton className="h-4 w-8" />
+          <Skeleton className="h-5 w-8 rounded-full" />
+        </div>
+      ))}
+    </div>
+  )
+}
