@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { ExternalLink, Maximize2, Search } from "lucide-react"
+import { ExternalLink, Lock, Maximize2, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import type { PreviewTab } from "./tab-config"
@@ -14,6 +14,7 @@ interface PreviewTabBarProps {
   fileCount: number
   onOpenSearch: () => void
   localPreviewUrl: string | null
+  hasApiKey: boolean
 }
 
 export function PreviewTabBar({
@@ -24,6 +25,7 @@ export function PreviewTabBar({
   fileCount,
   onOpenSearch,
   localPreviewUrl,
+  hasApiKey,
 }: PreviewTabBarProps) {
   const [isMac, setIsMac] = useState(false)
   useEffect(() => {
@@ -32,13 +34,17 @@ export function PreviewTabBar({
 
   return (
     <div className="flex h-11 items-center justify-between border-b border-foreground/[0.06] px-4 bg-card">
-      <div className="flex items-center h-full gap-0.5">
+      <div className="flex items-center h-full gap-0.5" role="tablist" aria-label="Preview tabs">
         {tabs.map((tab) => {
           const Icon = tab.icon
           const isActive = activeTab === tab.id
+          const isLocked = tab.requiresAI && !hasApiKey
           return (
             <button
               key={tab.id}
+              role="tab"
+              aria-selected={isActive}
+              aria-label={tab.label}
               onClick={() => onTabChange(tab.id)}
               className={cn(
                 "relative flex items-center gap-1.5 h-full px-3 text-xs font-medium",
@@ -46,10 +52,17 @@ export function PreviewTabBar({
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
                 isActive
                   ? "text-text-primary after:absolute after:bottom-0 after:inset-x-3 after:h-px after:bg-foreground"
-                  : "text-text-secondary hover:text-text-primary"
+                  : "text-text-secondary hover:text-text-primary",
+                isLocked && "opacity-50"
               )}
+              title={isLocked ? "Requires API key — set up in Settings" : tab.label}
             >
-              <Icon className="h-3.5 w-3.5" />
+              <div className="relative">
+                <Icon className="h-3.5 w-3.5" />
+                {isLocked && (
+                  <Lock className="absolute -bottom-0.5 -right-1 h-2 w-2 text-text-muted" aria-hidden="true" />
+                )}
+              </div>
               <span className="hidden sm:inline">{tab.label}</span>
             </button>
           )
@@ -77,6 +90,7 @@ export function PreviewTabBar({
               className="h-7 w-7 text-text-secondary hover:text-text-primary hover:bg-foreground/5 transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-ring"
               onClick={() => window.open(localPreviewUrl, "_blank")}
               title="Open in new tab"
+              aria-label="Open in new tab"
             >
               <ExternalLink className="h-3.5 w-3.5" />
             </Button>
@@ -85,6 +99,7 @@ export function PreviewTabBar({
               size="icon"
               className="h-7 w-7 text-text-secondary hover:text-text-primary hover:bg-foreground/5 transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-ring"
               title="Fullscreen"
+              aria-label="Fullscreen"
             >
               <Maximize2 className="h-3.5 w-3.5" />
             </Button>

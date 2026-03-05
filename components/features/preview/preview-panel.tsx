@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense } from "react"
 import { cn } from "@/lib/utils"
-import { useApp, useRepository } from "@/providers"
+import { useApp, useRepository, useAPIKeys } from "@/providers"
 import { LoadingProgress } from "@/components/features/loading/loading-progress"
 import { ProjectSummaryPanel } from "@/components/features/repo/project-summary"
 import { flattenFiles } from "@/lib/code/code-index"
@@ -14,6 +14,7 @@ import { PREVIEW_TABS } from "./tab-config"
 import { GlobalSearchOverlay } from "./global-search-overlay"
 import { PreviewRepoHeader } from "./preview-repo-header"
 import { PreviewTabBar } from "./preview-tab-bar"
+import { AIFeatureEmptyState } from "./ai-feature-empty-state"
 import {
   IssuesTabSkeleton,
   DocsTabSkeleton,
@@ -55,6 +56,8 @@ export function PreviewPanel({ className }: { className?: string }) {
     connectRepository, disconnectRepository, codeIndex,
     loadingStage, indexingProgress, isCacheHit,
   } = useRepository()
+  const { getValidProviders, isHydrated } = useAPIKeys()
+  const hasApiKey = isHydrated && getValidProviders().length > 0
   const [localPreviewUrl, setLocalPreviewUrl] = useState<string | null>(null)
 
   // Show "Ready!" state briefly before transitioning to loaded view
@@ -114,6 +117,10 @@ export function PreviewPanel({ className }: { className?: string }) {
     setRepoUrl("")
   }
 
+  const handleOpenSettings = useCallback(() => {
+    window.dispatchEvent(new Event("open-settings"))
+  }, [])
+
   // Global file search
   const [showGlobalSearch, setShowGlobalSearch] = useState(false)
   const [globalSearchQuery, setGlobalSearchQuery] = useState("")
@@ -168,6 +175,7 @@ export function PreviewPanel({ className }: { className?: string }) {
         fileCount={allFlatFiles.length}
         onOpenSearch={() => setShowGlobalSearch(true)}
         localPreviewUrl={localPreviewUrl}
+        hasApiKey={hasApiKey}
       />
 
       <div className="flex-1 bg-background overflow-hidden">
@@ -225,17 +233,25 @@ export function PreviewPanel({ className }: { className?: string }) {
             </Suspense>
           </FeatureErrorBoundary>
         ) : activeTab === "docs" ? (
-          <FeatureErrorBoundary featureName="Documentation">
-            <Suspense fallback={<DocsTabSkeleton />}>
-              <DocViewer />
-            </Suspense>
-          </FeatureErrorBoundary>
+          hasApiKey ? (
+            <FeatureErrorBoundary featureName="Documentation">
+              <Suspense fallback={<DocsTabSkeleton />}>
+                <DocViewer />
+              </Suspense>
+            </FeatureErrorBoundary>
+          ) : (
+            <AIFeatureEmptyState tabId="docs" onOpenSettings={handleOpenSettings} />
+          )
         ) : activeTab === "diagram" ? (
-          <FeatureErrorBoundary featureName="Diagram Viewer">
-            <Suspense fallback={<DiagramTabSkeleton />}>
-              <DiagramViewer files={files} codeIndex={codeIndex} onNavigateToFile={handleNavigateToFile} />
-            </Suspense>
-          </FeatureErrorBoundary>
+          hasApiKey ? (
+            <FeatureErrorBoundary featureName="Diagram Viewer">
+              <Suspense fallback={<DiagramTabSkeleton />}>
+                <DiagramViewer files={files} codeIndex={codeIndex} onNavigateToFile={handleNavigateToFile} />
+              </Suspense>
+            </FeatureErrorBoundary>
+          ) : (
+            <AIFeatureEmptyState tabId="diagram" onOpenSettings={handleOpenSettings} />
+          )
         ) : activeTab === "code" ? (
           <FeatureErrorBoundary featureName="Code Browser">
             <Suspense fallback={<CodeTabSkeleton />}>
@@ -263,11 +279,15 @@ export function PreviewPanel({ className }: { className?: string }) {
             </Suspense>
           </FeatureErrorBoundary>
         ) : activeTab === "changelog" ? (
-          <FeatureErrorBoundary featureName="Changelog">
-            <Suspense fallback={<ChangelogTabSkeleton />}>
-              <ChangelogViewer />
-            </Suspense>
-          </FeatureErrorBoundary>
+          hasApiKey ? (
+            <FeatureErrorBoundary featureName="Changelog">
+              <Suspense fallback={<ChangelogTabSkeleton />}>
+                <ChangelogViewer />
+              </Suspense>
+            </FeatureErrorBoundary>
+          ) : (
+            <AIFeatureEmptyState tabId="changelog" onOpenSettings={handleOpenSettings} />
+          )
         ) : activeTab === "git-history" ? (
           <FeatureErrorBoundary featureName="Git History">
             <Suspense fallback={<GitHistoryTabSkeleton />}>

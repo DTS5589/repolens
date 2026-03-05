@@ -39,4 +39,24 @@ describe('tab-config', () => {
       expect(tab.icon).toBeDefined()
     }
   })
+
+  describe('requiresAI field', () => {
+    it.each(['docs', 'diagram', 'changelog'])(
+      'marks "%s" tab as requiresAI',
+      (tabId) => {
+        const tab = PREVIEW_TABS.find(t => t.id === tabId)
+        expect(tab).toBeDefined()
+        expect(tab!.requiresAI).toBe(true)
+      }
+    )
+
+    it.each(['repo', 'issues', 'code', 'deps', 'git-history'])(
+      'does NOT mark "%s" tab as requiresAI',
+      (tabId) => {
+        const tab = PREVIEW_TABS.find(t => t.id === tabId)
+        expect(tab).toBeDefined()
+        expect(tab!.requiresAI).toBeFalsy()
+      }
+    )
+  })
 })
