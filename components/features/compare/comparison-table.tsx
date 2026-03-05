@@ -1,5 +1,6 @@
 "use client"
 
+import { BarChart3 } from "lucide-react"
 import { useComparison } from "@/providers/comparison-provider"
 import type { ComparisonRepo } from "@/types/comparison"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -80,11 +81,11 @@ interface BarChartMetric {
 }
 
 const BAR_CHART_METRICS: BarChartMetric[] = [
-  { label: "Stars", getValue: (r) => r.metrics.stars, format: formatCount },
-  { label: "Forks", getValue: (r) => r.metrics.forks, format: formatCount },
-  { label: "Open Issues", getValue: (r) => r.metrics.openIssues, format: formatCount },
-  { label: "Files", getValue: (r) => r.metrics.totalFiles, format: formatCount },
-  { label: "Lines (est.)", getValue: (r) => r.metrics.totalLines, format: formatCount },
+  { label: "Stars", getValue: (r) => r.metrics?.stars ?? 0, format: formatCount },
+  { label: "Forks", getValue: (r) => r.metrics?.forks ?? 0, format: formatCount },
+  { label: "Open Issues", getValue: (r) => r.metrics?.openIssues ?? 0, format: formatCount },
+  { label: "Files", getValue: (r) => r.metrics?.totalFiles ?? 0, format: formatCount },
+  { label: "Lines (est.)", getValue: (r) => r.metrics?.totalLines ?? 0, format: formatCount },
 ]
 
 interface TextMetric {
@@ -95,16 +96,16 @@ interface TextMetric {
 const TEXT_METRICS: TextMetric[] = [
   {
     label: "Primary Language",
-    getValue: (r) => r.metrics.primaryLanguage ?? "—",
+    getValue: (r) => r.metrics?.primaryLanguage ?? "—",
   },
   {
     label: "License",
-    getValue: (r) => r.metrics.license ?? "—",
+    getValue: (r) => r.metrics?.license ?? "—",
   },
   {
     label: "Last Active",
     getValue: (r) =>
-      r.metrics.pushedAt ? formatRelativeTime(r.metrics.pushedAt) : "—",
+      r.metrics?.pushedAt ? formatRelativeTime(r.metrics.pushedAt) : "—",
   },
 ]
 
@@ -113,7 +114,19 @@ export function ComparisonTable() {
   const repos = getRepoList()
   const readyRepos = repos.filter((r) => r.status === "ready")
 
-  if (repos.length === 0) return null
+  if (repos.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-foreground/20 px-6 py-12 text-center">
+        <BarChart3 className="mb-3 h-8 w-8 text-text-secondary" />
+        <p className="text-sm font-medium text-text-primary">
+          No repositories to compare
+        </p>
+        <p className="mt-1 text-xs text-text-secondary">
+          Add at least two repositories above to see comparison metrics.
+        </p>
+      </div>
+    )
+  }
 
   if (readyRepos.length === 0) {
     return (
@@ -218,7 +231,7 @@ function LanguageBreakdownSection({
 }
 
 function LanguageBar({ repo }: { repo: ComparisonRepo }) {
-  const entries = Object.entries(repo.metrics.languageBreakdown).filter(
+  const entries = Object.entries(repo.metrics?.languageBreakdown ?? {}).filter(
     ([l]) => l !== "other"
   )
 

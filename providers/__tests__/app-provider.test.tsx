@@ -1,0 +1,149 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, act } from '@testing-library/react'
+import { useApp, AppProvider } from '../app-provider'
+
+// Test helper component that reads context values
+function TestConsumer() {
+  const { previewUrl, isGenerating, sidebarWidth, setPreviewUrl, setIsGenerating, setSidebarWidth } = useApp()
+  return (
+    <div>
+      <span data-testid="previewUrl">{previewUrl ?? 'null'}</span>
+      <span data-testid="isGenerating">{String(isGenerating)}</span>
+      <span data-testid="sidebarWidth">{sidebarWidth}</span>
+      <button onClick={() => setPreviewUrl('https://example.com')}>set-url</button>
+      <button onClick={() => setPreviewUrl(null)}>clear-url</button>
+      <button onClick={() => setIsGenerating(true)}>start-gen</button>
+      <button onClick={() => setIsGenerating(false)}>stop-gen</button>
+      <button onClick={() => setSidebarWidth(400)}>set-width</button>
+    </div>
+  )
+}
+
+describe('AppProvider', () => {
+  it('provides initial state values', () => {
+    render(
+      <AppProvider>
+        <TestConsumer />
+      </AppProvider>
+    )
+
+    expect(screen.getByTestId('previewUrl')).toHaveTextContent('null')
+    expect(screen.getByTestId('isGenerating')).toHaveTextContent('false')
+    expect(screen.getByTestId('sidebarWidth')).toHaveTextContent('320')
+  })
+
+  it('updates previewUrl via setPreviewUrl', async () => {
+    render(
+      <AppProvider>
+        <TestConsumer />
+      </AppProvider>
+    )
+
+    await act(async () => {
+      screen.getByText('set-url').click()
+    })
+
+    expect(screen.getByTestId('previewUrl')).toHaveTextContent('https://example.com')
+  })
+
+  it('clears previewUrl to null', async () => {
+    render(
+      <AppProvider>
+        <TestConsumer />
+      </AppProvider>
+    )
+
+    await act(async () => {
+      screen.getByText('set-url').click()
+    })
+    expect(screen.getByTestId('previewUrl')).toHaveTextContent('https://example.com')
+
+    await act(async () => {
+      screen.getByText('clear-url').click()
+    })
+    expect(screen.getByTestId('previewUrl')).toHaveTextContent('null')
+  })
+
+  it('updates isGenerating state', async () => {
+    render(
+      <AppProvider>
+        <TestConsumer />
+      </AppProvider>
+    )
+
+    await act(async () => {
+      screen.getByText('start-gen').click()
+    })
+    expect(screen.getByTestId('isGenerating')).toHaveTextContent('true')
+
+    await act(async () => {
+      screen.getByText('stop-gen').click()
+    })
+    expect(screen.getByTestId('isGenerating')).toHaveTextContent('false')
+  })
+
+  it('updates sidebarWidth state', async () => {
+    render(
+      <AppProvider>
+        <TestConsumer />
+      </AppProvider>
+    )
+
+    await act(async () => {
+      screen.getByText('set-width').click()
+    })
+    expect(screen.getByTestId('sidebarWidth')).toHaveTextContent('400')
+  })
+
+  it('does not update previewUrl when same value is set', async () => {
+    const renderSpy = vi.fn()
+
+    function SpyConsumer() {
+      const { previewUrl, setPreviewUrl } = useApp()
+      renderSpy()
+      return (
+        <div>
+          <span data-testid="url">{previewUrl ?? 'null'}</span>
+          <button onClick={() => setPreviewUrl('https://example.com')}>set</button>
+        </div>
+      )
+    }
+
+    render(
+      <AppProvider>
+        <SpyConsumer />
+      </AppProvider>
+    )
+
+    const initialRenderCount = renderSpy.mock.calls.length
+
+    // Set URL first time
+    await act(async () => {
+      screen.getByText('set').click()
+    })
+
+    const afterFirstSet = renderSpy.mock.calls.length
+
+    // Set same URL again — should be a no-op
+    await act(async () => {
+      screen.getByText('set').click()
+    })
+
+    // Should not cause additional renders
+    expect(renderSpy.mock.calls.length).toBe(afterFirstSet)
+  })
+})
+
+describe('useApp', () => {
+  it('throws when used outside AppProvider', () => {
+    function BadConsumer() {
+      useApp()
+      return null
+    }
+
+    // Suppress console.error for expected React error
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(() => render(<BadConsumer />)).toThrow('useApp must be used within an AppProvider')
+    spy.mockRestore()
+  })
+})

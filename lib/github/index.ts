@@ -3,6 +3,8 @@ export {
   fetchTreeViaProxy,
   fetchFileViaProxy,
   fetchRateLimitViaProxy,
+  clearGitHubCache,
+  invalidateRepoCache,
 } from './client'
 
 export {

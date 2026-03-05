@@ -7,7 +7,7 @@ import type { ComplianceReport } from '@/lib/code/scanner'
 
 // Mock the scanner barrel
 const mockGetAllRules = vi.fn(() => [])
-const mockGenerateComplianceReport = vi.fn((): ComplianceReport => ({
+const mockGenerateComplianceReport = vi.fn<(...args: any[]) => ComplianceReport>((): ComplianceReport => ({
   owaspCoverage: {
     'A01': {
       name: 'Broken Access Control',
@@ -34,11 +34,11 @@ const mockGenerateComplianceReport = vi.fn((): ComplianceReport => ({
   overallCwePercent: 60,
   generatedAt: '2026-01-01T00:00:00.000Z',
 }))
-const mockExportComplianceJSON = vi.fn(() => '{}')
+const mockExportComplianceJSON = vi.fn<(...args: any[]) => string>(() => '{}')
 
 vi.mock('@/lib/code/issue-scanner', () => ({
-  generateComplianceReport: (...args: unknown[]) => mockGenerateComplianceReport(...args),
-  exportComplianceJSON: (...args: unknown[]) => mockExportComplianceJSON(...args),
+  generateComplianceReport: (...args: any[]) => mockGenerateComplianceReport(...args),
+  exportComplianceJSON: (...args: any[]) => mockExportComplianceJSON(...args),
   getAllRules: () => mockGetAllRules(),
   lookupCves: vi.fn().mockResolvedValue({ results: [], scannedPackages: 0, vulnerablePackages: 0, lookupErrors: [] }),
 }))

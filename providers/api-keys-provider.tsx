@@ -2,71 +2,21 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from "react"
 import { toast } from "sonner"
-import type { AIProvider, APIKeysState, APIKeyConfig, ProviderModel, ProviderInfo, ModelResponseItem } from "@/types/types"
+import type { AIProvider, APIKeysState, ProviderModel } from "@/types/types"
+import {
+  PROVIDERS,
+  DEFAULT_KEY_CONFIG,
+  DEFAULT_API_KEYS_STATE,
+  loadKeys,
+  saveKeys,
+  loadSelectedModel,
+  saveSelectedModel,
+  findDefaultModel,
+  fetchProviderModels,
+} from '@/lib/api-keys'
 
-// Provider information
-export const PROVIDERS: Record<AIProvider, ProviderInfo> = {
-  openai: {
-    id: 'openai',
-    name: 'OpenAI',
-    description: 'GPT-4, GPT-4o, GPT-3.5 Turbo',
-    docsUrl: 'https://platform.openai.com/api-keys',
-    keyPrefix: 'sk-',
-  },
-  google: {
-    id: 'google',
-    name: 'Google',
-    description: 'Gemini Pro, Gemini Flash',
-    docsUrl: 'https://aistudio.google.com/apikey',
-    keyPrefix: 'AI',
-  },
-  anthropic: {
-    id: 'anthropic',
-    name: 'Anthropic',
-    description: 'Claude 3.5, Claude 3 Opus',
-    docsUrl: 'https://console.anthropic.com/settings/keys',
-    keyPrefix: 'sk-ant-',
-  },
-  openrouter: {
-    id: 'openrouter',
-    name: 'OpenRouter',
-    description: 'Access multiple providers',
-    docsUrl: 'https://openrouter.ai/keys',
-    keyPrefix: 'sk-or-',
-  },
-}
-
-/** Preferred default model ID substrings per provider. Uses `.includes()` matching. */
-export const DEFAULT_MODELS: Partial<Record<AIProvider, string>> = {
-  anthropic: 'claude-sonnet-4-6',
-  google: 'gemini-2.5-pro',
-}
-
-/** Find the best default model for a provider from a list of available models. */
-export function findDefaultModel(models: ProviderModel[], provider: AIProvider): ProviderModel | null {
-  if (models.length === 0) return null
-
-  const preferredSubstring = DEFAULT_MODELS[provider]
-  if (preferredSubstring) {
-    const preferred = models.find(m => m.id.includes(preferredSubstring))
-    if (preferred) return preferred
-  }
-
-  return models[0]
-}
-
-const defaultKeyConfig: APIKeyConfig = {
-  key: '',
-  isValid: null,
-  lastValidated: null,
-}
-
-const defaultAPIKeysState: APIKeysState = {
-  openai: { ...defaultKeyConfig },
-  google: { ...defaultKeyConfig },
-  anthropic: { ...defaultKeyConfig },
-  openrouter: { ...defaultKeyConfig },
-}
+// Re-export for backward compatibility
+export { PROVIDERS, findDefaultModel, DEFAULT_MODELS } from '@/lib/api-keys'
 
 interface APIKeysContextType {
   apiKeys: APIKeysState
@@ -86,22 +36,8 @@ interface APIKeysContextType {
 
 const APIKeysContext = createContext<APIKeysContextType | null>(null)
 
-const STORAGE_KEY = 'codedoc-api-keys'
-const MODEL_STORAGE_KEY = 'codedoc-selected-model'
-const API_KEY_PROVIDERS: AIProvider[] = ['openai', 'google', 'anthropic', 'openrouter']
-
-/** Validate that parsed localStorage data has the expected APIKeysState shape. */
-function isValidAPIKeysState(data: unknown): data is APIKeysState {
-  if (!data || typeof data !== 'object') return false
-  const obj = data as Record<string, unknown>
-  return API_KEY_PROVIDERS.every(p => {
-    const entry = obj[p]
-    return entry && typeof entry === 'object' && 'key' in entry && typeof (entry as Record<string, unknown>).key === 'string'
-  })
-}
-
 export function APIKeysProvider({ children }: { children: ReactNode }) {
-  const [apiKeys, setAPIKeys] = useState<APIKeysState>(defaultAPIKeysState)
+  const [apiKeys, setAPIKeys] = useState<APIKeysState>(DEFAULT_API_KEYS_STATE)
   const [models, setModels] = useState<ProviderModel[]>([])
   const [isLoadingModels, setIsLoadingModels] = useState(false)
   const [selectedModel, setSelectedModel] = useState<ProviderModel | null>(null)
@@ -118,29 +54,13 @@ export function APIKeysProvider({ children }: { children: ReactNode }) {
 
   // Hydrate state from localStorage after mount (avoids SSR/client mismatch)
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY)
-      if (stored) {
-        const parsed: unknown = JSON.parse(stored)
-        if (isValidAPIKeysState(parsed)) {
-          setAPIKeys(parsed)
-        } else {
-          localStorage.removeItem(STORAGE_KEY)
-        }
-      }
-    } catch {
-      localStorage.removeItem(STORAGE_KEY)
-    }
+    const storedKeys = loadKeys()
+    if (storedKeys) setAPIKeys(storedKeys)
 
-    try {
-      const storedModel = localStorage.getItem(MODEL_STORAGE_KEY)
-      if (storedModel) {
-        const parsed = JSON.parse(storedModel) as ProviderModel
-        setSelectedModel(parsed)
-        selectedModelRef.current = parsed
-      }
-    } catch {
-      // Ignore invalid stored model
+    const storedModel = loadSelectedModel()
+    if (storedModel) {
+      setSelectedModel(storedModel)
+      selectedModelRef.current = storedModel
     }
 
     setIsHydrated(true)
@@ -149,17 +69,13 @@ export function APIKeysProvider({ children }: { children: ReactNode }) {
   // Save keys to localStorage when changed (skip before hydration)
   useEffect(() => {
     if (!isHydrated) return
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(apiKeys))
+    saveKeys(apiKeys)
   }, [apiKeys, isHydrated])
 
   // Persist selected model to localStorage
   useEffect(() => {
     if (!isHydrated) return
-    if (selectedModel) {
-      localStorage.setItem(MODEL_STORAGE_KEY, JSON.stringify(selectedModel))
-    } else {
-      localStorage.removeItem(MODEL_STORAGE_KEY)
-    }
+    saveSelectedModel(selectedModel)
   }, [selectedModel, isHydrated])
 
   const setAPIKey = useCallback((provider: AIProvider, key: string) => {
@@ -176,7 +92,7 @@ export function APIKeysProvider({ children }: { children: ReactNode }) {
   const removeAPIKey = useCallback((provider: AIProvider) => {
     setAPIKeys(prev => ({
       ...prev,
-      [provider]: { ...defaultKeyConfig },
+      [provider]: { ...DEFAULT_KEY_CONFIG },
     }))
     // Remove models from this provider
     setModels(prev => prev.filter(m => m.provider !== provider))
@@ -187,14 +103,7 @@ export function APIKeysProvider({ children }: { children: ReactNode }) {
     if (!key) return false
 
     try {
-      const response = await fetch(`/api/models/${provider}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apiKey: key }),
-      })
-
-      const data = await response.json()
-      const isValid = response.ok && data.models?.length > 0
+      const { models: providerModels, isValid } = await fetchProviderModels(provider, key)
 
       setAPIKeys(prev => ({
         ...prev,
@@ -205,17 +114,8 @@ export function APIKeysProvider({ children }: { children: ReactNode }) {
         },
       }))
 
-      if (isValid && data.models) {
-        // Add provider's models to the list
-        const providerModels: ProviderModel[] = data.models.map((m: ModelResponseItem) => ({
-          id: m.id,
-          name: m.name || m.id,
-          provider,
-          contextLength: m.contextLength,
-        }))
-        
+      if (isValid && providerModels.length > 0) {
         setModels(prev => {
-          // Remove old models from this provider and add new ones
           const filtered = prev.filter(m => m.provider !== provider)
           return [...filtered, ...providerModels]
         })
@@ -250,15 +150,10 @@ export function APIKeysProvider({ children }: { children: ReactNode }) {
     if (!key) return []
 
     try {
-      const response = await fetch(`/api/models/${provider}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apiKey: key }),
-      })
+      const { models: providerModels, isValid } = await fetchProviderModels(provider, key)
 
-      if (!response.ok) {
+      if (!isValid) {
         const errorMsg = `Failed to load ${PROVIDERS[provider].name} models — check your API key`
-        // Mark invalid on failure
         setAPIKeys(prev => ({
           ...prev,
           [provider]: {
@@ -271,14 +166,6 @@ export function APIKeysProvider({ children }: { children: ReactNode }) {
         toast.error(errorMsg)
         return []
       }
-
-      const data = await response.json()
-      const providerModels: ProviderModel[] = (data.models || []).map((m: ModelResponseItem) => ({
-        id: m.id,
-        name: m.name || m.id,
-        provider,
-        contextLength: m.contextLength,
-      }))
 
       setModels(prev => {
         const filtered = prev.filter(m => m.provider !== provider)
@@ -312,7 +199,6 @@ export function APIKeysProvider({ children }: { children: ReactNode }) {
       return providerModels
     } catch {
       const errorMsg = `Failed to load ${PROVIDERS[provider].name} models — check your API key`
-      // Mark invalid on failure
       setAPIKeys(prev => ({
         ...prev,
         [provider]: {

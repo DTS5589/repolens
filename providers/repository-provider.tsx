@@ -9,48 +9,16 @@ import { createEmptyIndex, batchIndexFiles } from '@/lib/code/code-index'
 import { getCachedRepo } from "@/lib/cache/repo-cache"
 import { analyzeCodebase, type FullAnalysis } from "@/lib/code/import-parser"
 import { startIndexing as runIndexingPipeline } from "@/lib/github/indexing-pipeline"
+import {
+  DEFAULT_SEARCH_STATE,
+  DEFAULT_INDEXING_PROGRESS,
+  type IndexingProgress,
+  type SearchState,
+  type LoadingStage,
+} from '@/lib/repository'
 
-interface IndexingProgress {
-  current: number
-  total: number
-  isComplete: boolean
-}
-
-export type LoadingStage =
-  | 'idle'
-  | 'metadata'
-  | 'tree'
-  | 'downloading'
-  | 'extracting'
-  | 'indexing'
-  | 'ready'
-  | 'cached'
-
-export interface SearchState {
-  searchQuery: string
-  debouncedSearchQuery: string
-  replaceQuery: string
-  showReplace: boolean
-  fileFilter: string
-  searchOptions: {
-    caseSensitive: boolean
-    regex: boolean
-    wholeWord: boolean
-  }
-}
-
-const defaultSearchState: SearchState = {
-  searchQuery: '',
-  debouncedSearchQuery: '',
-  replaceQuery: '',
-  showReplace: false,
-  fileFilter: '',
-  searchOptions: {
-    caseSensitive: false,
-    regex: false,
-    wholeWord: false,
-  },
-}
+// Re-export for backward compatibility
+export type { LoadingStage, SearchState } from '@/lib/repository'
 
 interface RepositoryContextType extends RepositoryContext {
   connectRepository: (url: string) => Promise<boolean>
@@ -94,13 +62,9 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [codeIndex, setCodeIndex] = useState<CodeIndex>(createEmptyIndex())
-  const [indexingProgress, setIndexingProgress] = useState<IndexingProgress>({
-    current: 0,
-    total: 0,
-    isComplete: false,
-  })
+  const [indexingProgress, setIndexingProgress] = useState<IndexingProgress>(DEFAULT_INDEXING_PROGRESS)
   const indexingAbortRef = useRef<AbortController | null>(null)
-  const [searchState, setSearchState] = useState<SearchState>(defaultSearchState)
+  const [searchState, setSearchState] = useState<SearchState>(DEFAULT_SEARCH_STATE)
   const [modifiedContents, setModifiedContents] = useState<Map<string, string>>(new Map())
   const [codebaseAnalysis, setCodebaseAnalysis] = useState<FullAnalysis | null>(null)
   const [failedFiles, setFailedFiles] = useState<Array<{ path: string; error: string }>>([])
@@ -138,7 +102,7 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
     setIsLoading(true)
     setError(null)
     setCodeIndex(createEmptyIndex())
-    setIndexingProgress({ current: 0, total: 0, isComplete: false })
+    setIndexingProgress(DEFAULT_INDEXING_PROGRESS)
     setFailedFiles([])
     setIsCacheHit(false)
     setCodebaseAnalysis(null)
@@ -207,9 +171,9 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
     setFiles([])
     setParsedFiles(new Map())
     setCodeIndex(createEmptyIndex())
-    setIndexingProgress({ current: 0, total: 0, isComplete: false })
+    setIndexingProgress(DEFAULT_INDEXING_PROGRESS)
     setError(null)
-    setSearchState(defaultSearchState)
+    setSearchState(DEFAULT_SEARCH_STATE)
     setModifiedContents(new Map())
     setCodebaseAnalysis(null)
     setFailedFiles([])

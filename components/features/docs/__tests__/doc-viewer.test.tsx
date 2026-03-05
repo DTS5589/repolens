@@ -114,6 +114,8 @@ const defaultAPIKeysValue = {
   fetchModels: vi.fn(),
   setSelectedModel: vi.fn(),
   getValidProviders: vi.fn(() => ['openai' as const]),
+  isHydrated: true,
+  modelFetchErrors: {},
 }
 
 const defaultRepoValue = {
@@ -183,7 +185,7 @@ function setupMocks(overrides: SetupOptions = {}) {
     ...(overrides.getValidProviders
       ? { getValidProviders: overrides.getValidProviders }
       : {}),
-  } as ReturnType<typeof useAPIKeys>)
+  } as unknown as ReturnType<typeof useAPIKeys>)
 
   vi.mocked(useRepository).mockReturnValue({
     ...defaultRepoValue,

@@ -8,15 +8,67 @@ import {
   type GenContext,
 } from '@/providers/docs-provider'
 
+// ---------------------------------------------------------------------------
+// Return type
+// ---------------------------------------------------------------------------
+
+/** Return value of {@link useDocsEngine}. */
+export interface DocsEngineReturn {
+  /** All generated documentation entries, newest first. */
+  generatedDocs: GeneratedDoc[]
+  /** Current chat messages from the active generation session. */
+  messages: ReturnType<typeof useDocsChat>['messages']
+  /** Chat status: `'ready'` | `'submitted'` | `'streaming'`. */
+  status: ReturnType<typeof useDocsChat>['status']
+  /** Error from the last generation attempt, if any. */
+  error: Error | null | undefined
+  /** Whether a generation is currently in progress. */
+  isGenerating: boolean
+  /** Abort the current generation. */
+  stop: () => void
+  /**
+   * Start a new documentation generation.
+   *
+   * Validates inputs, snapshots context, clears prior messages, and sends
+   * the prompt with a short delay to let React flush state.
+   */
+  handleGenerate: (
+    preset: (typeof DOC_PRESETS)[number],
+    targetFile: string | null,
+    customPrompt: string,
+    maxSteps?: number,
+    compactionEnabled?: boolean,
+  ) => void
+  /**
+   * Regenerate documentation from an existing {@link GeneratedDoc}.
+   *
+   * Looks up the original preset, restores the generation context, and
+   * re-sends the prompt.
+   */
+  handleRegenerate: (doc: GeneratedDoc) => void
+  /**
+   * Delete a generated doc by ID.
+   *
+   * If the deleted doc was the active doc, resets to the new-doc form.
+   */
+  handleDeleteDoc: (id: string) => void
+}
+
+// ---------------------------------------------------------------------------
+// Hook
+// ---------------------------------------------------------------------------
+
 /**
- * Encapsulates doc generation orchestration — starting, completing, and
- * deleting generations.  Uses both `useDocs()` (state) and `useDocsChat()`
- * (chat) contexts so it can bridge the two.
+ * Orchestrates documentation generation lifecycle.
+ *
+ * Bridges `useDocs()` (state) and `useDocsChat()` (chat) contexts to manage
+ * the full generation workflow: context setup, message sending, completion
+ * handling, and doc persistence.
  *
  * UI-only state (selectedPreset, customPrompt, targetFile, etc.) stays local
- * to DocViewer.
+ * to DocViewer — this hook only manages the generation engine.
  */
-export function useDocsEngine() {
+export function useDocsEngine(): DocsEngineReturn {
   const {
     generatedDocs,
     setGeneratedDocs,
@@ -47,11 +99,15 @@ export function useDocsEngine() {
   const currentDocIdRef = useRef<string | null>(null)
   const sendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Cleanup timer on unmount
+  // Cleanup timer and abort in-flight generation on unmount
   useEffect(() => {
     return () => {
       if (sendTimerRef.current) clearTimeout(sendTimerRef.current)
+      if (isSubmittingRef.current || status === 'streaming' || status === 'submitted') {
+        stop()
+      }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // --- When generation completes, save the doc ---
@@ -68,7 +124,7 @@ export function useDocsEngine() {
         lastMsg?.role === 'assistant' &&
         Array.isArray(lastMsg?.parts) &&
         lastMsg.parts.some(
-          (p: any) => p.type === 'tool-invocation' && p.state !== 'result',
+          (p: { type: string; state?: string }) => p.type === 'tool-invocation' && p.state !== 'result',
         )
       if (hasPendingToolCalls) {
         prevStatus.current = status
@@ -95,12 +151,7 @@ export function useDocsEngine() {
       const preset = DOC_PRESETS.find(p => p.id === ctx.docType)
       const docId = `doc-${Date.now()}`
       currentDocIdRef.current = docId
-      const title =
-        ctx.docType === 'file-explanation' && ctx.targetFile
-          ? `${ctx.targetFile.split('/').pop()} Explained`
-          : ctx.docType === 'custom'
-            ? ctx.customPrompt.slice(0, 50) + (ctx.customPrompt.length > 50 ? '...' : '')
-            : preset?.label || 'Documentation'
+      const title = buildDocTitle(ctx, preset?.label)
 
       const newDoc: GeneratedDoc = {
         id: docId,
@@ -120,18 +171,19 @@ export function useDocsEngine() {
     prevStatus.current = status
   }, [status, messages, setGeneratedDocs, setActiveDocId, setShowNewDoc])
 
-  // --- Actions ---
+  // --- Shared generation logic ---
 
-  const handleGenerate = (
+  /**
+   * Initiates a generation cycle: snapshots context, clears messages,
+   * builds the prompt, and schedules the send with a short delay.
+   */
+  const dispatchGeneration = (
     preset: (typeof DOC_PRESETS)[number],
     targetFile: string | null,
     customPrompt: string,
     maxSteps?: number,
     compactionEnabled?: boolean,
   ) => {
-    if (isGenerating || isSubmittingRef.current) return
-
-    // Snapshot context into ref before sending
     const ctx: GenContext = {
       docType: preset.id,
       targetFile,
@@ -140,13 +192,11 @@ export function useDocsEngine() {
       compactionEnabled: compactionEnabled ?? false,
     }
     genContextRef.current = ctx
-    setGenContext(ctx) // also push to provider ref for transport
-
+    setGenContext(ctx)
     setMessages([])
 
     const prompt = buildDocPrompt(preset, targetFile, customPrompt)
 
-    // Let React flush setMessages([]) before sending
     if (sendTimerRef.current) clearTimeout(sendTimerRef.current)
     isSubmittingRef.current = true
     hasSavedRef.current = false
@@ -157,7 +207,20 @@ export function useDocsEngine() {
     }, 50)
   }
 
-  const handleRegenerate = (doc: GeneratedDoc) => {
+  // --- Actions ---
+
+  const handleGenerate: DocsEngineReturn['handleGenerate'] = (
+    preset,
+    targetFile,
+    customPrompt,
+    maxSteps,
+    compactionEnabled,
+  ) => {
+    if (isGenerating || isSubmittingRef.current) return
+    dispatchGeneration(preset, targetFile, customPrompt, maxSteps, compactionEnabled)
+  }
+
+  const handleRegenerate: DocsEngineReturn['handleRegenerate'] = (doc) => {
     if (isGenerating || isSubmittingRef.current) return
 
     const preset = DOC_PRESETS.find(p => p.id === doc.type)
@@ -165,31 +228,15 @@ export function useDocsEngine() {
 
     setShowNewDoc(true)
     setActiveDocId(null)
-
-    const ctx: GenContext = {
-      docType: doc.type,
-      targetFile: doc.targetFile || null,
-      customPrompt: doc.customPrompt || '',
-      maxSteps: doc.maxSteps,
-    }
-    genContextRef.current = ctx
-    setGenContext(ctx)
-
-    setMessages([])
-
-    const prompt = buildDocPrompt(preset, doc.targetFile || null, doc.customPrompt || '')
-
-    if (sendTimerRef.current) clearTimeout(sendTimerRef.current)
-    isSubmittingRef.current = true
-    hasSavedRef.current = false
-    currentDocIdRef.current = null
-    sendTimerRef.current = setTimeout(() => {
-      sendMessage({ text: prompt })
-      isSubmittingRef.current = false
-    }, 50)
+    dispatchGeneration(
+      preset,
+      doc.targetFile || null,
+      doc.customPrompt || '',
+      doc.maxSteps,
+    )
   }
 
-  const handleDeleteDoc = (id: string) => {
+  const handleDeleteDoc: DocsEngineReturn['handleDeleteDoc'] = (id) => {
     setGeneratedDocs(prev => prev.filter(d => d.id !== id))
     if (activeDocId === id) {
       setActiveDocId(null)
@@ -210,4 +257,25 @@ export function useDocsEngine() {
     handleRegenerate,
     handleDeleteDoc,
   }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Derives a display title for a generated doc based on generation context.
+ *
+ * - File explanations use the filename.
+ * - Custom prompts use the first 50 characters of the user's prompt.
+ * - All others use the preset label.
+ */
+function buildDocTitle(ctx: GenContext, presetLabel?: string): string {
+  if (ctx.docType === 'file-explanation' && ctx.targetFile) {
+    return `${ctx.targetFile.split('/').pop()} Explained`
+  }
+  if (ctx.docType === 'custom') {
+    return ctx.customPrompt.slice(0, 50) + (ctx.customPrompt.length > 50 ? '...' : '')
+  }
+  return presetLabel || 'Documentation'
 }

@@ -19,113 +19,15 @@ import { buildStructuralIndex } from '@/lib/ai/structural-index'
 import { getMaxIndexBytesForModel } from '@/lib/ai/providers'
 import { handleToolCall } from '@/lib/ai/tool-call-handler'
 import type { CodeIndex } from '@/lib/code/code-index'
+import type { GenContext, GeneratedDoc, DocType } from '@/lib/docs'
 
-// ---------------------------------------------------------------------------
-// Types & constants (moved from doc-viewer.tsx)
-// ---------------------------------------------------------------------------
-
-export type DocType = 'architecture' | 'setup' | 'api-reference' | 'file-explanation' | 'custom'
-
-export interface DocPreset {
-  id: DocType
-  label: string
-  description: string
-  icon: ReactNode
-  prompt: string
-}
-
-// NOTE: icons are set to `null` here because React elements shouldn't live in
-// a provider module.  DocViewer maps `id → icon` at render time via
-// `DOC_PRESET_ICONS`.  The provider only cares about the prompt text.
-export const DOC_PRESETS: DocPreset[] = [
-  {
-    id: 'architecture',
-    label: 'Architecture Overview',
-    description: 'How the project is structured, modules, data flow, and design decisions',
-    icon: null,
-    prompt:
-      'Generate a comprehensive architecture overview for this codebase. Cover the high-level structure, key modules, data flow, and notable design decisions.',
-  },
-  {
-    id: 'setup',
-    label: 'Setup / Getting Started',
-    description: 'Installation, configuration, and how to run the project locally',
-    icon: null,
-    prompt:
-      'Generate a Getting Started guide for this project. Include prerequisites, installation steps, configuration (env vars, etc.), and how to run it locally.',
-  },
-  {
-    id: 'api-reference',
-    label: 'API Reference',
-    description: 'Exported functions, classes, types, and interfaces with signatures',
-    icon: null,
-    prompt:
-      'Generate an API reference documenting all significant exported functions, classes, types, and interfaces. Include type signatures, parameter descriptions, and usage examples.',
-  },
-  {
-    id: 'file-explanation',
-    label: 'Explain a File',
-    description: 'Deep explanation of a specific file -- purpose, logic, and how it fits',
-    icon: null,
-    prompt: '', // set dynamically based on selected file
-  },
-  {
-    id: 'custom',
-    label: 'Custom Prompt',
-    description: 'Ask the AI to generate any docs you need',
-    icon: null,
-    prompt: '',
-  },
-]
-
-export interface GeneratedDoc {
-  id: string
-  type: DocType
-  title: string
-  messages: UIMessage[]
-  createdAt: Date
-  targetFile?: string
-  customPrompt?: string
-  maxSteps?: number
-}
-
-/** Extracts all assistant text from chat messages. */
-export function getAssistantText(messages: UIMessage[]): string {
-  return messages
-    .filter(m => m.role === 'assistant')
-    .flatMap(
-      m =>
-        m.parts
-          ?.filter((p): p is { type: 'text'; text: string } => p.type === 'text')
-          .map(p => p.text) || [],
-    )
-    .join('')
-}
-
-/** Builds the prompt string for a given preset / file / custom prompt. */
-export function buildDocPrompt(
-  preset: DocPreset,
-  targetFile: string | null,
-  customPrompt: string,
-): string {
-  if (preset.id === 'file-explanation' && targetFile) {
-    return `Explain this file in detail: \`${targetFile}\`. Cover its purpose, how it fits in the architecture, key functions/classes, and walk through the main logic.`
-  }
-  if (preset.id === 'custom') return customPrompt
-  return preset.prompt
-}
-
-// ---------------------------------------------------------------------------
-// Generation context ref type (shared between provider & hook)
-// ---------------------------------------------------------------------------
-
-export interface GenContext {
-  docType: DocType
-  targetFile: string | null
-  customPrompt: string
-  maxSteps?: number
-  compactionEnabled?: boolean
-}
+// Re-export for backward compatibility
+export {
+  DOC_PRESETS,
+  getAssistantText,
+  buildDocPrompt,
+} from '@/lib/docs'
+export type { DocType, DocPreset, GeneratedDoc, GenContext } from '@/lib/docs'
 
 // ---------------------------------------------------------------------------
 // Docs State Context  (rarely changes)

@@ -1,17 +1,28 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback, Suspense, lazy } from "react"
 import { useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { ArrowLeft, Link2, Check, BarChart3, Package } from "lucide-react"
 import { Header } from "@/components/layout/header"
 import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
 import { RepoInputBar } from "@/components/features/compare/repo-input-bar"
 import { LoadedReposList } from "@/components/features/compare/loaded-repos-list"
-import { ComparisonTable } from "@/components/features/compare/comparison-table"
-import { DependencyOverlap } from "@/components/features/compare/dependency-overlap"
 import { useComparison } from "@/providers/comparison-provider"
 import { MAX_COMPARISON_REPOS } from "@/types/comparison"
+
+const ComparisonTable = lazy(() =>
+  import("@/components/features/compare/comparison-table").then((m) => ({
+    default: m.ComparisonTable,
+  }))
+)
+
+const DependencyOverlap = lazy(() =>
+  import("@/components/features/compare/dependency-overlap").then((m) => ({
+    default: m.DependencyOverlap,
+  }))
+)
 
 export default function ComparePage() {
   const searchParams = useSearchParams()
@@ -116,7 +127,21 @@ export default function ComparePage() {
                 <BarChart3 className="h-4 w-4 text-text-secondary" />
                 <h2 className="text-base font-semibold">Metrics</h2>
               </div>
-              <ComparisonTable />
+              <Suspense
+                fallback={
+                  <div className="space-y-4">
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <div key={i} className="space-y-2">
+                        <Skeleton className="h-4 w-24" />
+                        <Skeleton className="h-2 w-full" />
+                        <Skeleton className="h-2 w-3/4" />
+                      </div>
+                    ))}
+                  </div>
+                }
+              >
+                <ComparisonTable />
+              </Suspense>
             </section>
           )}
 
@@ -127,7 +152,13 @@ export default function ComparePage() {
                 <Package className="h-4 w-4 text-text-secondary" />
                 <h2 className="text-base font-semibold">Dependencies</h2>
               </div>
-              <DependencyOverlap />
+              <Suspense
+                fallback={
+                  <Skeleton className="h-48 w-full rounded-lg" />
+                }
+              >
+                <DependencyOverlap />
+              </Suspense>
             </section>
           )}
         </div>

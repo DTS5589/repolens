@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { ChevronRight, Package } from "lucide-react"
+import { AlertTriangle, ChevronRight, Package } from "lucide-react"
 import {
   Table,
   TableBody,
@@ -36,16 +36,33 @@ export function DependencyOverlap() {
         </p>
       )
     }
-    return null
+    return (
+      <p className="text-sm text-text-secondary">
+        No repositories loaded yet. Add repositories above to compare their
+        dependencies.
+      </p>
+    )
   }
 
-  const comparison = compareDependencies(
-    readyReposWithDeps.map((r) => ({
-      id: r.id,
-      deps: r.dependencies!.deps,
-      devDeps: r.dependencies!.devDeps,
-    }))
-  )
+  let comparison: ReturnType<typeof compareDependencies>
+  try {
+    comparison = compareDependencies(
+      readyReposWithDeps.map((r) => ({
+        id: r.id,
+        deps: r.dependencies!.deps,
+        devDeps: r.dependencies!.devDeps,
+      }))
+    )
+  } catch {
+    return (
+      <div className="flex items-center gap-2 rounded-lg border border-status-error/20 bg-status-error/5 px-4 py-3 text-sm text-status-error">
+        <AlertTriangle className="h-4 w-4 shrink-0" />
+        <p>
+          Failed to compare dependencies. Some repository data may be malformed.
+        </p>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-4">
