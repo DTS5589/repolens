@@ -230,26 +230,28 @@ export function GlobalSearchOverlay({
 
   /* ── Code search ──────────────────────────────────────────────── */
 
-  const codeResults = useMemo(() => {
-    if (activeTab !== 'code' || !debouncedQuery.trim()) return []
+  const { codeResults, totalCodeMatches } = useMemo(() => {
+    if (activeTab !== 'code' || !debouncedQuery.trim()) return { codeResults: [], totalCodeMatches: 0 }
     const results = searchIndex(codeIndex, debouncedQuery, codeSearchOptions)
-    // Flatten to a list of result items with a cap
     const items: Array<{ file: string; match: SearchMatch; language?: string }> = []
+    let total = 0
     for (const result of results) {
-      for (const match of result.matches) {
-        items.push({ file: result.file, match, language: result.language })
-        if (items.length >= MAX_CODE_RESULTS) return items
+      total += result.matches.length
+      if (items.length < MAX_CODE_RESULTS) {
+        for (const match of result.matches) {
+          items.push({ file: result.file, match, language: result.language })
+          if (items.length >= MAX_CODE_RESULTS) break
+        }
       }
     }
-    return items
+    return { codeResults: items, totalCodeMatches: total }
   }, [debouncedQuery, codeIndex, codeSearchOptions, activeTab])
 
   const codeResultStats = useMemo(() => {
-    if (activeTab !== 'code' || !debouncedQuery.trim()) return null
-    const results = searchIndex(codeIndex, debouncedQuery, codeSearchOptions)
-    const totalMatches = results.reduce((sum, r) => sum + r.matches.length, 0)
-    return { totalMatches, fileCount: results.length }
-  }, [debouncedQuery, codeIndex, codeSearchOptions, activeTab])
+    if (activeTab !== 'code' || !debouncedQuery.trim() || codeResults.length === 0) return null
+    const fileCount = new Set(codeResults.map(r => r.file)).size
+    return { totalMatches: totalCodeMatches, fileCount }
+  }, [debouncedQuery, codeResults, activeTab, totalCodeMatches])
 
   /* ── Symbol search ────────────────────────────────────────────── */
 
@@ -313,6 +315,7 @@ export function GlobalSearchOverlay({
     }
     if (e.key === 'ArrowDown') {
       e.preventDefault()
+      if (itemCount === 0) return
       setSelectedIndex(prev => Math.min(prev + 1, itemCount - 1))
       return
     }
@@ -332,7 +335,14 @@ export function GlobalSearchOverlay({
       if (e.key === '2') { e.preventDefault(); setActiveTab('code') }
       if (e.key === '3') { e.preventDefault(); setActiveTab('symbols') }
     }
-  }, [onClose, itemCount, selectedIndex, selectItem])
+    // Tab/Shift+Tab cycling (only when search input is focused)
+    if (e.key === 'Tab' && e.target === inputRef.current) {
+      e.preventDefault()
+      const tabs: SearchTab[] = ['files', 'code', 'symbols']
+      const idx = tabs.indexOf(activeTab)
+      setActiveTab(tabs[(idx + (e.shiftKey ? tabs.length - 1 : 1)) % tabs.length])
+    }
+  }, [onClose, itemCount, selectedIndex, selectItem, activeTab])
 
   // Scroll selected item into view
   useEffect(() => {
@@ -381,6 +391,11 @@ export function GlobalSearchOverlay({
             onChange={e => setQuery(e.target.value)}
             placeholder={placeholder}
             className="flex-1 h-10 bg-transparent text-sm text-text-primary placeholder:text-text-muted outline-none"
+            role="combobox"
+            aria-label="Search"
+            aria-expanded={itemCount > 0}
+            aria-controls="search-results"
+            aria-activedescendant={itemCount > 0 ? `search-result-${selectedIndex}` : undefined}
           />
           {query && (
             <button
@@ -428,7 +443,7 @@ export function GlobalSearchOverlay({
         )}
 
         {/* Results */}
-        <div ref={resultsRef} className="max-h-80 overflow-y-auto py-1">
+        <div ref={resultsRef} id="search-results" role="listbox" className="max-h-80 overflow-y-auto py-1">
           {activeTab === 'files' && (
             <FileResultsList
               query={query}
@@ -493,7 +508,10 @@ function FileResultsList({
       {results.map((f, i) => (
         <button
           key={f.path}
+          id={`search-result-${i}`}
           data-index={i}
+          role="option"
+          aria-selected={i === selectedIndex}
           onClick={() => onSelect(f.path)}
           className={cn(
             "w-full flex items-center gap-2 px-3 py-2 text-left transition-colors duration-150",
@@ -563,7 +581,10 @@ function CodeResultsList({
               </div>
             )}
             <button
+              id={`search-result-${i}`}
               data-index={i}
+              role="option"
+              aria-selected={i === selectedIndex}
               onClick={() => onSelect(r.file, r.match.line)}
               className={cn(
                 "w-full flex items-center gap-2 px-3 py-1 text-left transition-colors duration-150",
@@ -631,7 +652,10 @@ function SymbolResultsList({
         return (
           <button
             key={`${r.filePath}-${r.symbol.name}-${r.symbol.line}-${i}`}
+            id={`search-result-${i}`}
             data-index={i}
+            role="option"
+            aria-selected={i === selectedIndex}
             onClick={() => onSelect(r.filePath, r.symbol.line)}
             className={cn(
               "w-full flex items-center gap-2 px-3 py-1.5 text-left transition-colors duration-150",
