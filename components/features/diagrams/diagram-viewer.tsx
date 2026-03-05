@@ -148,14 +148,14 @@ export function DiagramViewer({ files, codeIndex, className, onNavigateToFile }:
     const svgEl = activeDiagramType === 'treemap'
       ? treemapRef.current
       : mermaidRef.current?.getSvgElement()
-    if (svgEl) exportSvg(svgEl, activeDiagramType)
+    if (svgEl && activeDiagramType) exportSvg(svgEl, activeDiagramType)
   }, [activeDiagramType])
 
   const handleExportPng = useCallback(() => {
     const svgEl = activeDiagramType === 'treemap'
       ? treemapRef.current
       : mermaidRef.current?.getSvgElement()
-    if (svgEl) exportPng(svgEl, activeDiagramType)
+    if (svgEl && activeDiagramType) exportPng(svgEl, activeDiagramType)
   }, [activeDiagramType])
 
   const handleNodeClick = useCallback((nodeId: string) => {
@@ -267,7 +267,7 @@ export function DiagramViewer({ files, codeIndex, className, onNavigateToFile }:
                 {diagram ? (
                   isTreemap && diagram.type === 'treemap' ? (
                     <TreemapChart ref={treemapRef} data={(diagram as TreemapDiagramResult).data} width={containerSize.width} height={containerSize.height} onNodeClick={handleTreemapClick} />
-                  ) : diagram.type !== 'treemap' ? (
+                  ) : diagram.type !== 'treemap' && diagram.type !== 'summary' ? (
                     <Suspense fallback={<MermaidDiagramSkeleton />}>
                       <MermaidDiagram ref={mermaidRef} chart={diagram.chart} className="min-h-[400px] p-4" onNodeClick={handleNodeClick} />
                     </Suspense>

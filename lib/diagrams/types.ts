@@ -20,7 +20,7 @@ export interface DiagramStats {
 }
 
 export interface MermaidDiagramResult {
-  type: DiagramType
+  type: Exclude<DiagramType, 'treemap'>
   title: string
   chart: string
   stats: DiagramStats
