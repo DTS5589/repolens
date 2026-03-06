@@ -38,6 +38,8 @@ vi.mock('lucide-react', () => {
     X: icon('X'),
     ChevronRight: icon('ChevronRight'),
     ChevronDown: icon('ChevronDown'),
+    Filter: icon('Filter'),
+    FilterX: icon('FilterX'),
   }
 })
 
@@ -188,6 +190,7 @@ describe('GlobalSearchOverlay', () => {
       expect(screen.getByTitle('Match Case')).toBeInTheDocument()
       expect(screen.getByTitle('Whole Word')).toBeInTheDocument()
       expect(screen.getByTitle('Use Regex')).toBeInTheDocument()
+      expect(screen.getByTitle('Excluding generated files')).toBeInTheDocument()
     })
 
     it('shows symbol kind filters only on Symbols tab', async () => {
@@ -490,6 +493,56 @@ describe('GlobalSearchOverlay', () => {
       act(() => { vi.advanceTimersByTime(300) })
 
       expect(screen.getByText(/3 matches in 2 files/)).toBeInTheDocument()
+    })
+
+    it('excludes generated files by default', async () => {
+      mockSearchIndex.mockReturnValue([
+        { file: 'src/app.ts', language: 'typescript', matches: [
+          { line: 1, content: 'const x = 1', column: 0, length: 5 },
+        ]},
+        { file: 'pnpm-lock.yaml', language: 'yaml', matches: [
+          { line: 100, content: 'integrity: sha512-abc', column: 0, length: 5 },
+        ]},
+        { file: 'dist/bundle.js', language: 'javascript', matches: [
+          { line: 1, content: 'var x=1', column: 0, length: 5 },
+        ]},
+      ])
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+      renderOverlay()
+      await user.click(screen.getByText('Code Search'))
+      await user.type(
+        screen.getByPlaceholderText('Search in file contents...'), 'x',
+      )
+      act(() => { vi.advanceTimersByTime(300) })
+
+      expect(screen.getByText('src/app.ts')).toBeInTheDocument()
+      expect(screen.queryByText('pnpm-lock.yaml')).not.toBeInTheDocument()
+      expect(screen.queryByText('dist/bundle.js')).not.toBeInTheDocument()
+    })
+
+    it('includes generated files when toggle is off', async () => {
+      mockSearchIndex.mockReturnValue([
+        { file: 'src/app.ts', language: 'typescript', matches: [
+          { line: 1, content: 'const x = 1', column: 0, length: 5 },
+        ]},
+        { file: 'pnpm-lock.yaml', language: 'yaml', matches: [
+          { line: 100, content: 'integrity: sha512-abc', column: 0, length: 5 },
+        ]},
+      ])
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+      renderOverlay()
+      await user.click(screen.getByText('Code Search'))
+
+      // Toggle off the exclude filter
+      await user.click(screen.getByTitle('Excluding generated files'))
+
+      await user.type(
+        screen.getByPlaceholderText('Search in file contents...'), 'x',
+      )
+      act(() => { vi.advanceTimersByTime(300) })
+
+      expect(screen.getByText('src/app.ts')).toBeInTheDocument()
+      expect(screen.getByText('pnpm-lock.yaml')).toBeInTheDocument()
     })
   })
 

@@ -4,6 +4,7 @@ import { useRef, useEffect, useState, useMemo, useCallback } from "react"
 import {
   Search, Code2, FileText, Braces, Box, Shapes, Type, List, Code,
   CaseSensitive, WholeWord, Regex, X, ChevronRight, ChevronDown,
+  Filter, FilterX,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { CodeIndex, SearchResult, SearchMatch } from "@/lib/code/code-index"
@@ -39,6 +40,19 @@ interface GlobalSearchOverlayProps {
 
 const INITIAL_VISIBLE_COUNT = 100
 const VISIBLE_COUNT_INCREMENT = 100
+
+const GENERATED_FILE_PATTERNS = [
+  /pnpm-lock\.yaml$/,
+  /package-lock\.json$/,
+  /yarn\.lock$/,
+  /\.lock$/,
+  /\.min\.(js|css)$/,
+  /\.bundle\.(js|css)$/,
+  /dist\//,
+  /\.next\//,
+  /node_modules\//,
+  /\.map$/,
+]
 
 const SYMBOL_ICON_MAP: Record<SymbolKind, React.ElementType> = {
   function: Braces,
@@ -190,6 +204,7 @@ export function GlobalSearchOverlay({
   const [caseSensitive, setCaseSensitive] = useState(false)
   const [wholeWord, setWholeWord] = useState(false)
   const [useRegex, setUseRegex] = useState(false)
+  const [excludeGenerated, setExcludeGenerated] = useState(true)
   const codeSearchOptions = useMemo(
     () => ({ caseSensitive, regex: useRegex, wholeWord }),
     [caseSensitive, useRegex, wholeWord],
@@ -253,16 +268,19 @@ export function GlobalSearchOverlay({
   const { codeResults, totalCodeMatches } = useMemo(() => {
     if (activeTab !== 'code' || !debouncedQuery.trim()) return { codeResults: [], totalCodeMatches: 0 }
     const results = searchIndex(codeIndex, debouncedQuery, codeSearchOptions)
+    const filtered = excludeGenerated
+      ? results.filter(r => !GENERATED_FILE_PATTERNS.some(p => p.test(r.file)))
+      : results
     const items: Array<{ file: string; match: SearchMatch; language?: string }> = []
     let total = 0
-    for (const result of results) {
+    for (const result of filtered) {
       total += result.matches.length
       for (const match of result.matches) {
         items.push({ file: result.file, match, language: result.language })
       }
     }
     return { codeResults: items, totalCodeMatches: total }
-  }, [debouncedQuery, codeIndex, codeSearchOptions, activeTab])
+  }, [debouncedQuery, codeIndex, codeSearchOptions, activeTab, excludeGenerated])
 
   // Visible code results: exclude collapsed files, limit by visibleCount
   const visibleCodeItems = useMemo(() => {
@@ -456,6 +474,8 @@ export function GlobalSearchOverlay({
               <SearchToggle active={caseSensitive} onClick={() => setCaseSensitive(v => !v)} icon={CaseSensitive} label="Match Case" />
               <SearchToggle active={wholeWord} onClick={() => setWholeWord(v => !v)} icon={WholeWord} label="Whole Word" />
               <SearchToggle active={useRegex} onClick={() => setUseRegex(v => !v)} icon={Regex} label="Use Regex" />
+              <div className="w-px h-4 bg-foreground/10 mx-0.5" />
+              <SearchToggle active={excludeGenerated} onClick={() => setExcludeGenerated(v => !v)} icon={excludeGenerated ? FilterX : Filter} label={excludeGenerated ? 'Excluding generated files' : 'Including generated files'} />
             </div>
           )}
         </div>
@@ -716,14 +736,14 @@ function CodeResultsList({
               type="button"
               onClick={() => onToggleFile(file)}
               aria-expanded={!isCollapsed}
-              className="w-full flex items-center gap-1.5 px-3 pt-2 pb-0.5 hover:bg-foreground/5 transition-colors"
+              className="w-full flex items-center gap-1.5 px-3 py-1.5 bg-muted/40 border-b border-border/30 sticky top-0 z-10 hover:bg-muted/60 transition-colors"
             >
               {isCollapsed
                 ? <ChevronRight className="h-3 w-3 text-text-muted shrink-0" />
                 : <ChevronDown className="h-3 w-3 text-text-muted shrink-0" />
               }
-              <Code2 className="h-3 w-3 text-text-muted shrink-0" />
-              <span className="text-[10px] font-medium text-text-secondary truncate">{file}</span>
+              <Code2 className="h-3 w-3 text-blue-400 shrink-0" />
+              <span className="text-[10px] font-semibold text-text-secondary truncate">{file}</span>
             </button>
             {matchElements}
           </div>
