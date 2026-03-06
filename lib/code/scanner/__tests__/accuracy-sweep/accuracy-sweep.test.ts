@@ -282,10 +282,10 @@ describe('Scanner Accuracy Sweep', () => {
     console.log('='.repeat(72))
 
     // Verify minimum fixture count
-    expect(summary.totalFixtures).toBeGreaterThanOrEqual(50)
+    expect(summary.totalFixtures).toBeGreaterThanOrEqual(100)
 
-    // Count total annotated expected findings (60+ required)
+    // Count total annotated expected findings (90+ required)
     const totalAnnotated = ALL_FIXTURES.reduce((sum, f) => sum + f.expected.length, 0)
-    expect(totalAnnotated).toBeGreaterThanOrEqual(60)
+    expect(totalAnnotated).toBeGreaterThanOrEqual(90)
   })
 })

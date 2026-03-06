@@ -223,4 +223,109 @@ func PurgeTempFiles(paths []string) {
       { ruleId: 'go-error-discard', line: 8, verdict: 'tp' },
     ],
   },
+
+  // -----------------------------------------------------------------------
+  // 8. Go SQL concat inline → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'go-sql-concat-inline',
+    description: 'db.Query with string concatenation — TP for go-sql-concat',
+    file: {
+      path: 'internal/db/search.go',
+      content: `package db
+
+import "database/sql"
+
+func SearchUsers(db *sql.DB, name string) (*sql.Rows, error) {
+\treturn db.Query("SELECT * FROM users WHERE name = '" + name + "'")
+}`,
+      language: 'go',
+    },
+    expected: [
+      { ruleId: 'go-sql-concat', line: 6, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 9. Go goroutine without recover → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'go-goroutine-no-recover',
+    description: 'go func() without deferred recover — TP for go-goroutine-no-recover',
+    file: {
+      path: 'internal/worker/pool.go',
+      content: `package worker
+
+import "log"
+
+func StartWorker(ch chan Task) {
+\tgo func() {
+\t\tfor task := range ch {
+\t\t\tif err := task.Execute(); err != nil {
+\t\t\t\tlog.Printf("task failed: %v", err)
+\t\t\t}
+\t\t}
+\t}()
+}`,
+      language: 'go',
+    },
+    expected: [
+      { ruleId: 'go-goroutine-no-recover', line: 6, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 10. Go blank import without justification → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'go-blank-import-no-comment',
+    description: 'Blank import _ "pkg" without comment — TP for go-unused-import-comment',
+    file: {
+      path: 'cmd/server/imports.go',
+      content: `package main
+
+import (
+\t_ "net/http/pprof"
+\t"fmt"
+)
+
+func init() {
+\tfmt.Println("server starting")
+}`,
+      language: 'go',
+    },
+    expected: [
+      { ruleId: 'go-unused-import-comment', line: 4, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 11. Go http.Post without timeout → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'go-http-post-no-timeout',
+    description: 'http.Post convenience function — no timeout, TP',
+    file: {
+      path: 'internal/client/webhook.go',
+      content: `package client
+
+import (
+\t"net/http"
+\t"strings"
+)
+
+func SendWebhook(url string, payload string) error {
+\tresp, err := http.Post(url, "application/json", strings.NewReader(payload))
+\tif err != nil {
+\t\treturn err
+\t}
+\tdefer resp.Body.Close()
+\treturn nil
+}`,
+      language: 'go',
+    },
+    expected: [
+      { ruleId: 'go-http-no-timeout', line: 9, verdict: 'tp' },
+    ],
+  },
 ]

@@ -803,4 +803,194 @@ export default client`,
       { ruleId: 'prompt-injection', line: 2, verdict: 'tp' },
     ],
   },
+
+  // -----------------------------------------------------------------------
+  // 34. Cookie with httpOnly: false → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'cookie-httponly-false',
+    description: 'res.cookie with httpOnly explicitly set to false — TP',
+    file: {
+      path: 'src/routes/auth.ts',
+      content: `import { Router } from 'express'
+
+const router = Router()
+
+router.post('/login', (req, res) => {
+  const token = generateToken(req.body)
+  res.cookie('session', token, { secure: true, httpOnly: false })
+  res.json({ ok: true })
+})
+
+export default router`,
+      language: 'typescript',
+    },
+    expected: [
+      { ruleId: 'cookie-no-httponly', line: 7, verdict: 'tp' },
+      { ruleId: 'cookie-no-samesite', line: 7, verdict: 'tp' },
+      { ruleId: 'composite-missing-auth-express-route', line: 5, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 35. Debug mode in config object → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'debug-config-object',
+    description: 'debug: true in config object — TP for debug-mode-production',
+    file: {
+      path: 'src/config/app.ts',
+      content: `export const appConfig = {
+  port: 3000,
+  debug: true,
+  logLevel: "verbose",
+}`,
+      language: 'typescript',
+    },
+    expected: [
+      { ruleId: 'debug-mode-production', line: 3, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 36. CORS wildcard via header → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'cors-wildcard-header-set',
+    description: 'Access-Control-Allow-Origin: * via setHeader — TP for cors-wildcard',
+    file: {
+      path: 'src/middleware/headers.ts',
+      content: `import { Request, Response, NextFunction } from 'express'
+
+export function corsMiddleware(req: Request, res: Response, next: NextFunction) {
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST')
+  next()
+}`,
+      language: 'typescript',
+    },
+    expected: [
+      { ruleId: 'cors-wildcard', line: 4, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 37. var usage in production code → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'var-usage-production',
+    description: 'var declarations in production code — TP for var-usage',
+    file: {
+      path: 'src/utils/counter.ts',
+      content: `var counter = 0
+var name = "default"
+
+export function increment() {
+  var temp = counter + 1
+  counter = temp
+  return counter
+}`,
+      language: 'typescript',
+    },
+    expected: [
+      { ruleId: 'var-usage', line: 1, verdict: 'tp' },
+      { ruleId: 'var-usage', line: 2, verdict: 'tp' },
+      { ruleId: 'var-usage', line: 5, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 38. any type in catch clause → FP (should be excluded)
+  // -----------------------------------------------------------------------
+  {
+    name: 'any-type-catch-clause',
+    description: 'catch (e: any) — excludePattern should suppress any-type rule',
+    file: {
+      path: 'src/services/parser.ts',
+      content: `export function safeParse(json: string) {
+  try {
+    return JSON.parse(json)
+  } catch (e: any) {
+    throw new Error(\`Parse failed: \${e.message}\`)
+  }
+}`,
+      language: 'typescript',
+    },
+    expected: [
+      // any-type excludePattern includes catch\s*\( — should NOT fire
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 39. ReDoS user input regex → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'redos-user-input-regex',
+    description: 'new RegExp(req.query.pattern) — TP for redos-user-regex',
+    file: {
+      path: 'src/routes/search.ts',
+      content: `import { Router } from 'express'
+
+const router = Router()
+
+router.get('/search', (req, res) => {
+  const pattern = new RegExp(req.query.pattern as string)
+  const results = items.filter(i => pattern.test(i.name))
+  res.json(results)
+})
+
+export default router`,
+      language: 'typescript',
+    },
+    expected: [
+      { ruleId: 'redos-user-regex', line: 6, verdict: 'tp' },
+      { ruleId: 'composite-missing-auth-express-route', line: 5, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 40. Weak cipher DES usage → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'weak-cipher-des-usage',
+    description: 'crypto.createCipheriv with DES — TP for weak-cipher-des',
+    file: {
+      path: 'src/crypto/legacy.ts',
+      content: `import crypto from 'crypto'
+
+export function encryptLegacy(data: string, key: Buffer) {
+  const cipher = crypto.createCipheriv('DES', key, Buffer.alloc(8))
+  return cipher.update(data, 'utf8', 'hex') + cipher.final('hex')
+}`,
+      language: 'typescript',
+    },
+    expected: [
+      { ruleId: 'weak-cipher-des', line: 4, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 41. GraphQL introspection enabled → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'graphql-introspection-prod',
+    description: 'introspection: true without env check — TP',
+    file: {
+      path: 'src/graphql/server.ts',
+      content: `import { ApolloServer } from '@apollo/server'
+import { typeDefs, resolvers } from './schema'
+
+const server = new ApolloServer({
+  typeDefs,
+  resolvers,
+  introspection: true,
+})
+
+export default server`,
+      language: 'typescript',
+    },
+    expected: [
+      { ruleId: 'graphql-introspection-enabled', line: 7, verdict: 'tp' },
+    ],
+  },
 ]

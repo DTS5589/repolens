@@ -368,4 +368,114 @@ def get_user(conn, user_id):
       { ruleId: 'sql-injection', line: 5, verdict: 'tp' },
     ],
   },
+
+  // -----------------------------------------------------------------------
+  // 17. Flask secret key hardcoded → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'python-flask-secret-key',
+    description: 'app.secret_key hardcoded as string literal — TP',
+    file: {
+      path: 'src/app.py',
+      content: `from flask import Flask
+
+app = Flask(__name__)
+app.secret_key = "super-secret-key-12345"
+
+@app.route('/')
+def index():
+    return "Hello"`,
+      language: 'python',
+    },
+    expected: [
+      { ruleId: 'flask-secret-key-hardcoded', line: 4, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 18. Django raw SQL with string formatting → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'python-django-raw-sql',
+    description: 'Model.objects.raw with % formatting — TP for django-raw-sql',
+    file: {
+      path: 'views/search.py',
+      content: `from myapp.models import User
+
+def search_user(request):
+    name = request.GET.get('name')
+    users = User.objects.raw("SELECT * FROM users WHERE name = '%s'" % name)
+    return render(request, 'results.html', {'users': users})`,
+      language: 'python',
+    },
+    expected: [
+      { ruleId: 'django-raw-sql', line: 5, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 19. ast.literal_eval — should NOT fire eval-usage (FP test)
+  // -----------------------------------------------------------------------
+  {
+    name: 'python-eval-safe-ast',
+    description: 'ast.literal_eval is safe — eval-usage should NOT fire',
+    file: {
+      path: 'src/parsers/config_reader.py',
+      content: `import ast
+
+def parse_config_value(raw: str):
+    return ast.literal_eval(raw)
+
+def parse_list(data: str):
+    return ast.literal_eval(data)`,
+      language: 'python',
+    },
+    expected: [
+      // ast.literal_eval doesn't match \beval\s*\( due to word boundary
+      // Should NOT trigger eval-usage
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 20. Python SSL verify=False → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'python-ssl-no-verify',
+    description: 'requests.get with verify=False — TP for python-ssl-no-verify',
+    file: {
+      path: 'src/clients/api.py',
+      content: `import requests
+
+def fetch_data(url: str):
+    response = requests.get(url, verify=False)
+    return response.json()`,
+      language: 'python',
+    },
+    expected: [
+      { ruleId: 'python-ssl-no-verify', line: 4, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 21. Python tempfile.mktemp → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'python-tempfile-mktemp',
+    description: 'tempfile.mktemp() insecure temp file — TP',
+    file: {
+      path: 'src/utils/temp.py',
+      content: `import tempfile
+import os
+
+def create_temp_config():
+    path = tempfile.mktemp(suffix='.conf')
+    with open(path, 'w') as f:
+        f.write('key=value')
+    return path`,
+      language: 'python',
+    },
+    expected: [
+      { ruleId: 'python-tempfile-mktemp', line: 5, verdict: 'tp' },
+    ],
+  },
 ]

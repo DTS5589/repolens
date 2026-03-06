@@ -262,4 +262,30 @@ public class AuditController extends HttpServlet {
       // No java-log-injection rule exists — verify no false positives
     ],
   },
+
+  // -----------------------------------------------------------------------
+  // 11. Java System.exit in production → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'java-system-exit-production',
+    description: 'System.exit() in production code — TP for java-system-exit',
+    file: {
+      path: 'src/main/java/com/app/service/BootstrapService.java',
+      content: `public class BootstrapService {
+    public void initialize() {
+        if (!checkLicense()) {
+            System.exit(1);
+        }
+    }
+
+    private boolean checkLicense() {
+        return false;
+    }
+}`,
+      language: 'java',
+    },
+    expected: [
+      { ruleId: 'java-system-exit', line: 4, verdict: 'tp' },
+    ],
+  },
 ]

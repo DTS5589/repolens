@@ -109,4 +109,74 @@ pub fn read_config(path: &str) -> Result<String, io::Error> {
       // No unwrap or expect — nothing should fire
     ],
   },
+
+  // -----------------------------------------------------------------------
+  // 5. Rust unsafe without SAFETY comment → TP for both rules
+  // -----------------------------------------------------------------------
+  {
+    name: 'rust-unsafe-no-safety-comment',
+    description: 'unsafe block without // SAFETY: — TP for rust-unsafe and rust-unsafe-block',
+    file: {
+      path: 'src/mem/raw.rs',
+      content: `pub fn raw_copy(src: *const u8, dst: *mut u8, len: usize) {
+    unsafe {
+        std::ptr::copy_nonoverlapping(src, dst, len);
+    }
+}`,
+      language: 'rust',
+    },
+    expected: [
+      { ruleId: 'rust-unsafe', line: 2, verdict: 'tp' },
+      { ruleId: 'rust-unsafe-block', line: 2, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 6. Rust unwrap_or_default → should NOT fire (safe alternative)
+  // -----------------------------------------------------------------------
+  {
+    name: 'rust-unwrap-or-default-safe',
+    description: 'unwrap_or_default() does not match unwrap() pattern — should NOT fire',
+    file: {
+      path: 'src/config/defaults.rs',
+      content: `use std::env;
+
+pub fn get_port() -> u16 {
+    env::var("PORT")
+        .unwrap_or_default()
+        .parse::<u16>()
+        .unwrap_or(3000)
+}`,
+      language: 'rust',
+    },
+    expected: [
+      // unwrap_or_default() and unwrap_or(x) don't match \.unwrap\s*\(
+      // because there are characters between "unwrap" and "("
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 7. Rust unsafe with SAFETY: comment → rust-unsafe-block suppressed
+  // -----------------------------------------------------------------------
+  {
+    name: 'rust-unsafe-with-safety-comment',
+    description: 'unsafe with // SAFETY: comment — rust-unsafe-block suppressed, rust-unsafe still fires',
+    file: {
+      path: 'src/ffi/wrapper.rs',
+      content: `extern "C" {
+    fn c_compress(data: *const u8, len: usize) -> i32;
+}
+
+pub fn compress(data: &[u8]) -> i32 {
+    // SAFETY: c_compress reads exactly len bytes from a valid slice pointer
+    unsafe { c_compress(data.as_ptr(), data.len()) }
+}`,
+      language: 'rust',
+    },
+    expected: [
+      // rust-unsafe fires (no SAFETY excludePattern on that rule)
+      { ruleId: 'rust-unsafe', line: 7, verdict: 'tp' },
+      // rust-unsafe-block has excludePattern /\/\/\s*SAFETY/ — suppressed
+    ],
+  },
 ]

@@ -281,4 +281,53 @@ export async function fetchRepos() {
       { ruleId: 'composite-async-no-try-catch', line: 3, verdict: 'tp' },
     ],
   },
+
+  // -----------------------------------------------------------------------
+  // 11. Express session fixation → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'express-session-fixation',
+    description: 'express-session without resave: false — TP for express-session-fixation',
+    file: {
+      path: 'src/middleware/session.ts',
+      content: `import express from 'express'
+import session from 'express-session'
+
+const app = express()
+app.use(session({
+  secret: 'keyboard cat',
+  saveUninitialized: true,
+}))
+
+export default app`,
+      language: 'typescript',
+    },
+    expected: [
+      { ruleId: 'express-session-fixation', line: 2, verdict: 'tp' },
+      { ruleId: 'express-no-helmet', line: 4, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 12. Express CORS credentials with wildcard → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'express-cors-credentials-wildcard',
+    description: 'cors with origin: * and credentials: true — TP',
+    file: {
+      path: 'src/middleware/cors-config.ts',
+      content: `import cors from 'cors'
+import express from 'express'
+
+const app = express()
+app.use(cors({ origin: '*', credentials: true }))
+
+export default app`,
+      language: 'typescript',
+    },
+    expected: [
+      { ruleId: 'express-cors-credentials-wildcard', line: 5, verdict: 'tp' },
+      { ruleId: 'express-no-helmet', line: 4, verdict: 'tp' },
+    ],
+  },
 ]
