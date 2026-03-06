@@ -1,5 +1,5 @@
 import type { GitHubRepo, RepoTree, GitHubTag, GitHubBranch, GitHubCommit, GitHubComparison } from "@/types/repository"
-import type { BlameData, CommitDetail } from "@/types/git-history"
+import type { BlameData, CommitDetail, CommitFile } from "@/types/git-history"
 import {
   getCached,
   getStale,
@@ -50,14 +50,406 @@ function buildProxyHeaders(): HeadersInit {
   return headers
 }
 
+// ---------------------------------------------------------------------------
+// Direct GitHub API helpers (PAT mode — bypasses proxy routes)
+// ---------------------------------------------------------------------------
+
+const GITHUB_API_BASE = 'https://api.github.com'
+const GITHUB_GRAPHQL_ENDPOINT = 'https://api.github.com/graphql'
+
+/** Endpoint type identifier for URL mapping and response normalization. */
+type ProxyEndpoint =
+  | 'repo'
+  | 'tree'
+  | 'file'
+  | 'tags'
+  | 'branches'
+  | 'commits'
+  | 'compare'
+  | 'commit'
+  | 'rate-limit'
+
+interface DirectUrlMapping {
+  url: string
+  endpoint: ProxyEndpoint
+}
+
 /**
- * Client-side fetcher that calls proxy API routes instead of GitHub directly.
- * The proxy routes handle authentication — the access token never reaches the browser.
+ * Convert a proxy API path+params into a direct GitHub API URL.
+ * Returns null for unrecognized paths (caller falls through to proxy).
+ */
+function mapProxyUrlToGitHubApi(proxyUrl: string): DirectUrlMapping | null {
+  const parsed = new URL(proxyUrl, 'http://localhost')
+  const pathname = parsed.pathname
+  const params = parsed.searchParams
+  const owner = params.get('owner') ?? ''
+  const name = params.get('name') ?? ''
+  const e = encodeURIComponent
+
+  if (pathname === '/api/github/repo') {
+    return { url: `${GITHUB_API_BASE}/repos/${e(owner)}/${e(name)}`, endpoint: 'repo' }
+  }
+
+  if (pathname === '/api/github/tree') {
+    const sha = params.get('sha') ?? 'HEAD'
+    return {
+      url: `${GITHUB_API_BASE}/repos/${e(owner)}/${e(name)}/git/trees/${e(sha)}?recursive=1`,
+      endpoint: 'tree',
+    }
+  }
+
+  if (pathname === '/api/github/file') {
+    const branch = params.get('branch') ?? ''
+    const path = params.get('path') ?? ''
+    return {
+      url: `https://raw.githubusercontent.com/${owner}/${name}/${branch}/${path}`,
+      endpoint: 'file',
+    }
+  }
+
+  if (pathname === '/api/github/tags') {
+    const qp = new URLSearchParams()
+    const perPage = params.get('per_page')
+    if (perPage) qp.set('per_page', perPage)
+    const qs = qp.toString()
+    return {
+      url: `${GITHUB_API_BASE}/repos/${e(owner)}/${e(name)}/tags${qs ? `?${qs}` : ''}`,
+      endpoint: 'tags',
+    }
+  }
+
+  if (pathname === '/api/github/branches') {
+    const qp = new URLSearchParams()
+    const perPage = params.get('per_page')
+    if (perPage) qp.set('per_page', perPage)
+    const qs = qp.toString()
+    return {
+      url: `${GITHUB_API_BASE}/repos/${e(owner)}/${e(name)}/branches${qs ? `?${qs}` : ''}`,
+      endpoint: 'branches',
+    }
+  }
+
+  if (pathname === '/api/github/commits') {
+    const qp = new URLSearchParams()
+    for (const key of ['sha', 'since', 'until', 'per_page', 'path']) {
+      const val = params.get(key)
+      if (val) qp.set(key, val)
+    }
+    const qs = qp.toString()
+    return {
+      url: `${GITHUB_API_BASE}/repos/${e(owner)}/${e(name)}/commits${qs ? `?${qs}` : ''}`,
+      endpoint: 'commits',
+    }
+  }
+
+  if (pathname === '/api/github/compare') {
+    const base = e(params.get('base') ?? '')
+    const head = e(params.get('head') ?? '')
+    return {
+      url: `${GITHUB_API_BASE}/repos/${e(owner)}/${e(name)}/compare/${base}...${head}`,
+      endpoint: 'compare',
+    }
+  }
+
+  // /api/github/commit/{sha}?owner=X&name=Y
+  const commitMatch = pathname.match(/^\/api\/github\/commit\/(.+)$/)
+  if (commitMatch) {
+    const sha = commitMatch[1]
+    return {
+      url: `${GITHUB_API_BASE}/repos/${e(owner)}/${e(name)}/commits/${sha}`,
+      endpoint: 'commit',
+    }
+  }
+
+  if (pathname === '/api/github/rate-limit') {
+    return { url: `${GITHUB_API_BASE}/rate_limit`, endpoint: 'rate-limit' }
+  }
+
+  return null
+}
+
+/**
+ * Fetch from the GitHub API directly with PAT authentication.
+ * Handles JSON responses and common GitHub error codes.
+ */
+async function directFetch(url: string, pat: string): Promise<unknown> {
+  const response = await fetch(url, {
+    headers: {
+      'Accept': 'application/vnd.github.v3+json',
+      'Authorization': `Bearer ${pat}`,
+    },
+  })
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}))
+    const ghMessage = (body as { message?: string }).message
+    if (response.status === 404) {
+      throw new Error(ghMessage ?? 'Not found. Make sure the repository exists.')
+    }
+    if (response.status === 403) {
+      throw new Error('Rate limit exceeded. Try again later.')
+    }
+    if (response.status === 422) {
+      throw new Error(ghMessage ?? 'Invalid request.')
+    }
+    throw new Error(ghMessage ?? `Request failed: ${response.statusText}`)
+  }
+
+  return response.json()
+}
+
+/**
+ * Fetch file content from raw.githubusercontent.com with PAT auth.
+ * Returns { content: string } to match the proxy response shape.
+ */
+async function directFetchRawFile(url: string, pat: string): Promise<{ content: string }> {
+  const response = await fetch(url, {
+    headers: { 'Authorization': `Bearer ${pat}` },
+  })
+
+  if (!response.ok) {
+    if (response.status === 404) {
+      throw new Error('File not found.')
+    }
+    throw new Error(`Failed to fetch file: ${response.statusText}`)
+  }
+
+  const content = await response.text()
+  return { content }
+}
+
+// ---------------------------------------------------------------------------
+// Response normalization — transform raw GitHub API data to match proxy shapes
+// These mirror the transformations in lib/github/fetcher.ts.
+// ---------------------------------------------------------------------------
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
+function normalizeRepo(data: any): GitHubRepo {
+  return {
+    owner: data.owner.login,
+    name: data.name,
+    fullName: data.full_name,
+    description: data.description,
+    defaultBranch: data.default_branch,
+    stars: data.stargazers_count,
+    forks: data.forks_count,
+    language: data.language,
+    topics: data.topics || [],
+    isPrivate: data.private,
+    url: data.html_url,
+    size: data.size,
+    openIssuesCount: data.open_issues_count ?? 0,
+    pushedAt: data.pushed_at ?? '',
+    license: data.license?.spdx_id ?? null,
+  }
+}
+
+function normalizeTags(data: any): GitHubTag[] {
+  return (data as any[]).map((tag: any) => ({
+    name: tag.name as string,
+    commitSha: tag.commit.sha as string,
+    commitUrl: tag.commit.url as string,
+    tarballUrl: (tag.tarball_url as string) ?? '',
+    zipballUrl: (tag.zipball_url as string) ?? '',
+  }))
+}
+
+function normalizeBranches(data: any): GitHubBranch[] {
+  return (data as any[]).map((branch: any) => ({
+    name: branch.name as string,
+    commitSha: branch.commit.sha as string,
+    isProtected: (branch.protected as boolean) ?? false,
+  }))
+}
+
+function normalizeCommits(data: any): GitHubCommit[] {
+  return (data as any[]).map((item: any) => {
+    const commit = item.commit
+    const commitAuthor = commit.author
+    const commitCommitter = commit.committer
+    const author = item.author
+    return {
+      sha: item.sha as string,
+      message: commit.message as string,
+      authorName: commitAuthor.name as string,
+      authorEmail: commitAuthor.email as string,
+      authorDate: commitAuthor.date as string,
+      committerName: commitCommitter.name as string,
+      committerDate: commitCommitter.date as string,
+      url: item.html_url as string,
+      authorLogin: (author?.login as string) ?? null,
+      authorAvatarUrl: (author?.avatar_url as string) ?? null,
+      parents: ((item.parents ?? []) as any[]).map((p: any) => ({ sha: p.sha as string })),
+    }
+  })
+}
+
+function normalizeCompare(data: any): GitHubComparison {
+  return {
+    status: data.status as string,
+    aheadBy: data.ahead_by as number,
+    behindBy: data.behind_by as number,
+    totalCommits: data.total_commits as number,
+    commits: normalizeCommits(data.commits),
+    files: ((data.files ?? []) as any[]).map((file: any) => ({
+      filename: file.filename as string,
+      status: file.status as string,
+      additions: file.additions as number,
+      deletions: file.deletions as number,
+      changes: file.changes as number,
+      patch: file.patch as string | undefined,
+    })),
+  }
+}
+
+function normalizeCommitDetail(data: any): CommitDetail {
+  const commit = data.commit
+  const commitAuthor = commit.author
+  const commitCommitter = commit.committer
+  const author = data.author
+  const stats = data.stats
+  const rawFiles = (data.files ?? []) as any[]
+  return {
+    sha: data.sha as string,
+    message: commit.message as string,
+    authorName: commitAuthor.name as string,
+    authorEmail: commitAuthor.email as string,
+    authorDate: commitAuthor.date as string,
+    committerName: commitCommitter.name as string,
+    committerDate: commitCommitter.date as string,
+    url: data.html_url as string,
+    authorLogin: (author?.login as string) ?? null,
+    authorAvatarUrl: (author?.avatar_url as string) ?? null,
+    parents: ((data.parents ?? []) as any[]).map((p: any) => ({ sha: p.sha as string })),
+    stats: {
+      additions: stats.additions as number,
+      deletions: stats.deletions as number,
+      total: stats.total as number,
+    },
+    files: rawFiles.map((file: any): CommitFile => ({
+      filename: file.filename as string,
+      status: file.status as CommitFile['status'],
+      additions: file.additions as number,
+      deletions: file.deletions as number,
+      changes: file.changes as number,
+      patch: file.patch as string | undefined,
+      previousFilename: file.previous_filename as string | undefined,
+    })),
+  }
+}
+
+function normalizeRateLimit(data: any): { limit: number; remaining: number; reset: number; authenticated: boolean } {
+  const core = data.rate ?? data.resources?.core
+  return {
+    limit: (core?.limit as number) ?? 0,
+    remaining: (core?.remaining as number) ?? 0,
+    reset: (core?.reset as number) ?? 0,
+    authenticated: true,
+  }
+}
+
+/** Apply the appropriate normalization for a given endpoint. */
+function normalizeDirectResponse<T>(data: unknown, endpoint: ProxyEndpoint): T {
+  switch (endpoint) {
+    case 'repo':        return normalizeRepo(data) as T
+    case 'tree':        return data as T
+    case 'tags':        return normalizeTags(data) as T
+    case 'branches':    return normalizeBranches(data) as T
+    case 'commits':     return normalizeCommits(data) as T
+    case 'compare':     return normalizeCompare(data) as T
+    case 'commit':      return normalizeCommitDetail(data) as T
+    case 'rate-limit':  return normalizeRateLimit(data) as T
+    default:            return data as T
+  }
+}
+
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
+// ---------------------------------------------------------------------------
+// Blame GraphQL query — duplicated from lib/github/fetcher.ts for client-side use
+// ---------------------------------------------------------------------------
+
+const BLAME_QUERY = `
+query BlameData($owner: String!, $name: String!, $expression: String!) {
+  repository(owner: $owner, name: $name) {
+    object(expression: $expression) {
+      ... on Blob {
+        byteSize
+        isTruncated
+        blame(startingLine: 1) {
+          ranges {
+            startingLine
+            endingLine
+            age
+            commit {
+              oid
+              abbreviatedOid
+              message
+              messageHeadline
+              committedDate
+              url
+              author {
+                name
+                email
+                date
+                user {
+                  login
+                  avatarUrl
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+`
+
+interface BlameGraphQLResponse {
+  data: {
+    repository: {
+      object: {
+        byteSize: number
+        isTruncated: boolean
+        blame: {
+          ranges: BlameData['ranges']
+        }
+      } | null
+    }
+  }
+  errors?: Array<{ message: string }>
+}
+
+// ---------------------------------------------------------------------------
+// Core fetch — proxy or direct depending on PAT availability
+// ---------------------------------------------------------------------------
+
+/**
+ * Client-side fetcher that calls proxy API routes or GitHub API directly.
+ * When a PAT is available, bypasses the proxy to reduce latency.
+ * When no PAT is set, falls back to the proxy routes (used by OAuth users).
  */
 async function proxyFetch<T>(url: string): Promise<T> {
   if (!url.startsWith('/')) {
     throw new Error('proxyFetch only accepts relative URLs')
   }
+
+  // Direct mode: PAT is available — call GitHub API directly
+  const pat = getGitHubPAT()
+  if (pat) {
+    const mapping = mapProxyUrlToGitHubApi(url)
+    if (mapping) {
+      if (mapping.endpoint === 'file') {
+        return directFetchRawFile(mapping.url, pat) as Promise<T>
+      }
+      const raw = await directFetch(mapping.url, pat)
+      return normalizeDirectResponse<T>(raw, mapping.endpoint)
+    }
+  }
+
+  // Proxy mode: no PAT or unrecognized path — use proxy routes
   const response = await fetch(url, { headers: buildProxyHeaders() })
 
   if (!response.ok) {
@@ -277,13 +669,54 @@ export async function fetchBlameViaProxy(
   return data
 }
 
-/** Internal helper: POST to /api/github/blame and parse response. */
+/** Internal helper: fetch blame data via proxy or direct GraphQL. */
 async function fetchBlameFromApi(
   owner: string,
   name: string,
   ref: string,
   path: string,
 ): Promise<BlameData> {
+  // Direct mode: PAT available — call GitHub GraphQL API directly
+  const pat = getGitHubPAT()
+  if (pat) {
+    const expression = `${ref}:${path}`
+    const response = await fetch(GITHUB_GRAPHQL_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${pat}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        query: BLAME_QUERY,
+        variables: { owner, name, expression },
+      }),
+    })
+
+    if (response.status === 401) {
+      throw new Error('Authentication required to fetch blame data')
+    }
+    if (!response.ok) {
+      throw new Error(`GraphQL request failed: ${response.statusText}`)
+    }
+
+    const body = (await response.json()) as BlameGraphQLResponse
+    if (body.errors && body.errors.length > 0) {
+      throw new Error(body.errors[0].message)
+    }
+
+    const blob = body.data.repository.object
+    if (!blob) {
+      throw new Error(`File not found: ${path}`)
+    }
+
+    return {
+      ranges: blob.blame.ranges,
+      isTruncated: blob.isTruncated,
+      byteSize: blob.byteSize,
+    }
+  }
+
+  // Proxy mode: no PAT — POST to proxy route
   const headers: HeadersInit = { 'Content-Type': 'application/json', ...buildProxyHeaders() }
   const response = await fetch('/api/github/blame', {
     method: 'POST',
