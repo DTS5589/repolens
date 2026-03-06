@@ -54,7 +54,7 @@ export const SECURITY_RULES: ScanRule[] = [
     learnMoreUrl: 'https://cwe.mitre.org/data/definitions/259.html',
     pattern: '(?:password|passwd|pwd)\\s*[:=]\\s*["\'][^"\']{4,}["\']',
     patternOptions: { regex: true, caseSensitive: false },
-    excludePattern: /process\.env|import\.meta\.env|env\.|getenv|os\.environ|placeholder|example|your[_-]|xxx|changeme|schema|zod|yup|validate|type\b|interface\b|Props|param|arg|hash|bcrypt|scrypt|label|i18n|locale|translation|field|\bform\b|\binput\b|\bdisplay\b|message|dataclass|@dataclass/i,
+    excludePattern: /process\.env|import\.meta\.env|env\.|getenv|os\.environ|placeholder|example|your[_-]|xxx|changeme|schema|zod|yup|validate|type\b|interface\b|Props|param|arg|hash|bcrypt|scrypt|label|i18n|locale|translation|field|\bform\b|\binput\b|\bdisplay\b|message|dataclass|@dataclass|Enter\s+your|Type\s+your|Please\s+enter|Choose\s+your|Confirm\s+your/i,
     excludeFiles: /rules-security|rules-security-lang|rules-quality|rules-framework|rules-composite|\.test\.|_test\.\w+$|\.spec\.|__tests__|[/\\]tests?[/\\]|fixture|e2e|docker-compose|\.ya?ml$|\.toml$|\.env\.example|\.env\.template|\.env\.sample/i,
     confidence: 'medium',
     fix: "process.env.DB_PASSWORD",

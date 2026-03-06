@@ -289,4 +289,83 @@ DEBUG = True`,
       { ruleId: 'debug-mode-production', line: 5, verdict: 'tp' },
     ],
   },
+
+  // -----------------------------------------------------------------------
+  // 13. Unsafe yaml.load → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'python-yaml-unsafe-load',
+    description: 'yaml.load without SafeLoader — TP',
+    file: {
+      path: 'src/config/parser.py',
+      content: `import yaml
+
+def load_config(path):
+    with open(path, 'r') as f:
+        config = yaml.load(f)
+    return config`,
+      language: 'python',
+    },
+    expected: [
+      { ruleId: 'python-yaml-load', line: 5, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 14. exec(compile(...)) variant → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'python-exec-compile',
+    description: 'exec() with compile() — dynamic code execution TP',
+    file: {
+      path: 'src/plugins/loader.py',
+      content: `def run_plugin(code_str):
+    compiled = compile(code_str, '<plugin>', 'exec')
+    exec(compiled)`,
+      language: 'python',
+    },
+    expected: [
+      { ruleId: 'python-exec', line: 3, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 15. subprocess.call with shell=True → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'python-subprocess-call-shell',
+    description: 'subprocess.call with shell=True — command injection TP',
+    file: {
+      path: 'src/utils/converter.py',
+      content: `import subprocess
+
+def convert_file(filename):
+    subprocess.call(f"convert {filename} output.pdf", shell=True)`,
+      language: 'python',
+    },
+    expected: [
+      { ruleId: 'python-subprocess-shell', line: 4, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 16. SQL concat in Python → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'python-sql-string-concat',
+    description: 'SQL query with string concatenation in Python — TP',
+    file: {
+      path: 'src/db/users.py',
+      content: `import sqlite3
+
+def get_user(conn, user_id):
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM users WHERE id = " + str(user_id))
+    return cursor.fetchone()`,
+      language: 'python',
+    },
+    expected: [
+      { ruleId: 'sql-injection', line: 5, verdict: 'tp' },
+    ],
+  },
 ]

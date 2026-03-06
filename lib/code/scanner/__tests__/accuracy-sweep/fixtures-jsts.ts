@@ -96,8 +96,7 @@ describe('expression parser', () => {
       language: 'typescript',
     },
     expected: [
-      // eval-usage is security+critical — fires even on test files despite excludeFiles
-      { ruleId: 'eval-usage', line: 6, verdict: 'fp' },
+      // eval-usage now suppressed by excludeFiles (__tests__ + .test. match)
     ],
   },
 
@@ -521,6 +520,287 @@ export async function getUser(name: string) {
     },
     expected: [
       // timing-attack-comparison may or may not fire depending on pattern
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 21. SQL injection inline query → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'sql-injection-inline-query',
+    description: 'db.query with template literal SQL — direct injection TP',
+    file: {
+      path: 'src/api/users.ts',
+      content: `import { db } from '../db'
+
+export async function getUser(userId: string) {
+  const result = await db.query(\`SELECT * FROM users WHERE id = '\${userId}'\`)
+  return result.rows[0]
+}`,
+      language: 'typescript',
+    },
+    expected: [
+      { ruleId: 'sql-injection', line: 4, verdict: 'tp' },
+      { ruleId: 'composite-async-no-try-catch', line: 3, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 22. Command injection via template literal → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'command-injection-template-rm',
+    description: 'exec() with template literal shell command — TP',
+    file: {
+      path: 'src/utils/cleanup.ts',
+      content: `import { exec } from 'child_process'
+
+export function cleanupDir(userInput: string) {
+  exec(\`rm -rf /tmp/\${userInput}\`, (err) => {
+    if (err) console.error(err)
+  })
+}`,
+      language: 'typescript',
+    },
+    expected: [
+      { ruleId: 'command-injection-template', line: 4, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 23. child_process.exec direct call → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'command-injection-cp-exec',
+    description: 'child_process.exec with string concat — TP',
+    file: {
+      path: 'src/utils/shell.ts',
+      content: `import * as child_process from 'child_process'
+
+export function listDir(dir: string) {
+  child_process.exec('ls ' + dir, (err, stdout) => {
+    console.log(stdout)
+  })
+}`,
+      language: 'typescript',
+    },
+    expected: [
+      { ruleId: 'command-injection-exec-direct', line: 4, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 24. Private RSA key inline → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'private-key-rsa-inline',
+    description: 'RSA private key pasted in source — TP',
+    file: {
+      path: 'src/config/keys.ts',
+      content: `export const SIGNING_KEY = \`-----BEGIN RSA PRIVATE KEY-----
+MIIEpAIBAAKCAQEA0Z3VS5JJcds3xfn3ygWyF8PbnGcY1234567890abcdefg
+-----END RSA PRIVATE KEY-----\``,
+      language: 'typescript',
+    },
+    expected: [
+      { ruleId: 'private-key-inline', line: 1, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 25. Path traversal via readFile → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'path-traversal-readfile',
+    description: 'fs.readFile with user-controlled path via template literal — TP',
+    file: {
+      path: 'src/routes/download.ts',
+      content: `import fs from 'fs'
+import { Router } from 'express'
+
+const router = Router()
+
+router.get('/download/:file', (req, res) => {
+  fs.readFile(\`./uploads/\${req.params.file}\`, (err, data) => {
+    if (err) return res.status(404).send('Not found')
+    res.send(data)
+  })
+})
+
+export default router`,
+      language: 'typescript',
+    },
+    expected: [
+      { ruleId: 'path-traversal', line: 7, verdict: 'tp' },
+      { ruleId: 'composite-missing-auth-express-route', line: 6, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 26. Open redirect from query param → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'open-redirect-query',
+    description: 'res.redirect with user-controlled returnUrl — TP',
+    file: {
+      path: 'src/routes/login.ts',
+      content: `import { Router } from 'express'
+
+const router = Router()
+
+router.get('/login/callback', (req, res) => {
+  res.redirect(req.query.returnUrl as string)
+})
+
+export default router`,
+      language: 'typescript',
+    },
+    expected: [
+      { ruleId: 'open-redirect', line: 6, verdict: 'tp' },
+      { ruleId: 'composite-missing-auth-express-route', line: 5, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 27. Weak MD5 hash for password → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'weak-hash-md5-password',
+    description: 'crypto.createHash(md5) for password — TP',
+    file: {
+      path: 'src/auth/hash.ts',
+      content: `import crypto from 'crypto'
+
+export function hashPassword(password: string) {
+  return crypto.createHash('md5').update(password).digest('hex')
+}`,
+      language: 'typescript',
+    },
+    expected: [
+      { ruleId: 'weak-hash', line: 4, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 28. Insecure random for session → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'insecure-random-session',
+    description: 'Math.random() used for session identifier — TP',
+    file: {
+      path: 'src/auth/session.ts',
+      content: `export function createSession() {
+  return Math.random().toString(36) + '-session-' + Date.now()
+}`,
+      language: 'typescript',
+    },
+    expected: [
+      { ruleId: 'insecure-random', line: 2, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 29. JWT decode without verify → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'jwt-decode-no-verify',
+    description: 'jwt.decode() without verify — TP',
+    file: {
+      path: 'src/middleware/auth.ts',
+      content: `import jwt from 'jsonwebtoken'
+
+export function getUserFromToken(token: string) {
+  const payload = jwt.decode(token)
+  return payload
+}`,
+      language: 'typescript',
+    },
+    expected: [
+      { ruleId: 'jwt-no-verify', line: 4, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 30. Prototype pollution via __proto__ → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'prototype-pollution-proto-access',
+    description: 'Direct __proto__ assignment from parsed input — TP',
+    file: {
+      path: 'src/utils/merge.ts',
+      content: `export function unsafeMerge(target: any, source: string) {
+  const parsed = JSON.parse(source)
+  for (const key of Object.keys(parsed)) {
+    target.__proto__ = parsed[key]
+  }
+}`,
+      language: 'typescript',
+    },
+    expected: [
+      { ruleId: 'prototype-pollution-proto', line: 4, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 31. NoSQL injection via $where → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'nosql-injection-where',
+    description: 'MongoDB $where with user input — TP',
+    file: {
+      path: 'src/db/search.ts',
+      content: `import { db } from './connection'
+
+export async function search(filter: string) {
+  const results = await db.collection('users').find({ $where: req.body.filter })
+  return results.toArray()
+}`,
+      language: 'typescript',
+    },
+    expected: [
+      { ruleId: 'nosql-injection', line: 4, verdict: 'tp' },
+      { ruleId: 'composite-async-no-try-catch', line: 3, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 32. OpenAI API key hardcoded → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'llm-openai-key-hardcoded',
+    description: 'OpenAI API key hardcoded in source — TP',
+    file: {
+      path: 'src/config/ai.ts',
+      content: `import OpenAI from 'openai'
+
+const client = new OpenAI({
+  apiKey: "sk-Abc123Def456Ghi789Jkl012Mno345Pqr678Stu901Vwx234"
+})
+
+export default client`,
+      language: 'typescript',
+    },
+    expected: [
+      { ruleId: 'llm-openai-key', line: 4, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 33. Prompt injection via template literal → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'prompt-injection-user-input',
+    description: 'User input interpolated into LLM prompt — TP',
+    file: {
+      path: 'src/ai/summarize.ts',
+      content: `export function buildPrompt(userInput: string) {
+  const prompt = \`Summarize the following content: \${userInput}\`
+  return prompt
+}`,
+      language: 'typescript',
+    },
+    expected: [
+      { ruleId: 'prompt-injection', line: 2, verdict: 'tp' },
     ],
   },
 ]

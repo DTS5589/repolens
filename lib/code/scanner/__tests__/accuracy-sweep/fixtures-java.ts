@@ -190,4 +190,76 @@ public class Database {
       { ruleId: 'hardcoded-password', line: 6, verdict: 'tp' },
     ],
   },
+
+  // -----------------------------------------------------------------------
+  // 8. Java deserialization single-line → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'java-deserialization-inline',
+    description: 'ObjectInputStream + readObject on same line — TP',
+    file: {
+      path: 'src/main/java/com/app/rpc/Handler.java',
+      content: `import java.io.*;
+import java.net.*;
+
+public class Handler {
+    public Object handleRequest(Socket socket) throws Exception {
+        Object obj = new ObjectInputStream(socket.getInputStream()).readObject();
+        return obj;
+    }
+}`,
+      language: 'java',
+    },
+    expected: [
+      { ruleId: 'java-deserialization', line: 6, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 9. Java SSRF via URL.openStream — no specific rule (verify no FPs)
+  // -----------------------------------------------------------------------
+  {
+    name: 'java-ssrf-url-open',
+    description: 'new URL(userUrl).openStream() — no java-ssrf rule yet',
+    file: {
+      path: 'src/main/java/com/app/proxy/Fetcher.java',
+      content: `import java.net.*;
+import java.io.*;
+
+public class Fetcher {
+    public InputStream fetch(String userUrl) throws Exception {
+        return new URL(userUrl).openStream();
+    }
+}`,
+      language: 'java',
+    },
+    expected: [
+      // No java-ssrf rule exists — verify no false positives from other rules
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 10. Java log injection — no specific rule (verify no FPs)
+  // -----------------------------------------------------------------------
+  {
+    name: 'java-log-injection-param',
+    description: 'Logger with unsanitized request param — no log-injection rule yet',
+    file: {
+      path: 'src/main/java/com/app/controller/AuditController.java',
+      content: `import java.util.logging.Logger;
+import javax.servlet.http.*;
+
+public class AuditController extends HttpServlet {
+    private static final Logger logger = Logger.getLogger("audit");
+
+    protected void doGet(HttpServletRequest request, HttpServletResponse response) {
+        logger.info("User: " + request.getParameter("user"));
+    }
+}`,
+      language: 'java',
+    },
+    expected: [
+      // No java-log-injection rule exists — verify no false positives
+    ],
+  },
 ]

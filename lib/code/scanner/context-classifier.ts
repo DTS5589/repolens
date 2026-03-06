@@ -59,6 +59,11 @@ export const SANITIZER_PATTERNS: RegExp[] = [
   /\bhtml\.escape\s*\(/i,
   /\bcgi\.escape/i,
   /CGI\.escapeHTML/,
+  /\bALLOWED_HOSTS\b/i,
+  /\ballowedOrigins\b/i,
+  /\b(?:whitelist|allowlist)\b/i,
+  /\bisValidUrl\b/i,
+  /\bvalidateUrl\b/i,
 ]
 
 // ---------------------------------------------------------------------------
