@@ -22,6 +22,23 @@ export interface CachedRepo {
   files: Array<{ path: string; content: string; language?: string }>
   /** Serialized file tree for potential offline use. */
   tree: FileNode[]
+  /** GitHub metadata — optional for backward compat with older cached entries. */
+  description?: string | null
+  stars?: number
+  language?: string | null
+}
+
+/** Lightweight metadata for listing cached repos without loading file contents. */
+export interface CachedRepoMeta {
+  key: string
+  owner: string
+  repo: string
+  sha: string
+  timestamp: number
+  fileCount: number
+  description?: string | null
+  stars?: number
+  language?: string | null
 }
 
 // ---------------------------------------------------------------------------
@@ -118,6 +135,7 @@ export async function setCachedRepo(
   sha: string,
   files: Array<{ path: string; content: string; language?: string }>,
   tree: FileNode[],
+  meta?: { description?: string | null; stars?: number; language?: string | null },
 ): Promise<void> {
   try {
     const db = await openDB()
@@ -130,6 +148,11 @@ export async function setCachedRepo(
       timestamp: Date.now(),
       files,
       tree,
+      ...(meta && {
+        description: meta.description,
+        stars: meta.stars,
+        language: meta.language,
+      }),
     }
 
     await new Promise<void>((resolve, reject) => {
@@ -162,6 +185,37 @@ export async function clearCachedRepo(
     })
   } catch {
     // Silently ignore.
+  }
+}
+
+/** List lightweight metadata for all cached repos, sorted by most-recent first. */
+export async function listCachedRepos(): Promise<CachedRepoMeta[]> {
+  try {
+    const db = await openDB()
+    const records: CachedRepo[] = await new Promise((resolve) => {
+      const tx = db.transaction(STORE_NAME, 'readonly')
+      const store = tx.objectStore(STORE_NAME)
+      const request = store.getAll()
+
+      request.onsuccess = () => resolve(request.result ?? [])
+      request.onerror = () => resolve([])
+    })
+
+    return records
+      .map((r) => ({
+        key: r.key,
+        owner: r.owner,
+        repo: r.repo,
+        sha: r.sha,
+        timestamp: r.timestamp,
+        fileCount: r.files?.length ?? 0,
+        description: r.description,
+        stars: r.stars,
+        language: r.language,
+      }))
+      .sort((a, b) => b.timestamp - a.timestamp)
+  } catch {
+    return []
   }
 }
 

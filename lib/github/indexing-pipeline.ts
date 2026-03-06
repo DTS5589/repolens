@@ -142,7 +142,11 @@ export async function startIndexing(
   setLoadingStage('ready')
 
   // B2: Persist to IndexedDB cache
-  setCachedRepo(repoData.owner, repoData.name, treeSha, accumulated, fileTree)
+  setCachedRepo(repoData.owner, repoData.name, treeSha, accumulated, fileTree, {
+    description: repoData.description,
+    stars: repoData.stars,
+    language: repoData.language,
+  })
     .catch(() => { /* cache write failure is non-critical */ })
 
   // B6: Notify user of failed files

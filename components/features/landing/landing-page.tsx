@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Github, Loader2, ArrowRight } from "lucide-react"
 import { useRepository } from "@/providers"
 import { LoadingProgress } from "@/components/features/loading/loading-progress"
+import { RecentRepos } from "@/components/features/landing/recent-repos"
 
 interface LandingPageProps {
   repoUrl: string
@@ -134,6 +135,8 @@ export function LandingPage({
           </div>
         </section>
 
+        {/* ── Recently Analyzed Repos ── */}
+        <RecentRepos onConnectWithUrl={onConnectWithUrl} />
 
       </div>
     </div>
