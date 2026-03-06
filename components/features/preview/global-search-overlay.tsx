@@ -3,7 +3,7 @@
 import { useRef, useEffect, useState, useMemo, useCallback } from "react"
 import {
   Search, Code2, FileText, Braces, Box, Shapes, Type, List, Code,
-  CaseSensitive, WholeWord, Regex, X,
+  CaseSensitive, WholeWord, Regex, X, ChevronRight, ChevronDown,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { CodeIndex, SearchResult, SearchMatch } from "@/lib/code/code-index"
@@ -37,7 +37,8 @@ interface GlobalSearchOverlayProps {
 
 /* ── Constants ─────────────────────────────────────────────────────── */
 
-const MAX_CODE_RESULTS = 100
+const INITIAL_VISIBLE_COUNT = 100
+const VISIBLE_COUNT_INCREMENT = 100
 
 const SYMBOL_ICON_MAP: Record<SymbolKind, React.ElementType> = {
   function: Braces,
@@ -213,9 +214,28 @@ export function GlobalSearchOverlay({
     inputRef.current?.focus()
   }, [activeTab])
 
+  // Collapsible file groups (code tab)
+  const [collapsedFiles, setCollapsedFiles] = useState<Set<string>>(new Set())
+  const [codeVisibleCount, setCodeVisibleCount] = useState(INITIAL_VISIBLE_COUNT)
+
+  const toggleFileCollapse = useCallback((file: string) => {
+    setCollapsedFiles(prev => {
+      const next = new Set(prev)
+      if (next.has(file)) next.delete(file)
+      else next.add(file)
+      return next
+    })
+  }, [])
+
+  const loadMoreCodeResults = useCallback(() => {
+    setCodeVisibleCount(prev => prev + VISIBLE_COUNT_INCREMENT)
+  }, [])
+
   // Reset selected index when query or tab changes
   useEffect(() => {
     setSelectedIndex(0)
+    setCollapsedFiles(new Set())
+    setCodeVisibleCount(INITIAL_VISIBLE_COUNT)
   }, [debouncedQuery, activeTab])
 
   /* ── File search ──────────────────────────────────────────────── */
@@ -237,26 +257,45 @@ export function GlobalSearchOverlay({
     let total = 0
     for (const result of results) {
       total += result.matches.length
-      if (items.length < MAX_CODE_RESULTS) {
-        for (const match of result.matches) {
-          items.push({ file: result.file, match, language: result.language })
-          if (items.length >= MAX_CODE_RESULTS) break
-        }
+      for (const match of result.matches) {
+        items.push({ file: result.file, match, language: result.language })
       }
     }
     return { codeResults: items, totalCodeMatches: total }
   }, [debouncedQuery, codeIndex, codeSearchOptions, activeTab])
 
+  // Visible code results: exclude collapsed files, limit by visibleCount
+  const visibleCodeItems = useMemo(() => {
+    const items: typeof codeResults = []
+    for (const r of codeResults) {
+      if (collapsedFiles.has(r.file)) continue
+      items.push(r)
+      if (items.length >= codeVisibleCount) break
+    }
+    return items
+  }, [codeResults, collapsedFiles, codeVisibleCount])
+
+  const hasMoreCodeResults = useMemo(() => {
+    let count = 0
+    for (const r of codeResults) {
+      if (collapsedFiles.has(r.file)) continue
+      count++
+      if (count > codeVisibleCount) return true
+    }
+    return false
+  }, [codeResults, collapsedFiles, codeVisibleCount])
+
   const codeResultStats = useMemo(() => {
     if (activeTab !== 'code' || !debouncedQuery.trim() || codeResults.length === 0) return null
     const fileCount = new Set(codeResults.map(r => r.file)).size
-    return { totalMatches: totalCodeMatches, fileCount }
-  }, [debouncedQuery, codeResults, activeTab, totalCodeMatches])
+    return { totalMatches: totalCodeMatches, fileCount, visibleCount: visibleCodeItems.length }
+  }, [debouncedQuery, codeResults, activeTab, totalCodeMatches, visibleCodeItems.length])
 
   /* ── Symbol search ────────────────────────────────────────────── */
 
   // Build cross-file symbol index (cached via useMemo on codeIndex reference)
   const allSymbols = useMemo(() => {
+    if (activeTab !== 'symbols') return []
     const result: SymbolResult[] = []
     for (const [, file] of codeIndex.files) {
       const symbols = extractSymbols(file.content, file.language)
@@ -271,7 +310,7 @@ export function GlobalSearchOverlay({
       }
     }
     return result
-  }, [codeIndex])
+  }, [codeIndex, activeTab])
 
   const symbolResults = useMemo(() => {
     if (activeTab !== 'symbols') return []
@@ -282,7 +321,7 @@ export function GlobalSearchOverlay({
         if (!q) return true
         return s.symbol.name.toLowerCase().includes(q)
       })
-      .slice(0, MAX_CODE_RESULTS)
+      .slice(0, INITIAL_VISIBLE_COUNT)
   }, [debouncedQuery, allSymbols, activeKinds, activeTab])
 
   /* ── Navigable items ──────────────────────────────────────────── */
@@ -290,21 +329,26 @@ export function GlobalSearchOverlay({
   const itemCount = activeTab === 'files'
     ? fileResults.length
     : activeTab === 'code'
-      ? codeResults.length
+      ? visibleCodeItems.length
       : symbolResults.length
+
+  // Clamp selectedIndex when itemCount shrinks (e.g. file collapse)
+  useEffect(() => {
+    setSelectedIndex(prev => Math.min(prev, Math.max(0, itemCount - 1)))
+  }, [itemCount])
 
   const selectItem = useCallback((index: number) => {
     if (activeTab === 'files') {
       const result = fileResults[index]
       if (result) onSelect(result.path)
     } else if (activeTab === 'code') {
-      const result = codeResults[index]
+      const result = visibleCodeItems[index]
       if (result) onSelect(result.file, result.match.line)
     } else {
       const result = symbolResults[index]
       if (result) onSelect(result.filePath, result.symbol.line)
     }
-  }, [activeTab, fileResults, codeResults, symbolResults, onSelect])
+  }, [activeTab, fileResults, visibleCodeItems, symbolResults, onSelect])
 
   /* ── Keyboard ─────────────────────────────────────────────────── */
 
@@ -335,8 +379,8 @@ export function GlobalSearchOverlay({
       if (e.key === '2') { e.preventDefault(); setActiveTab('code') }
       if (e.key === '3') { e.preventDefault(); setActiveTab('symbols') }
     }
-    // Tab/Shift+Tab cycling (only when search input is focused)
-    if (e.key === 'Tab' && e.target === inputRef.current) {
+    // Tab/Shift+Tab cycling — trap focus within the overlay
+    if (e.key === 'Tab') {
       e.preventDefault()
       const tabs: SearchTab[] = ['files', 'code', 'symbols']
       const idx = tabs.indexOf(activeTab)
@@ -457,10 +501,16 @@ export function GlobalSearchOverlay({
             <CodeResultsList
               query={debouncedQuery}
               results={codeResults}
+              visibleItems={visibleCodeItems}
               stats={codeResultStats}
               searchOptions={codeSearchOptions}
               selectedIndex={selectedIndex}
               onSelect={onSelect}
+              collapsedFiles={collapsedFiles}
+              onToggleFile={toggleFileCollapse}
+              hasMore={hasMoreCodeResults}
+              onLoadMore={loadMoreCodeResults}
+              scrollContainerRef={resultsRef}
             />
           )}
           {activeTab === 'symbols' && (
@@ -536,21 +586,52 @@ function FileResultsList({
   )
 }
 
+type CodeResultItem = { file: string; match: SearchMatch; language?: string }
+
 function CodeResultsList({
   query,
   results,
+  visibleItems,
   stats,
   searchOptions,
   selectedIndex,
   onSelect,
+  collapsedFiles,
+  onToggleFile,
+  hasMore,
+  onLoadMore,
+  scrollContainerRef,
 }: {
   query: string
-  results: Array<{ file: string; match: SearchMatch; language?: string }>
-  stats: { totalMatches: number; fileCount: number } | null
+  results: CodeResultItem[]
+  visibleItems: CodeResultItem[]
+  stats: { totalMatches: number; fileCount: number; visibleCount: number } | null
   searchOptions: { caseSensitive: boolean; regex: boolean; wholeWord: boolean }
   selectedIndex: number
   onSelect: (path: string, line?: number) => void
+  collapsedFiles: Set<string>
+  onToggleFile: (file: string) => void
+  hasMore: boolean
+  onLoadMore: () => void
+  scrollContainerRef: React.RefObject<HTMLDivElement | null>
 }) {
+  const sentinelRef = useRef<HTMLDivElement>(null)
+
+  // Intersection observer for infinite scroll
+  useEffect(() => {
+    if (!hasMore) return
+    const sentinel = sentinelRef.current
+    const container = scrollContainerRef.current
+    if (!sentinel || !container) return
+
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) onLoadMore() },
+      { root: container, threshold: 0 },
+    )
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [hasMore, onLoadMore, scrollContainerRef])
+
   if (!query.trim()) {
     return (
       <div className="px-3 py-4 text-center text-xs text-text-muted">
@@ -562,59 +643,93 @@ function CodeResultsList({
     return <div className="px-3 py-4 text-center text-xs text-text-muted">No matches found</div>
   }
 
-  // Group consecutive results by file for visual separation
-  let lastFile = ''
+  // Group all results by file (preserving order)
+  const fileOrder: string[] = []
+  const fileMatches = new Map<string, CodeResultItem[]>()
+  for (const r of results) {
+    if (!fileMatches.has(r.file)) {
+      fileOrder.push(r.file)
+      fileMatches.set(r.file, [])
+    }
+    fileMatches.get(r.file)!.push(r)
+  }
+
+  // Build a set of visible items for quick lookup
+  const visibleSet = new Set(visibleItems)
+  let visibleIdx = 0
 
   return (
     <>
-      {results.map((r, i) => {
-        const showHeader = r.file !== lastFile
-        lastFile = r.file
-        const fileName = r.file.split('/').pop() || r.file
+      {/* Stats header */}
+      {stats && (
+        <div className="px-3 py-1.5 text-[10px] text-text-muted text-center border-b border-foreground/[0.04]">
+          {stats.visibleCount < stats.totalMatches
+            ? `Showing ${stats.visibleCount} of ${stats.totalMatches} matches in ${stats.fileCount} file${stats.fileCount !== 1 ? 's' : ''}`
+            : `${stats.totalMatches} match${stats.totalMatches !== 1 ? 'es' : ''} in ${stats.fileCount} file${stats.fileCount !== 1 ? 's' : ''}`
+          }
+        </div>
+      )}
+      {fileOrder.map(file => {
+        const matches = fileMatches.get(file)!
+        const isCollapsed = collapsedFiles.has(file)
+
+        const matchElements: React.JSX.Element[] = []
+        if (!isCollapsed) {
+          for (const r of matches) {
+            if (!visibleSet.has(r)) continue
+            const idx = visibleIdx++
+            matchElements.push(
+              <button
+                key={`${r.file}-${r.match.line}-${r.match.column}`}
+                id={`search-result-${idx}`}
+                data-index={idx}
+                role="option"
+                aria-selected={idx === selectedIndex}
+                onClick={() => onSelect(r.file, r.match.line)}
+                className={cn(
+                  "w-full flex items-center gap-2 px-3 py-1 text-left transition-colors duration-150",
+                  "focus-visible:outline-none",
+                  idx === selectedIndex ? "bg-foreground/10" : "hover:bg-foreground/5",
+                )}
+              >
+                <span className="text-[10px] text-text-muted tabular-nums w-8 text-right shrink-0">
+                  {r.match.line}
+                </span>
+                <span className="text-xs text-text-secondary truncate font-mono">
+                  <HighlightedText
+                    text={r.match.content.trim()}
+                    query={query}
+                    options={searchOptions}
+                  />
+                </span>
+              </button>,
+            )
+          }
+        }
+
+        // Skip file groups with no visible matches (beyond visible limit)
+        if (matchElements.length === 0 && !isCollapsed) return null
+
         return (
-          <div key={`${r.file}-${r.match.line}-${r.match.column}`}>
-            {showHeader && (
-              <div className="flex items-center gap-1.5 px-3 pt-2 pb-0.5">
-                <Code2 className="h-3 w-3 text-text-muted shrink-0" />
-                <span className="text-[10px] font-medium text-text-secondary truncate">{fileName}</span>
-                <span className="text-[10px] text-text-muted truncate ml-1">{r.file}</span>
-              </div>
-            )}
+          <div key={file}>
             <button
-              id={`search-result-${i}`}
-              data-index={i}
-              role="option"
-              aria-selected={i === selectedIndex}
-              onClick={() => onSelect(r.file, r.match.line)}
-              className={cn(
-                "w-full flex items-center gap-2 px-3 py-1 text-left transition-colors duration-150",
-                "focus-visible:outline-none",
-                i === selectedIndex ? "bg-foreground/10" : "hover:bg-foreground/5",
-              )}
+              type="button"
+              onClick={() => onToggleFile(file)}
+              aria-expanded={!isCollapsed}
+              className="w-full flex items-center gap-1.5 px-3 pt-2 pb-0.5 hover:bg-foreground/5 transition-colors"
             >
-              <span className="text-[10px] text-text-muted tabular-nums w-8 text-right shrink-0">
-                {r.match.line}
-              </span>
-              <span className="text-xs text-text-secondary truncate font-mono">
-                <HighlightedText
-                  text={r.match.content.trim()}
-                  query={query}
-                  options={searchOptions}
-                />
-              </span>
+              {isCollapsed
+                ? <ChevronRight className="h-3 w-3 text-text-muted shrink-0" />
+                : <ChevronDown className="h-3 w-3 text-text-muted shrink-0" />
+              }
+              <Code2 className="h-3 w-3 text-text-muted shrink-0" />
+              <span className="text-[10px] font-medium text-text-secondary truncate">{file}</span>
             </button>
+            {matchElements}
           </div>
         )
       })}
-      {stats && (
-        <div className="px-3 py-1.5 text-[10px] text-text-muted text-center border-t border-foreground/[0.04]">
-          {stats.totalMatches > MAX_CODE_RESULTS
-            ? `Showing ${MAX_CODE_RESULTS} of ${stats.totalMatches} matches`
-            : `${stats.totalMatches} match${stats.totalMatches !== 1 ? 'es' : ''}`
-          }
-          {' '}in {stats.fileCount} file{stats.fileCount !== 1 ? 's' : ''}
-        </div>
-      )}
+      {hasMore && <div ref={sentinelRef} className="h-1" />}
     </>
   )
 }

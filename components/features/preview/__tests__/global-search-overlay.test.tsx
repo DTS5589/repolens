@@ -36,6 +36,8 @@ vi.mock('lucide-react', () => {
     WholeWord: icon('WholeWord'),
     Regex: icon('Regex'),
     X: icon('X'),
+    ChevronRight: icon('ChevronRight'),
+    ChevronDown: icon('ChevronDown'),
   }
 })
 
@@ -104,6 +106,14 @@ describe('GlobalSearchOverlay', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     // jsdom doesn't implement scrollIntoView
     Element.prototype.scrollIntoView = vi.fn()
+    // jsdom doesn't implement IntersectionObserver
+    globalThis.IntersectionObserver = class {
+      observe = vi.fn()
+      unobserve = vi.fn()
+      disconnect = vi.fn()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      constructor(_cb: any, _opts?: any) {}
+    } as unknown as typeof IntersectionObserver
   })
 
   afterEach(() => {
@@ -373,7 +383,7 @@ describe('GlobalSearchOverlay', () => {
       )
       act(() => { vi.advanceTimersByTime(300) })
 
-      expect(screen.getByText('app.ts')).toBeInTheDocument()
+      expect(screen.getByText('src/app.ts')).toBeInTheDocument()
       expect(screen.getByText('10')).toBeInTheDocument()
       expect(screen.getByText('20')).toBeInTheDocument()
     })
@@ -479,8 +489,7 @@ describe('GlobalSearchOverlay', () => {
       )
       act(() => { vi.advanceTimersByTime(300) })
 
-      expect(screen.getByText(/3 match/)).toBeInTheDocument()
-      expect(screen.getByText(/2 file/)).toBeInTheDocument()
+      expect(screen.getByText(/3 matches in 2 files/)).toBeInTheDocument()
     })
   })
 
@@ -846,7 +855,7 @@ describe('GlobalSearchOverlay', () => {
       ).toBeInTheDocument()
     })
 
-    it('Tab is not intercepted when a non-input element has focus', async () => {
+    it('Tab is intercepted even when a non-input element has focus (focus trap)', async () => {
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
       renderOverlay()
 
@@ -858,10 +867,10 @@ describe('GlobalSearchOverlay', () => {
       const option = screen.getAllByRole('option')[0]
       option.focus()
 
-      // Tab should NOT switch tabs when focus is on a result, not the input
+      // Tab should still cycle tabs even from a result button (focus trap)
       await user.tab()
       expect(
-        screen.getByPlaceholderText('Search files by name or path...'),
+        screen.getByPlaceholderText('Search in file contents...'),
       ).toBeInTheDocument()
     })
   })
@@ -902,7 +911,7 @@ describe('GlobalSearchOverlay', () => {
       )
       act(() => { vi.advanceTimersByTime(300) })
 
-      expect(screen.getByText(/Showing 100 of 120/)).toBeInTheDocument()
+      expect(screen.getByText(/Showing 100 of 120 matches in 2 files/)).toBeInTheDocument()
     })
   })
 })
