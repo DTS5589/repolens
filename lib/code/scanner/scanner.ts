@@ -22,6 +22,7 @@ import { isLikelyRealSecret } from './entropy'
 import { getAST, analyzeAST, AST_LANGUAGES, clearASTCache } from './ast-analyzer'
 import { trackTaint, taintFlowsToIssues } from './taint-tracker'
 import { scoreIssue, scoreProject, getRiskDistribution, buildCvssVector } from './risk-scorer'
+import { scanWithTreeSitter } from './tree-sitter-scanner'
 
 const MAX_PER_RULE = 15
 
@@ -40,6 +41,19 @@ const RULES: ScanRule[] = [
 /** Returns the full set of regex-based scan rules. */
 export function getAllRules(): ScanRule[] {
   return RULES
+}
+
+/** Compute summary counts from an issues array. */
+export function computeScanSummary(issues: CodeIssue[]) {
+  return {
+    total: issues.length,
+    critical: issues.filter(i => i.severity === 'critical').length,
+    warning: issues.filter(i => i.severity === 'warning').length,
+    info: issues.filter(i => i.severity === 'info').length,
+    bySecurity: issues.filter(i => i.category === 'security').length,
+    byBadPractice: issues.filter(i => i.category === 'bad-practice').length,
+    byReliability: issues.filter(i => i.category === 'reliability').length,
+  }
 }
 
 // Rule IDs related to secrets/passwords (used for entropy & type-annotation suppression).
@@ -591,22 +605,11 @@ export function scanIssues(
 
   // Health grades
   const sloc = Array.from(filesToScan.values()).reduce((sum, f) => sum + f.lineCount, 0)
-  const critCount = issues.filter(i => i.severity === 'critical').length
-  const warnCount = issues.filter(i => i.severity === 'warning').length
-  const infoCount = issues.filter(i => i.severity === 'info').length
   const grades = computeHealthGrades(issues, sloc)
 
   const result: ScanResults = {
     issues,
-    summary: {
-      total: issues.length,
-      critical: critCount,
-      warning: warnCount,
-      info: infoCount,
-      bySecurity: issues.filter(i => i.category === 'security').length,
-      byBadPractice: issues.filter(i => i.category === 'bad-practice').length,
-      byReliability: issues.filter(i => i.category === 'reliability').length,
-    },
+    summary: computeScanSummary(issues),
     healthGrade: grades.healthGrade,
     healthScore: grades.healthScore,
     ruleOverflow,
@@ -815,6 +818,23 @@ async function scanIssuesAsyncImpl(
   await yieldToMain()
   if (isStale?.()) return null
 
+  // --- Phase 5b: Tree-sitter multi-language analysis (async) ---
+  try {
+    const treeSitterIssues = await scanWithTreeSitter(filesToScan)
+    for (const issue of treeSitterIssues) {
+      if (isPartialScan && !filesToScan.has(issue.file)) continue
+      if (!seenIds.has(issue.id)) {
+        seenIds.add(issue.id)
+        issues.push(issue)
+      }
+    }
+  } catch (err) {
+    console.warn('[scanner] Tree-sitter analysis failed:', err)
+  }
+
+  await yieldToMain()
+  if (isStale?.()) return null
+
   // --- Phase 6: Context cross-reference + sorting + risk scoring ---
   if (analysis) {
     for (const issue of issues) {
@@ -850,22 +870,11 @@ async function scanIssuesAsyncImpl(
   const riskDistribution = getRiskDistribution(issues)
 
   const sloc = Array.from(filesToScan.values()).reduce((sum, f) => sum + f.lineCount, 0)
-  const critCount = issues.filter(i => i.severity === 'critical').length
-  const warnCount = issues.filter(i => i.severity === 'warning').length
-  const infoCount = issues.filter(i => i.severity === 'info').length
   const grades = computeHealthGrades(issues, sloc)
 
   const result: ScanResults = {
     issues,
-    summary: {
-      total: issues.length,
-      critical: critCount,
-      warning: warnCount,
-      info: infoCount,
-      bySecurity: issues.filter(i => i.category === 'security').length,
-      byBadPractice: issues.filter(i => i.category === 'bad-practice').length,
-      byReliability: issues.filter(i => i.category === 'reliability').length,
-    },
+    summary: computeScanSummary(issues),
     healthGrade: grades.healthGrade,
     healthScore: grades.healthScore,
     ruleOverflow,

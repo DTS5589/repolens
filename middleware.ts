@@ -13,6 +13,7 @@ const RESERVED_SEGMENTS = new Set([
     'site.webmanifest',
     'robots.txt',
     'public',
+    'wasm',
 ])
 
 /** Only allow valid GitHub username/repo characters: alphanumeric, hyphens, dots, underscores. */

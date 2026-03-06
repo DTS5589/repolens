@@ -1,6 +1,7 @@
 // Type, class, and JSX component extraction for multiple languages.
 
 import type { ExtractedType, ExtractedClass } from './types'
+import { extractTypesTreeSitter, extractClassesTreeSitter } from './tree-sitter-symbols'
 
 // ---------------------------------------------------------------------------
 // Type/Interface/Enum extraction
@@ -194,4 +195,20 @@ export function extractJsxComponents(content: string, lang: string): string[] {
     if (m[1].length > 1 && /^[A-Z]/.test(m[1])) components.add(m[1])
   }
   return Array.from(components)
+}
+
+// ---------------------------------------------------------------------------
+// Async variants — Tree-sitter with regex fallback
+// ---------------------------------------------------------------------------
+
+export async function extractTypesAsync(content: string, lang: string): Promise<ExtractedType[]> {
+  const tsTypes = await extractTypesTreeSitter(content, lang)
+  if (tsTypes && tsTypes.length > 0) return tsTypes
+  return extractTypes(content, lang)
+}
+
+export async function extractClassesAsync(content: string, lang: string): Promise<ExtractedClass[]> {
+  const tsClasses = await extractClassesTreeSitter(content, lang)
+  if (tsClasses && tsClasses.length > 0) return tsClasses
+  return extractClasses(content, lang)
 }

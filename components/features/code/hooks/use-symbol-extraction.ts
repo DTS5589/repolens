@@ -1,4 +1,5 @@
-import { useMemo } from "react"
+import { useMemo, useState, useEffect } from "react"
+import { extractSymbolsTreeSitter } from '@/lib/code/parser/tree-sitter-symbols'
 
 export interface ExtractedSymbol {
   name: string
@@ -213,9 +214,37 @@ export function extractSymbols(content: string, language?: string): ExtractedSym
   return extractTsSymbols(content)
 }
 
+/**
+ * Async symbol extraction — uses Tree-sitter when available, falls back to regex.
+ */
+export async function extractSymbolsAsync(content: string, language?: string): Promise<ExtractedSymbol[]> {
+  if (language) {
+    const tsSymbols = await extractSymbolsTreeSitter(content, language)
+    if (tsSymbols && tsSymbols.length > 0) return tsSymbols
+  }
+  return extractSymbols(content, language)
+}
+
 export function useSymbolExtraction(content: string | null | undefined, language: string | undefined): ExtractedSymbol[] {
-  return useMemo(() => {
+  const syncSymbols = useMemo(() => {
     if (!content) return []
     return extractSymbols(content, language)
   }, [content, language])
+
+  const [symbols, setSymbols] = useState(syncSymbols)
+
+  useEffect(() => {
+    setSymbols(syncSymbols)
+    if (!content || !language) return
+
+    let cancelled = false
+    extractSymbolsTreeSitter(content, language).then(tsSymbols => {
+      if (!cancelled && tsSymbols && tsSymbols.length > 0) {
+        setSymbols(tsSymbols)
+      }
+    }).catch(() => { /* regex fallback already set */ })
+    return () => { cancelled = true }
+  }, [content, language, syncSymbols])
+
+  return symbols
 }

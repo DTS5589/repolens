@@ -12,6 +12,11 @@ export type {
 
 export { scanIssues, scanIssuesAsync, getAllRules, clearScanCache } from './scanner'
 
+export { scanWithTreeSitter } from './tree-sitter-scanner'
+
+export { TREE_SITTER_RULES, getRulesForLanguage, getLanguagesWithRules } from './rules-tree-sitter'
+export type { TreeSitterRule } from './rules-tree-sitter'
+
 export { scanInWorker, terminateScanWorker } from './scanner-client'
 
 export {
