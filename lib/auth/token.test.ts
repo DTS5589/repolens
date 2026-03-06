@@ -15,18 +15,35 @@ describe('getAccessToken', () => {
     vi.clearAllMocks()
   })
 
-  it('returns the access token when the user is authenticated', async () => {
+  /** Helper: build a mock NextRequest with optional X-GitHub-Token header. */
+  function mockRequest(pat?: string) {
+    return {
+      headers: {
+        get: (name: string) =>
+          name === 'X-GitHub-Token' ? (pat ?? null) : null,
+      },
+    } as Parameters<typeof getAccessToken>[0]
+  }
+
+  it('returns the PAT when X-GitHub-Token header is present', async () => {
+    const result = await getAccessToken(mockRequest('ghp_pat123'))
+
+    expect(result).toBe('ghp_pat123')
+    // Should NOT call getToken — PAT short-circuits
+    expect(mockGetToken).not.toHaveBeenCalled()
+  })
+
+  it('returns the access token when the user is authenticated via OAuth', async () => {
     mockGetToken.mockResolvedValue({
       accessToken: 'gho_abc123',
       sub: 'user-1',
     } as Awaited<ReturnType<typeof getToken>>)
 
-    const mockRequest = {} as Parameters<typeof getAccessToken>[0]
-    const result = await getAccessToken(mockRequest)
+    const result = await getAccessToken(mockRequest())
 
     expect(result).toBe('gho_abc123')
     expect(mockGetToken).toHaveBeenCalledWith({
-      req: mockRequest,
+      req: expect.anything(),
       secret: process.env.NEXTAUTH_SECRET,
     })
   })
@@ -34,8 +51,7 @@ describe('getAccessToken', () => {
   it('returns undefined when no token is available', async () => {
     mockGetToken.mockResolvedValue(null)
 
-    const mockRequest = {} as Parameters<typeof getAccessToken>[0]
-    const result = await getAccessToken(mockRequest)
+    const result = await getAccessToken(mockRequest())
 
     expect(result).toBeUndefined()
   })
@@ -45,9 +61,21 @@ describe('getAccessToken', () => {
       sub: 'user-2',
     } as Awaited<ReturnType<typeof getToken>>)
 
-    const mockRequest = {} as Parameters<typeof getAccessToken>[0]
-    const result = await getAccessToken(mockRequest)
+    const result = await getAccessToken(mockRequest())
 
     expect(result).toBeUndefined()
+  })
+
+  it('returns PAT when BOTH X-GitHub-Token and OAuth JWT are present (PAT wins)', async () => {
+    mockGetToken.mockResolvedValue({
+      accessToken: 'gho_oauth_token',
+      sub: 'user-3',
+    } as Awaited<ReturnType<typeof getToken>>)
+
+    const result = await getAccessToken(mockRequest('ghp_pat_token'))
+
+    expect(result).toBe('ghp_pat_token')
+    // PAT short-circuits — OAuth getToken should not be called
+    expect(mockGetToken).not.toHaveBeenCalled()
   })
 })
