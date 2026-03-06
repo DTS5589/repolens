@@ -134,12 +134,11 @@ export function ToursProvider({ children }: { children: ReactNode }) {
   )
 
   const nextStop = useCallback(() => {
-    setActiveTour((tour) => {
-      if (!tour) return null
-      setActiveStopIndex((prev) => Math.min(prev + 1, tour.stops.length - 1))
-      return tour
+    setActiveStopIndex((prev) => {
+      if (!activeTour) return prev
+      return Math.min(prev + 1, activeTour.stops.length - 1)
     })
-  }, [])
+  }, [activeTour])
 
   const prevStop = useCallback(() => {
     setActiveStopIndex((prev) => Math.max(prev - 1, 0))

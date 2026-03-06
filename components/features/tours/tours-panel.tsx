@@ -68,6 +68,7 @@ export function ToursPanel({ className, onNavigateToFile }: ToursPanelProps) {
 
         const generatedTour = parsed.tour as Tour
         await saveTour(generatedTour)
+        if (repo?.fullName) loadTours(repo.fullName)
         setShowGenerateDialog(false)
       } catch (err) {
         console.error("[tours-panel] Generation error:", err)
@@ -75,7 +76,7 @@ export function ToursPanel({ className, onNavigateToFile }: ToursPanelProps) {
         setIsGenerating(false)
       }
     },
-    [repo?.fullName, codeIndex, saveTour],
+    [repo?.fullName, codeIndex, saveTour, loadTours],
   )
 
   const handleDelete = useCallback(

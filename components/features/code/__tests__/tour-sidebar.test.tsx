@@ -179,15 +179,15 @@ describe('TourSidebar', () => {
     // Open dialog
     await user.click(screen.getByRole('button', { name: /create new tour/i }))
 
-    // Fill form
-    await user.type(screen.getByLabelText('Name'), 'My New Tour')
-    await user.type(screen.getByPlaceholderText(/brief description/i), 'Tour description')
+    // Fill form — use short values to keep character-by-character typing fast
+    await user.type(screen.getByLabelText('Name'), 'Tour')
+    await user.type(screen.getByPlaceholderText(/brief description/i), 'Desc')
 
     // Submit
     await user.click(screen.getByRole('button', { name: 'Create Tour' }))
 
-    expect(onCreateTour).toHaveBeenCalledWith('My New Tour', 'Tour description')
-  })
+    expect(onCreateTour).toHaveBeenCalledWith('Tour', 'Desc')
+  }, 15_000)
 
   it('create button in empty state also opens dialog', async () => {
     const user = userEvent.setup()
