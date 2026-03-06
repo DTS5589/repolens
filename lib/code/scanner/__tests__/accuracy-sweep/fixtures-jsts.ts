@@ -1132,4 +1132,388 @@ export function createConfig(options: Partial<AppConfig>): AppConfig {
       // First arg to Object.assign is {}, not req.body/params/query — safe.
     ],
   },
+
+  // -----------------------------------------------------------------------
+  // 48. SSTI — EJS render with req.body.template → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'ssti-js-injection',
+    description: 'ejs.render with req.body.template — server-side template injection, TP',
+    file: {
+      path: 'src/views/preview.ts',
+      content: `import ejs from 'ejs'
+import { Request, Response } from 'express'
+
+export function renderTemplate(req: Request, res: Response) {
+  const html = ejs.render(req.body.template, { name: 'World' })
+  res.send(html)
+}`,
+      language: 'typescript',
+    },
+    expected: [
+      { ruleId: 'ssti-js', line: 5, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 49. TLS rejectUnauthorized: false → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'tls-reject-unauthorized',
+    description: 'https.Agent with rejectUnauthorized: false — TLS bypass, TP',
+    file: {
+      path: 'src/api/client.ts',
+      content: `import https from 'https'
+
+const agent = new https.Agent({ rejectUnauthorized: false })
+export const client = { httpsAgent: agent }`,
+      language: 'typescript',
+    },
+    expected: [
+      { ruleId: 'tls-reject-unauthorized-false', line: 3, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 50. NODE_TLS_REJECT_UNAUTHORIZED = '0' → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'tls-env-disable',
+    description: 'NODE_TLS_REJECT_UNAUTHORIZED = 0 — global TLS disable, TP',
+    file: {
+      path: 'src/bootstrap.ts',
+      content: `process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'`,
+      language: 'typescript',
+    },
+    expected: [
+      { ruleId: 'tls-env-disable', line: 1, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 51. Hardcoded IV in createCipheriv → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'hardcoded-iv',
+    description: 'createCipheriv with Buffer.from hardcoded IV — crypto misuse, TP',
+    file: {
+      path: 'src/crypto/encrypt.ts',
+      content: `import crypto from 'crypto'
+
+export function encrypt(data: string, key: Buffer) {
+  const cipher = crypto.createCipheriv('aes-256-cbc', key, Buffer.from('1234567890abcdef'))
+  return cipher.update(data, 'utf8', 'hex') + cipher.final('hex')
+}`,
+      language: 'typescript',
+    },
+    expected: [
+      { ruleId: 'hardcoded-iv', line: 4, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 52. vm.runInNewContext with user code → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'vm-code-execution',
+    description: 'vm.runInNewContext executing user-supplied code — sandbox escape risk, TP',
+    file: {
+      path: 'src/sandbox/runner.ts',
+      content: `import vm from 'vm'
+
+export function runUserCode(code: string) {
+  return vm.runInNewContext(code, { Math, Date })
+}`,
+      language: 'typescript',
+    },
+    expected: [
+      { ruleId: 'vm-code-execution', line: 4, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 53. vm2 deprecated import → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'vm2-deprecated-import',
+    description: 'import from vm2 — deprecated with known sandbox escapes, TP',
+    file: {
+      path: 'src/sandbox/vm2-runner.ts',
+      content: `import { VM } from 'vm2'
+
+export function runSandboxed(code: string) {
+  const vmInstance = new VM()
+  return vmInstance.run(code)
+}`,
+      language: 'typescript',
+    },
+    expected: [
+      { ruleId: 'vm2-deprecated', line: 1, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 54. Error stack exposure in response → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'error-stack-exposure',
+    description: 'res.json with err.stack — leaks internals to client, TP',
+    file: {
+      path: 'src/middleware/error.ts',
+      content: `import { Request, Response, NextFunction } from 'express'
+
+export function handleError(err: Error, req: Request, res: Response, next: NextFunction) {
+  res.json({ message: err.message, stack: err.stack })
+}`,
+      language: 'typescript',
+    },
+    expected: [
+      { ruleId: 'error-stack-exposure', line: 4, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 55. CSP unsafe-inline → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'csp-unsafe-inline',
+    description: "Content-Security-Policy with 'unsafe-inline' — XSS risk, TP",
+    file: {
+      path: 'src/middleware/csp.ts',
+      content: `export function setCSP(res: any) {
+  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'unsafe-inline'")
+}`,
+      language: 'typescript',
+    },
+    expected: [
+      { ruleId: 'csp-unsafe-inline', line: 2, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 56. CSP unsafe-eval → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'csp-unsafe-eval',
+    description: "Content-Security-Policy with 'unsafe-eval' — allows eval(), TP",
+    file: {
+      path: 'src/middleware/csp-eval.ts',
+      content: `export function setCSPEval(res: any) {
+  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'unsafe-eval'")
+}`,
+      language: 'typescript',
+    },
+    expected: [
+      { ruleId: 'csp-unsafe-eval', line: 2, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 57. Deprecated TLS version → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'deprecated-tls-version',
+    description: "secureProtocol: 'TLSv1_method' — deprecated TLS 1.0, TP",
+    file: {
+      path: 'src/config/tls.ts',
+      content: `import tls from 'tls'
+
+export const options = {
+  secureProtocol: 'TLSv1_method',
+  minVersion: 'TLSv1',
+}`,
+      language: 'typescript',
+    },
+    expected: [
+      { ruleId: 'deprecated-tls', line: 4, verdict: 'tp' },
+      { ruleId: 'deprecated-tls', line: 5, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 58. JWT algorithm 'none' → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'jwt-algorithm-none',
+    description: "algorithms: ['none', 'HS256'] — allows forged tokens, TP",
+    file: {
+      path: 'src/auth/jwt.ts',
+      content: `import jwt from 'jsonwebtoken'
+
+export function verifyToken(token: string) {
+  return jwt.verify(token, 'secret', { algorithms: ['none', 'HS256'] })
+}`,
+      language: 'typescript',
+    },
+    expected: [
+      { ruleId: 'jwt-algo-none', line: 4, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 59. Object injection via bracket accessor → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'object-injection-bracket',
+    description: 'settings[req.query.key] — dynamic property access with request data, TP',
+    file: {
+      path: 'src/routes/settings.ts',
+      content: `import { Router } from 'express'
+
+const router = Router()
+const settings: Record<string, string> = {}
+
+router.get('/setting', (req, res) => {
+  const value = settings[req.query.key]
+  res.json({ value })
+})
+
+export default router`,
+      language: 'typescript',
+    },
+    expected: [
+      { ruleId: 'object-injection-bracket', line: 7, verdict: 'tp' },
+      { ruleId: 'composite-missing-auth-express-route', line: 6, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 60. Console log with sensitive data → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'console-log-sensitive-data',
+    description: 'console.log with password variable — credential leak in logs, TP',
+    file: {
+      path: 'src/auth/login.ts',
+      content: `export function debugLogin(username: string, password: string) {
+  console.log('Login attempt', { username, password })
+}`,
+      language: 'typescript',
+    },
+    expected: [
+      { ruleId: 'console-log-sensitive', line: 2, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 61. Static crypto key in createCipheriv → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'static-crypto-key',
+    description: 'createCipheriv with hardcoded string key — extractable from source, TP',
+    file: {
+      path: 'src/crypto/cipher.ts',
+      content: `import crypto from 'crypto'
+
+export function encryptData(data: string, iv: Buffer) {
+  const cipher = crypto.createCipheriv('aes-256-cbc', 'my-secret-key-32-chars-long!!!!!', iv)
+  return cipher.update(data, 'utf8', 'hex') + cipher.final('hex')
+}`,
+      language: 'typescript',
+    },
+    expected: [
+      { ruleId: 'static-crypto-key', line: 4, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 62. Sensitive data in URL query string → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'sensitive-data-url',
+    description: 'password in URL query parameter — exposed in logs/history, TP',
+    file: {
+      path: 'src/services/auth-client.ts',
+      content: `export async function authenticate(user: string, pass: string) {
+  const res = await fetch(\`https://api.acme.io/login?password=\${pass}&user=\${user}\`)
+  return res.json()
+}`,
+      language: 'typescript',
+    },
+    expected: [
+      { ruleId: 'sensitive-data-in-url', line: 2, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 63. React href="javascript:..." → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'react-href-javascript',
+    description: 'href="javascript:void(0)" — XSS vector in React, TP',
+    file: {
+      path: 'src/components/ActionLink.tsx',
+      content: `export function ActionLink({ onClick }: { onClick: () => void }) {
+  return <a href="javascript:void(0)" onClick={onClick}>Click</a>
+}`,
+      language: 'typescriptreact',
+    },
+    expected: [
+      { ruleId: 'react-href-javascript', line: 2, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 64. React target="_blank" without rel="noopener" → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'react-target-blank',
+    description: 'target="_blank" without rel="noopener" — reverse tabnapping, TP',
+    file: {
+      path: 'src/components/ExternalLink.tsx',
+      content: `export function ExternalLink({ url, label }: { url: string; label: string }) {
+  return <a href={url} target="_blank">{label}</a>
+}`,
+      language: 'typescriptreact',
+    },
+    expected: [
+      { ruleId: 'react-target-blank-noopener', line: 2, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 65. NEXT_PUBLIC_ env with secret names → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'nextjs-public-env-secret',
+    description: 'NEXT_PUBLIC_SECRET and NEXT_PUBLIC_API_KEY — client-exposed secrets, TP',
+    file: {
+      path: 'src/config/env.ts',
+      content: `export const config = {
+  secretKey: process.env.NEXT_PUBLIC_SECRET,
+  apiKey: process.env.NEXT_PUBLIC_API_KEY,
+}`,
+      language: 'typescript',
+    },
+    expected: [
+      { ruleId: 'nextjs-public-env-secret', line: 2, verdict: 'tp' },
+      { ruleId: 'nextjs-public-env-secret', line: 3, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 66. UNSAFE_componentWillMount → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'react-unsafe-lifecycle',
+    description: 'UNSAFE_componentWillMount — deprecated lifecycle, TP',
+    file: {
+      path: 'src/components/LegacyWidget.tsx',
+      content: `import React from 'react'
+
+class LegacyWidget extends React.Component {
+  UNSAFE_componentWillMount() {
+    this.loadData()
+  }
+  render() { return <div>Widget</div> }
+  loadData() {}
+}
+
+export default LegacyWidget`,
+      language: 'typescriptreact',
+    },
+    expected: [
+      { ruleId: 'react-unsafe-lifecycle', line: 4, verdict: 'tp' },
+    ],
+  },
 ]

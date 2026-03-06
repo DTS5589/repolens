@@ -478,4 +478,122 @@ def create_temp_config():
       { ruleId: 'python-tempfile-mktemp', line: 5, verdict: 'tp' },
     ],
   },
+
+  // -----------------------------------------------------------------------
+  // 22. Python bare except → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'python-bare-except',
+    description: 'bare except: catches everything including SystemExit — TP',
+    file: {
+      path: 'src/utils/loader.py',
+      content: `def load_data(path):
+    try:
+        with open(path) as f:
+            return f.read()
+    except:
+        return None`,
+      language: 'python',
+    },
+    expected: [
+      { ruleId: 'python-bare-except', line: 5, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 23. Python os.system with f-string → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'python-os-system',
+    description: 'os.system with f-string — command injection risk, TP',
+    file: {
+      path: 'src/admin/services.py',
+      content: `import os
+
+def restart_service(name):
+    os.system(f"systemctl restart {name}")`,
+      language: 'python',
+    },
+    expected: [
+      { ruleId: 'python-os-system', line: 4, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 24. SSTI Python — render_template_string with request → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'ssti-python',
+    description: 'render_template_string(request.form.get(...)) — SSTI, TP',
+    file: {
+      path: 'views/preview.py',
+      content: `from flask import render_template_string, request
+
+def preview():
+    return render_template_string(request.form.get('template'))`,
+      language: 'python',
+    },
+    expected: [
+      { ruleId: 'ssti-python', line: 4, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 25. Python marshal.load → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'python-marshal-load',
+    description: 'marshal.load from file — insecure deserialization, TP',
+    file: {
+      path: 'src/cache/loader.py',
+      content: `import marshal
+
+def load_cached(path):
+    with open(path, 'rb') as f:
+        return marshal.load(f)`,
+      language: 'python',
+    },
+    expected: [
+      { ruleId: 'python-marshal-load', line: 5, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 26. XXE Python — xml.etree.ElementTree.parse → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'xxe-python',
+    description: 'xml.etree.ElementTree.parse — vulnerable to XXE, TP',
+    file: {
+      path: 'src/parsers/xml_loader.py',
+      content: `import xml.etree.ElementTree as ET
+
+def load_xml(path):
+    tree = xml.etree.ElementTree.parse(path)
+    return tree.getroot()`,
+      language: 'python',
+    },
+    expected: [
+      { ruleId: 'xxe-python', line: 4, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 27. Python timing attack — == with secret → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'python-timing-attack',
+    description: '== comparison with secret variable — timing attack, TP',
+    file: {
+      path: 'src/auth/verify.py',
+      content: `def check_auth(provided, secret):
+    if provided == secret:
+        return True
+    return False`,
+      language: 'python',
+    },
+    expected: [
+      { ruleId: 'timing-attack-py', line: 2, verdict: 'tp' },
+    ],
+  },
 ]

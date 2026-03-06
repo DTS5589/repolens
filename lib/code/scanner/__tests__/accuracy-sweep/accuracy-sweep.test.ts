@@ -17,6 +17,9 @@ import { compositeFixtures } from './fixtures-composite'
 import { phpFixtures } from './fixtures-php'
 import { cFixtures } from './fixtures-c'
 import { rubyFixtures } from './fixtures-ruby'
+import { shellFixtures } from './fixtures-shell'
+import { csharpFixtures } from './fixtures-csharp'
+import { kotlinFixtures } from './fixtures-kotlin'
 
 // ---------------------------------------------------------------------------
 // All fixtures combined
@@ -32,6 +35,9 @@ const ALL_FIXTURES: FixtureCase[] = [
   ...phpFixtures,
   ...cFixtures,
   ...rubyFixtures,
+  ...shellFixtures,
+  ...csharpFixtures,
+  ...kotlinFixtures,
 ]
 
 // ---------------------------------------------------------------------------
@@ -288,10 +294,10 @@ describe('Scanner Accuracy Sweep', () => {
     console.log('='.repeat(72))
 
     // Verify minimum fixture count
-    expect(summary.totalFixtures).toBeGreaterThanOrEqual(120)
+    expect(summary.totalFixtures).toBeGreaterThanOrEqual(145)
 
-    // Count total annotated expected findings (100+ required)
+    // Count total annotated expected findings (120+ required)
     const totalAnnotated = ALL_FIXTURES.reduce((sum, f) => sum + f.expected.length, 0)
-    expect(totalAnnotated).toBeGreaterThanOrEqual(100)
+    expect(totalAnnotated).toBeGreaterThanOrEqual(120)
   })
 })

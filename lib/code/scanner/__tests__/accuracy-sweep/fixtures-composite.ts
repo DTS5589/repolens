@@ -330,4 +330,51 @@ export default app`,
       { ruleId: 'express-no-helmet', line: 4, verdict: 'tp' },
     ],
   },
+
+  // -----------------------------------------------------------------------
+  // 13. WebSocket server without auth → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'composite-websocket-no-auth',
+    description: 'WebSocketServer without authentication — open access, TP',
+    file: {
+      path: 'src/ws/server.ts',
+      content: `import { WebSocketServer } from 'ws'
+
+const wss = new WebSocketServer({ port: 8080 })
+
+wss.on('connection', (ws) => {
+  ws.on('message', (data) => {
+    ws.send(\`Echo: \${data}\`)
+  })
+})`,
+      language: 'typescript',
+    },
+    expected: [
+      { ruleId: 'composite-websocket-no-auth', line: 1, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 14. TOCTOU — existsSync + writeFileSync race → TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'composite-toctou-file-check',
+    description: 'existsSync + unlinkSync + writeFileSync — TOCTOU race condition, TP',
+    file: {
+      path: 'src/utils/safe-write.ts',
+      content: `import fs from 'fs'
+
+export function safeWrite(filePath: string, data: string) {
+  if (fs.existsSync(filePath)) {
+    fs.unlinkSync(filePath)
+  }
+  fs.writeFileSync(filePath, data)
+}`,
+      language: 'typescript',
+    },
+    expected: [
+      { ruleId: 'composite-toctou-file-check', line: 5, verdict: 'tp' },
+    ],
+  },
 ]
