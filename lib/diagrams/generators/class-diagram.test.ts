@@ -7,17 +7,20 @@ describe('generateClassDiagram', () => {
 
     expect(result.type).toBe('classes')
     expect(result.chart).toContain('classDiagram')
-    // Should include the interface and class from mock data
-    expect(result.chart).toContain('ButtonProps')
-    expect(result.chart).toContain('<<interface>>')
+    // Only connected types (via inheritance/implements) should be rendered
     expect(result.chart).toContain('ApiClient')
+    expect(result.chart).toContain('BaseClient')
+    expect(result.chart).toContain('HttpClient')
+    expect(result.chart).toContain('<<interface>>')
+    // Types should be grouped in module namespaces
+    expect(result.chart).toContain('namespace services')
     expect(result.stats.totalNodes).toBeGreaterThanOrEqual(3)
   })
 
   it('renders enum types with <<enumeration>> stereotype', () => {
-    const result = generateClassDiagram(createRealisticAnalysis())
+    const result = generateClassDiagram(createCompositionAnalysis())
 
-    expect(result.chart).toContain('Theme')
+    expect(result.chart).toContain('Status')
     expect(result.chart).toContain('<<enumeration>>')
   })
 
@@ -58,9 +61,9 @@ describe('generateClassDiagram', () => {
     const result = generateClassDiagram(createRealisticAnalysis())
 
     expect(result.nodePathMap.size).toBeGreaterThan(0)
-    // All type names should map to their source file paths
-    expect(result.nodePathMap.get('ButtonProps')).toBe('src/types.ts')
+    // Connected types should map to their source file paths
     expect(result.nodePathMap.get('ApiClient')).toBe('src/services/api.ts')
+    expect(result.nodePathMap.get('BaseClient')).toBe('src/services/auth.ts')
   })
 
   describe('complex type handling', () => {

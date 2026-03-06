@@ -283,83 +283,7 @@ export function generateClassDiagram(analysis: FullAnalysis): MermaidDiagramResu
     }
   }
 
-  let chart = 'classDiagram\n'
-  let nodeCount = 0
-  let edgeCount = 0
-
-  for (const t of typesToRender) {
-    nodePathMap.set(t.safeName, t.path)
-    nodeCount++
-    if (t.kind === 'interface') {
-      chart += `  class ${t.safeName} {\n    <<interface>>\n`
-      for (const prop of getCleanProperties(t.properties, 6)) {
-        const s = sanitizeProp(prop)
-        if (s) chart += `    +${s}\n`
-      }
-      chart += `  }\n`
-    } else if (t.kind === 'enum') {
-      chart += `  class ${t.safeName} {\n    <<enumeration>>\n`
-      for (const prop of t.properties.slice(0, 6)) {
-        const s = sanitizeProp(prop)
-        if (s) chart += `    ${s}\n`
-      }
-      chart += `  }\n`
-    } else if (t.kind === 'class') {
-      chart += `  class ${t.safeName} {\n`
-      for (const prop of getCleanProperties(t.properties, 5)) {
-        const s = sanitizeProp(prop)
-        if (s) chart += `    +${s}\n`
-      }
-      for (const method of (t.methods || []).slice(0, 4)) {
-        const s = sanitizeProp(method)
-        if (s) chart += `    +${s}\n`
-      }
-      chart += `  }\n`
-    } else if (t.isObjectType) {
-      // Type alias with object-like body — extract real properties
-      chart += `  class ${t.safeName} {\n    <<type>>\n`
-      for (const prop of getCleanProperties(t.properties, 4)) {
-        const s = sanitizeProp(prop)
-        if (s) chart += `    ${s}\n`
-      }
-      chart += `  }\n`
-    } else {
-      // Non-object type alias (utility, union, intersection, conditional, mapped)
-      // Could also be a mixed type with some clean properties buried in garbage.
-      chart += `  class ${t.safeName} {\n    <<type>>\n`
-      const cleanProps = getCleanProperties(t.properties, t.properties.length)
-      if (cleanProps.length > 0) {
-        // Enough clean properties passed the 50% threshold — show them
-        for (const prop of cleanProps.slice(0, 4)) {
-          const s = sanitizeProp(prop)
-          if (s) chart += `    ${s}\n`
-        }
-      } else if (!t.properties.some(isCleanRawProperty)) {
-        // No properties matched at all — genuinely non-object type, show compact signature
-        const sig = buildTypeSignature(t.properties)
-        if (sig) chart += `    ${sig}\n`
-      }
-      // else: some clean but <50% — show empty box (better than garbage)
-      chart += `  }\n`
-    }
-    // Relationships
-    if (t.extends) for (const ext of t.extends) {
-      const safeExt = sanitizeName(ext.trim())
-      if (safeExt && safeExt !== t.safeName && renderedNames.has(safeExt)) {
-        chart += `  ${safeExt} <|-- ${t.safeName}\n`
-        edgeCount++
-      }
-    }
-    if (t.implements) for (const impl of t.implements) {
-      const safeImpl = sanitizeName(impl.trim())
-      if (safeImpl && renderedNames.has(safeImpl)) {
-        chart += `  ${safeImpl} <|.. ${t.safeName}\n`
-        edgeCount++
-      }
-    }
-  }
-
-  // ── Composition edges from property type references ──
+  // ── Composition edges — type reference extraction ──
   const BUILTIN_TYPES = new Set([
     'Promise', 'Array', 'Record', 'Map', 'Set', 'Date', 'Error',
     'RegExp', 'Symbol', 'Function', 'Object',
@@ -386,31 +310,161 @@ export function generateClassDiagram(analysis: FullAnalysis): MermaidDiagramResu
     return refs
   }
 
-  const compositionEdges = new Set<string>()
+  // ── Pass 1: Compute ALL edges before rendering ──
+  type EdgeEntry = { from: string; to: string; syntax: string }
+  const allEdges: EdgeEntry[] = []
+  const compositionEdgeKeys = new Set<string>()
+
   for (const t of typesToRender) {
-    const allMembers = [...t.properties, ...(t.methods || [])]
-    for (const member of allMembers) {
+    if (t.extends) for (const ext of t.extends) {
+      const safeExt = sanitizeName(ext.trim())
+      if (safeExt && safeExt !== t.safeName && renderedNames.has(safeExt)) {
+        allEdges.push({ from: safeExt, to: t.safeName, syntax: `  ${safeExt} <|-- ${t.safeName}` })
+      }
+    }
+    if (t.implements) for (const impl of t.implements) {
+      const safeImpl = sanitizeName(impl.trim())
+      if (safeImpl && renderedNames.has(safeImpl)) {
+        allEdges.push({ from: safeImpl, to: t.safeName, syntax: `  ${safeImpl} <|.. ${t.safeName}` })
+      }
+    }
+    const members = [...t.properties, ...(t.methods || [])]
+    for (const member of members) {
       for (const ref of extractReferencedTypes(member)) {
         const safeRef = sanitizeName(ref)
         if (safeRef !== t.safeName && renderedNames.has(safeRef)) {
           const edgeKey = `${t.safeName}--${safeRef}`
-          if (!compositionEdges.has(edgeKey)) {
-            compositionEdges.add(edgeKey)
-            chart += `  ${t.safeName} *-- ${safeRef}\n`
-            edgeCount++
+          if (!compositionEdgeKeys.has(edgeKey)) {
+            compositionEdgeKeys.add(edgeKey)
+            allEdges.push({ from: t.safeName, to: safeRef, syntax: `  ${t.safeName} *-- ${safeRef}` })
           }
         }
       }
     }
   }
 
+  // ── Build connected types set ──
+  const connectedTypes = new Set<string>()
+  for (const edge of allEdges) {
+    connectedTypes.add(edge.from)
+    connectedTypes.add(edge.to)
+  }
+
+  // ── Filter to connected types, or fallback to top 10 by propCount ──
+  let typesToDisplay: TypeEntry[]
+  let isFallback = false
+  if (connectedTypes.size > 0) {
+    typesToDisplay = typesToRender.filter(t => connectedTypes.has(t.safeName))
+  } else {
+    isFallback = true
+    typesToDisplay = [...typesToRender]
+      .sort((a, b) => b.propCount - a.propCount)
+      .slice(0, 10)
+  }
+
+  // ── Derive module name from file path ──
+  function getModuleName(filePath: string): string {
+    const lastSlash = filePath.lastIndexOf('/')
+    if (lastSlash < 0) return 'root'
+    let dir = filePath.slice(0, lastSlash)
+    dir = dir.replace(/^(?:src|lib)(?:\/|$)/, '')
+    if (!dir) return 'root'
+    return dir.replace(/\//g, '_').replace(/[^a-zA-Z0-9_]/g, '_') || 'root'
+  }
+
+  // ── Group types by module ──
+  const moduleGroups = new Map<string, TypeEntry[]>()
+  for (const t of typesToDisplay) {
+    const mod = getModuleName(t.path)
+    if (!moduleGroups.has(mod)) moduleGroups.set(mod, [])
+    moduleGroups.get(mod)!.push(t)
+  }
+
+  // ── Render a single type block ──
+  function renderTypeBlock(t: TypeEntry, indent: string): string {
+    let block = ''
+    if (t.kind === 'interface') {
+      block += `${indent}class ${t.safeName} {\n${indent}  <<interface>>\n`
+      for (const prop of getCleanProperties(t.properties, 6)) {
+        const s = sanitizeProp(prop)
+        if (s) block += `${indent}  +${s}\n`
+      }
+      block += `${indent}}\n`
+    } else if (t.kind === 'enum') {
+      block += `${indent}class ${t.safeName} {\n${indent}  <<enumeration>>\n`
+      for (const prop of t.properties.slice(0, 6)) {
+        const s = sanitizeProp(prop)
+        if (s) block += `${indent}  ${s}\n`
+      }
+      block += `${indent}}\n`
+    } else if (t.kind === 'class') {
+      block += `${indent}class ${t.safeName} {\n`
+      for (const prop of getCleanProperties(t.properties, 5)) {
+        const s = sanitizeProp(prop)
+        if (s) block += `${indent}  +${s}\n`
+      }
+      for (const method of (t.methods || []).slice(0, 4)) {
+        const s = sanitizeProp(method)
+        if (s) block += `${indent}  +${s}\n`
+      }
+      block += `${indent}}\n`
+    } else if (t.isObjectType) {
+      block += `${indent}class ${t.safeName} {\n${indent}  <<type>>\n`
+      for (const prop of getCleanProperties(t.properties, 4)) {
+        const s = sanitizeProp(prop)
+        if (s) block += `${indent}  ${s}\n`
+      }
+      block += `${indent}}\n`
+    } else {
+      block += `${indent}class ${t.safeName} {\n${indent}  <<type>>\n`
+      const cleanProps = getCleanProperties(t.properties, t.properties.length)
+      if (cleanProps.length > 0) {
+        for (const prop of cleanProps.slice(0, 4)) {
+          const s = sanitizeProp(prop)
+          if (s) block += `${indent}  ${s}\n`
+        }
+      } else if (!t.properties.some(isCleanRawProperty)) {
+        const sig = buildTypeSignature(t.properties)
+        if (sig) block += `${indent}  ${sig}\n`
+      }
+      block += `${indent}}\n`
+    }
+    return block
+  }
+
+  // ── Pass 2: Render diagram with module namespaces ──
+  let chart = 'classDiagram\n'
+  let nodeCount = 0
+  const displayNames = new Set(typesToDisplay.map(t => t.safeName))
+
+  for (const [moduleName, types] of moduleGroups) {
+    chart += `  namespace ${moduleName} {\n`
+    for (const t of types) {
+      nodePathMap.set(t.safeName, t.path)
+      nodeCount++
+      chart += renderTypeBlock(t, '    ')
+    }
+    chart += `  }\n`
+  }
+
+  // Render edges after all namespace blocks
+  let edgeCount = 0
+  for (const edge of allEdges) {
+    if (displayNames.has(edge.from) && displayNames.has(edge.to)) {
+      chart += `${edge.syntax}\n`
+      edgeCount++
+    }
+  }
+
   if (nodeCount === 0) chart = 'flowchart TD\n  empty["No classes, interfaces, or types found"]\n'
 
-  const truncated = totalFound > MAX_TYPES ? ` (showing top ${nodeCount} of ${totalFound})` : ''
+  const title = isFallback || nodeCount === 0
+    ? `Type & Class Diagram (${nodeCount} types)`
+    : `Type Relationships (${nodeCount} connected types from ${totalFound} total)`
 
   return {
     type: 'classes',
-    title: `Type & Class Diagram (${totalFound} types${truncated})`,
+    title,
     chart,
     stats: { totalNodes: nodeCount, totalEdges: edgeCount },
     nodePathMap,
