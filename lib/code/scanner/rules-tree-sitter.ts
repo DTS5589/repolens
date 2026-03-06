@@ -213,7 +213,7 @@ const SECURITY_RULES: TreeSitterRule[] = [
     query: `(assignment
   left: (identifier) @_name
   right: (string) @value
-  (#match? @_name "(?i)(password|secret|api_key|apikey|token|private_key|auth_token|access_key)"))`,
+  (#match? @_name "^(password|secret|api_key|apikey|token|private_key|auth_token|access_key|PASSWORD|SECRET|API_KEY|APIKEY|TOKEN|PRIVATE_KEY|AUTH_TOKEN|ACCESS_KEY|Password|Secret|Api_Key|Token|Private_Key)$"))`,
     languages: ['python'],
     captureName: 'value',
     confidence: 'medium',
@@ -230,7 +230,7 @@ const SECURITY_RULES: TreeSitterRule[] = [
     query: `(variable_declarator
   name: (identifier) @_name
   value: (string_literal) @value
-  (#match? @_name "(?i)(password|secret|apiKey|token|privateKey|authToken|accessKey)"))`,
+  (#match? @_name "^(password|secret|apiKey|token|privateKey|authToken|accessKey|PASSWORD|SECRET|APIKEY|TOKEN|PRIVATEKEY|AUTHTOKEN|ACCESSKEY|Password|Secret|ApiKey|Token|PrivateKey|AuthToken|AccessKey)$"))`,
     languages: ['java'],
     captureName: 'value',
     confidence: 'medium',
@@ -249,7 +249,7 @@ const SECURITY_RULES: TreeSitterRule[] = [
     (identifier) @_name)
   right: (expression_list
     (interpreted_string_literal) @value)
-  (#match? @_name "(?i)(password|secret|apiKey|token|privateKey|authToken|accessKey)"))`,
+  (#match? @_name "^(password|secret|apiKey|token|privateKey|authToken|accessKey|PASSWORD|SECRET|APIKEY|TOKEN|PRIVATEKEY|AUTHTOKEN|ACCESSKEY|Password|Secret|ApiKey|Token|PrivateKey|AuthToken|AccessKey)$"))`,
     languages: ['go'],
     captureName: 'value',
     confidence: 'medium',
@@ -289,7 +289,7 @@ const SECURITY_RULES: TreeSitterRule[] = [
   arguments: (argument_list
     (string_literal) @_algo)
   (#match? @_method "^getInstance$")
-  (#match? @_algo "(?i)(MD5|SHA-1|SHA1)"))`,
+  (#match? @_algo "^(MD5|SHA-1|SHA1|md5|sha-1|sha1|Md5|Sha1)$"))`,
     languages: ['java'],
     captureName: '_algo',
     confidence: 'high',
@@ -350,7 +350,7 @@ const QUALITY_RULES: TreeSitterRule[] = [
     description: 'Empty except block with pass silently swallows errors. Log or handle the exception.',
     suggestion: 'At minimum, log the exception: except Exception as e: logger.exception(e)',
     query: `(except_clause
-  body: (block
+  (block
     (pass_statement) @pass))`,
     languages: ['python'],
     captureName: 'pass',
