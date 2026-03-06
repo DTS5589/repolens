@@ -224,3 +224,41 @@ export function DepsTabSkeleton() {
     </div>
   )
 }
+
+/**
+ * Skeleton fallback for the Tours tab.
+ * Mimics the header + tour card list.
+ */
+export function ToursTabSkeleton() {
+  return (
+    <div role="status" aria-label="Loading tours" className="flex h-full flex-col">
+      {/* Header */}
+      <div className="flex items-center justify-between border-b px-4 py-3">
+        <div className="flex items-center gap-2">
+          <Skeleton className="h-4 w-4" />
+          <Skeleton className="h-4 w-24" />
+        </div>
+        <Skeleton className="h-7 w-28 rounded-md" />
+      </div>
+      {/* Tour cards */}
+      <div className="space-y-3 p-4">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className="rounded-lg border p-4 space-y-3">
+            <div className="flex items-start gap-3">
+              <Skeleton className="h-8 w-8 rounded-md" />
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-4 w-48" />
+                <Skeleton className="h-3 w-full max-w-[280px]" />
+                <Skeleton className="h-3 w-32" />
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-7 w-16 rounded-md" />
+              <Skeleton className="h-7 w-16 rounded-md" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
