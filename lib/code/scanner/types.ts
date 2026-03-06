@@ -122,6 +122,8 @@ export interface CompositeRule {
   learnMoreUrl?: string
   /** File extensions to scan */
   fileFilter: string[]
+  /** Skip files matching this pattern (applied to file path) */
+  excludeFiles?: RegExp
   /** ALL of these patterns must be present in the same file to trigger */
   requiredPatterns: RegExp[]
   /** Report on the line matching this pattern (the "sink") */

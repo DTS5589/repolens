@@ -5,7 +5,7 @@
 // Placeholder patterns that are never real secrets
 // ---------------------------------------------------------------------------
 
-const PLACEHOLDER_PATTERN = /\bexample\b|\bplaceholder\b|\bchangeme\b|\btest\b|\bxxx\b|your[_-]|\bTODO\b/i
+const PLACEHOLDER_PATTERN = /(?:\b|[_-])(?:example|placeholder|changeme|test|xxx)(?:\b|[_-])|your[_-]|\bTODO\b/i
 
 /**
  * Compute Shannon entropy in bits per character.
@@ -38,7 +38,7 @@ export function shannonEntropy(str: string): number {
  * @param value     The candidate secret string
  * @param threshold Minimum entropy in bits/char (default 3.5)
  */
-export function isLikelyRealSecret(value: string, threshold = 3.5): boolean {
+export function isLikelyRealSecret(value: string, threshold = 3.3): boolean {
   if (PLACEHOLDER_PATTERN.test(value)) return false
   return value.length >= 8 && shannonEntropy(value) >= threshold
 }

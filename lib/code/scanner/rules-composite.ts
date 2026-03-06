@@ -215,7 +215,8 @@ export const COMPOSITE_RULES: CompositeRule[] = [
     ],
     sinkPattern: /export\s+(?:async\s+)?function\s+(?:GET|POST|PUT|DELETE|PATCH)\s*\(/,
     mitigations: [/getServerSession|getSession|auth\s*\(|verifyToken|requireAuth|isAuthenticated|cookies\s*\(|headers\s*\(.*authorization|getToken|withAuth|authenticate/i],
-    mustNotContain: [/webhook|health|status|ping|public|cron|sitemap|robots|favicon|manifest|opengraph|og-image/i],
+    mustNotContain: [/webhook|ping|public|cron|sitemap|robots|favicon|manifest|opengraph|og-image/i],
+    excludeFiles: /\/(?:health|status|ping|webhook|cron|sitemap|robots|favicon|manifest|opengraph|og-image)\//i,
     confidence: 'medium',
   },
 
@@ -541,6 +542,7 @@ export function scanCompositeRules(codeIndex: CodeIndex): CodeIssue[] {
     for (const rule of COMPOSITE_RULES) {
       if (!rule.fileFilter.includes(ext)) continue
       if (SKIP_VENDORED.test(path)) continue
+      if (rule.excludeFiles && rule.excludeFiles.test(path)) continue
 
       // Use pre-computed file content
       const content = file.content
@@ -549,7 +551,7 @@ export function scanCompositeRules(codeIndex: CodeIndex): CodeIssue[] {
       const allPresent = rule.requiredPatterns.every(p => p.test(content))
       if (!allPresent) continue
 
-      // mustNotContain — if ANY of these patterns match, suppress the rule entirely
+      // mustNotContain — if ANY of these patterns match content, suppress the rule entirely
       if (rule.mustNotContain && rule.mustNotContain.some(p => p.test(content))) continue
 
       // Check mitigations — if ANY mitigation is present, skip
@@ -594,15 +596,15 @@ export function scanCompositeRules(codeIndex: CodeIndex): CodeIssue[] {
         }
       }
 
-      // Find the sink line (where the dangerous operation happens)
-      let sinkLine = 1
-      let sinkSnippet = ''
+      // Find ALL sink lines (where the dangerous operations happen)
+      const sinkMatches: Array<{ line: number; snippet: string }> = []
       for (let i = 0; i < file.lines.length; i++) {
         if (rule.sinkPattern.test(file.lines[i])) {
-          sinkLine = i + 1
-          sinkSnippet = file.lines[i].trim()
-          break
+          sinkMatches.push({ line: i + 1, snippet: file.lines[i].trim() })
         }
+      }
+      if (sinkMatches.length === 0) {
+        sinkMatches.push({ line: 1, snippet: '' })
       }
 
       // --- Context-aware suppression for composite rules ---
@@ -629,25 +631,27 @@ export function scanCompositeRules(codeIndex: CodeIndex): CodeIssue[] {
         ? rule.description + ' (partial mitigation detected — some safeguards present but incomplete)'
         : rule.description
 
-      issues.push({
-        id: `${rule.id}-${path}`,
-        ruleId: rule.id,
-        category: rule.category,
-        severity: rule.severity,
-        title: rule.title,
-        description,
-        file: path,
-        line: sinkLine,
-        column: 0,
-        snippet: sinkSnippet || 'Multiple dangerous patterns detected in this file',
-        suggestion: rule.suggestion,
-        cwe: rule.cwe,
-        owasp: rule.owasp,
-        learnMoreUrl: rule.learnMoreUrl,
-        confidence: rule.confidence,
-        fix: rule.fix,
-        fixDescription: rule.fixDescription,
-      })
+      for (const { line: sinkLine, snippet: sinkSnippet } of sinkMatches) {
+        issues.push({
+          id: `${rule.id}-${path}-${sinkLine}`,
+          ruleId: rule.id,
+          category: rule.category,
+          severity: rule.severity,
+          title: rule.title,
+          description,
+          file: path,
+          line: sinkLine,
+          column: 0,
+          snippet: sinkSnippet || 'Multiple dangerous patterns detected in this file',
+          suggestion: rule.suggestion,
+          cwe: rule.cwe,
+          owasp: rule.owasp,
+          learnMoreUrl: rule.learnMoreUrl,
+          confidence: rule.confidence,
+          fix: rule.fix,
+          fixDescription: rule.fixDescription,
+        })
+      }
     }
   }
 

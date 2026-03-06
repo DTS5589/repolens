@@ -312,7 +312,7 @@ export const FRAMEWORK_RULES: ScanRule[] = [
     cwe: 'CWE-89',
     owasp: 'A03:2021 Injection',
     learnMoreUrl: 'https://cwe.mitre.org/data/definitions/89.html',
-    pattern: '\\.raw\\s*\\(\\s*(?:f[\'"]|[\'"].*%s|request\\.)',
+    pattern: '(?:\\.raw|cursor\\.execute)\\s*\\(\\s*(?:f[\'"]|[\'"].*%s|request\\.)',
     patternOptions: { regex: true },
     fileFilter: PY,
     excludePattern: /params\s*=|%s.*,\s*\[/,

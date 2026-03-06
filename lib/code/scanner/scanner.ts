@@ -193,8 +193,8 @@ function runRegexRules(ctx: ScanContext): RegexRulesResult {
         // --- Context-aware suppression ---
         const ctx = classifyLine(match.content, result.file, blockCommentLines, match.line - 1)
 
-        // Comment suppression (unless security-critical)
-        if (ctx.isComment && !isSecurityCritical) continue
+        // Comment suppression (unless security-critical or comment-targeted like todo-fixme)
+        if (ctx.isComment && !isSecurityCritical && rule.id !== 'todo-fixme') continue
 
         // Test/generated/example file suppression (non-security only)
         if ((ctx.isTestFile || ctx.isGeneratedFile || ctx.isExampleFile) && rule.category !== 'security') continue
@@ -263,6 +263,114 @@ function runRegexRules(ctx: ScanContext): RegexRulesResult {
           line: match.line,
           column: match.column,
           snippet: match.content.trim(),
+          suggestion: rule.suggestion,
+          cwe: rule.cwe,
+          owasp: rule.owasp,
+          learnMoreUrl: rule.learnMoreUrl,
+          confidence: issueConfidence,
+          fix: rule.fix,
+          fixDescription: rule.fixDescription,
+        })
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Multi-line scanning pass — catch patterns spanning 2-3 consecutive lines
+  // ---------------------------------------------------------------------------
+  const MULTILINE_RULE_IDS = new Set([
+    'sql-injection',
+    'python-subprocess-shell',
+    'jwt-weak-secret',
+    'error-stack-exposure',
+    'django-raw-sql',
+    'command-injection-exec-direct',
+  ])
+
+  for (const rule of RULES) {
+    if (!rule.pattern || !MULTILINE_RULE_IDS.has(rule.id)) continue
+
+    // Respect file-filter: skip if no matching extensions present
+    if (rule.fileFilter && rule.fileFilter.length > 0) {
+      const hasMatchingFile = rule.fileFilter.some(ext => presentExtensions.has(ext.toLowerCase()))
+      if (!hasMatchingFile) continue
+    }
+
+    const flags = (rule.patternOptions?.caseSensitive ?? false) ? 'g' : 'gi'
+    let regex: RegExp
+    try {
+      regex = new RegExp(rule.pattern, flags)
+    } catch {
+      continue
+    }
+
+    const isSecurityCritical = rule.severity === 'critical' && rule.category === 'security'
+
+    for (const [path, file] of filesToScan) {
+      if (isPartialScan && !filesToScan.has(path)) continue
+      if (rule.fileFilter && rule.fileFilter.length > 0) {
+        const ext = '.' + (path.split('.').pop() || '')
+        if (!rule.fileFilter.includes(ext.toLowerCase())) continue
+      }
+      if (SKIP_VENDORED.test(path)) continue
+      if (rule.excludeFiles && rule.excludeFiles.test(path)) continue
+
+      const lines = file.lines
+      if (!blockCommentCache.has(path)) {
+        blockCommentCache.set(path, lines ? computeBlockCommentLines(lines) : undefined)
+      }
+      const blockCommentLines = blockCommentCache.get(path)
+
+      for (let i = 0; i < lines.length - 1; i++) {
+        const lineNum = i + 1
+        const issueId = `${rule.id}-${path}-${lineNum}`
+        if (seenIds.has(issueId)) continue
+
+        const joined = i + 2 < lines.length
+          ? lines[i] + ' ' + lines[i + 1] + ' ' + lines[i + 2]
+          : lines[i] + ' ' + lines[i + 1]
+
+        regex.lastIndex = 0
+        if (!regex.test(joined)) continue
+
+        // Exclusions
+        if (rule.excludePattern && rule.excludePattern.test(joined)) continue
+
+        // Context-aware suppression on the first line
+        const ctx = classifyLine(lines[i], path, blockCommentLines, i)
+        if (ctx.isComment && !isSecurityCritical && rule.id !== 'todo-fixme') continue
+        if ((ctx.isTestFile || ctx.isGeneratedFile || ctx.isExampleFile) && rule.category !== 'security') continue
+        if (ctx.isTypeAnnotation && SECRET_RULE_IDS.test(rule.id)) continue
+        if (ctx.isStringLiteral && STRING_LITERAL_SUPPRESSED_IDS.has(rule.id)) continue
+
+        // Inline suppression
+        const prevLine = i >= 1 ? lines[i - 1] : undefined
+        if (hasInlineSuppression(lines[i], prevLine, rule.id, rule.severity === 'critical')) {
+          suppressionCount++
+          continue
+        }
+
+        let issueConfidence = computeDynamicConfidence(rule.confidence, ctx, joined)
+        let issueDescription = rule.description
+        if (rule.category === 'security') {
+          if (hasSanitizerNearby(lines, i)) {
+            issueConfidence = issueConfidence === 'high' ? 'medium' : 'low'
+            issueDescription += ' (sanitizer detected nearby)'
+          }
+        }
+
+        seenIds.add(issueId)
+        issues.push({
+          id: issueId,
+          ruleId: rule.id,
+          category: rule.category,
+          severity: rule.severity,
+          title: rule.title,
+          description: issueDescription,
+          file: path,
+          line: lineNum,
+          column: 0,
+          snippet: lines[i].trim(),
           suggestion: rule.suggestion,
           cwe: rule.cwe,
           owasp: rule.owasp,

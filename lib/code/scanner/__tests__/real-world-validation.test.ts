@@ -127,7 +127,7 @@ describe('Real-world corpus validation', () => {
     console.log('-'.repeat(110))
 
     for (const r of results) {
-      const expectedTPs = r.entry.expected.filter(e => e.verdict === 'tp').length
+      const expectedTPs = r.entry.expected.filter(e => e.verdict === 'tp')
       console.log(
         r.entry.id.padEnd(35),
         r.entry.category.padEnd(12),
@@ -136,8 +136,16 @@ describe('Real-world corpus validation', () => {
         String(r.falsePositives).padStart(5),
         String(r.missedExpected).padStart(7),
         String(r.usefulWarnings).padStart(7),
-        String(expectedTPs).padStart(9),
+        String(expectedTPs.length).padStart(9),
       )
+      // Print missed findings for diagnosis
+      if (r.missedExpected > 0) {
+        for (let i = 0; i < expectedTPs.length; i++) {
+          if (!r.matchedExpected.has(i)) {
+            console.log(`    ❌ MISSED: ${expectedTPs[i].ruleId} L${expectedTPs[i].line}`)
+          }
+        }
+      }
     }
     console.log('-'.repeat(110))
 
@@ -213,7 +221,7 @@ describe('Real-world corpus validation', () => {
     console.log('='.repeat(110) + '\n')
   })
 
-  it('vulnerable files should have recall >= 50%', () => {
+  it('vulnerable files should have recall >= 90%', () => {
     // Re-scan if results not populated (test isolation)
     const vulnResults = getOrScan('vulnerable')
 
@@ -225,7 +233,7 @@ describe('Real-world corpus validation', () => {
     const recall = totalExpected > 0 ? (totalTP / totalExpected) * 100 : 100
 
     console.log(`\nVulnerable recall: ${totalTP}/${totalExpected} = ${recall.toFixed(1)}%`)
-    expect(recall).toBeGreaterThanOrEqual(50)
+    expect(recall).toBeGreaterThanOrEqual(90)
   })
 
   it('secure files should have <= 3 findings per file on average', () => {
@@ -247,7 +255,7 @@ describe('Real-world corpus validation', () => {
     expect(avgFindings).toBeLessThanOrEqual(3)
   })
 
-  it('overall signal-to-noise should be > 60%', () => {
+  it('overall signal-to-noise should be > 85%', () => {
     const allResults = getOrScanAll()
 
     const totalFindings = allResults.reduce((s, r) => s + r.findings.length, 0)
@@ -258,7 +266,7 @@ describe('Real-world corpus validation', () => {
       : 100
 
     console.log(`\nSignal-to-noise: (${totalTP} TP + ${totalUseful} useful) / ${totalFindings} total = ${signalToNoise.toFixed(1)}%`)
-    expect(signalToNoise).toBeGreaterThan(60)
+    expect(signalToNoise).toBeGreaterThan(85)
   })
 
   // -------------------------------------------------------------------------
