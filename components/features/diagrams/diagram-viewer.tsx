@@ -5,6 +5,7 @@ import type { MermaidDiagramHandle } from './mermaid-diagram'
 import { MermaidDiagramSkeleton } from '@/components/features/loading/tab-skeleton'
 import {
   generateDiagram,
+  generateDiagramAsync,
   getAvailableDiagrams,
   generateProjectSummary,
   type DiagramType,
@@ -102,7 +103,7 @@ export function DiagramViewer({ files, codeIndex, className, onNavigateToFile }:
       .slice(0, 8)
   }, [focusQuery, analysis])
 
-  // Generate diagram
+  // Generate diagram (sync — instant rendering)
   const selectedType = viewMode === 'overview' ? null : viewMode
   const activeDiagramType = focusTarget ? 'focus' as DiagramType : selectedType
   const diagram = useMemo((): AnyDiagramResult | null => {
@@ -116,6 +117,23 @@ export function DiagramViewer({ files, codeIndex, className, onNavigateToFile }:
       return null
     }
   }, [files, codeIndex, activeDiagramType, analysis, focusTarget, focusHops])
+
+  // Async enhancement for class diagrams (Tree-sitter for non-JS/TS)
+  const [asyncDiagram, setAsyncDiagram] = useState<AnyDiagramResult | null>(null)
+  useEffect(() => {
+    if (activeDiagramType !== 'classes' || !files || files.length === 0 || codeIndex.totalFiles === 0) {
+      setAsyncDiagram(null)
+      return
+    }
+    let cancelled = false
+    generateDiagramAsync('classes', codeIndex, files).then(result => {
+      if (!cancelled) setAsyncDiagram(result)
+    }).catch(() => { /* sync fallback is already showing */ })
+    return () => { cancelled = true }
+  }, [activeDiagramType, files, codeIndex])
+
+  // Use async-enhanced diagram for classes if available, otherwise sync
+  const activeDiagram = (activeDiagramType === 'classes' && asyncDiagram) ? asyncDiagram : diagram
 
   // Reset pan/zoom on change
   useEffect(() => { setZoom(1); setPan({ x: 0, y: 0 }) }, [viewMode, focusTarget])
@@ -159,11 +177,11 @@ export function DiagramViewer({ files, codeIndex, className, onNavigateToFile }:
   }, [activeDiagramType])
 
   const handleNodeClick = useCallback((nodeId: string) => {
-    if (!diagram || diagram.type === 'treemap') return
-    const pathMap = (diagram as { nodePathMap: Map<string, string> }).nodePathMap
+    if (!activeDiagram || activeDiagram.type === 'treemap') return
+    const pathMap = (activeDiagram as { nodePathMap: Map<string, string> }).nodePathMap
     const filePath = pathMap.get(nodeId)
     if (filePath && onNavigateToFile) onNavigateToFile(filePath)
-  }, [diagram, onNavigateToFile])
+  }, [activeDiagram, onNavigateToFile])
 
   const handleTreemapClick = useCallback((path: string) => { onNavigateToFile?.(path) }, [onNavigateToFile])
 
@@ -200,7 +218,7 @@ export function DiagramViewer({ files, codeIndex, className, onNavigateToFile }:
 
   const isOverview = viewMode === 'overview' && !focusTarget
   const isTreemap = activeDiagramType === 'treemap'
-  const isMermaid = !isOverview && !isTreemap && diagram && diagram.type !== 'treemap'
+  const isMermaid = !isOverview && !isTreemap && activeDiagram && activeDiagram.type !== 'treemap'
   const canExport = !!isMermaid || isTreemap
 
   return (
@@ -219,14 +237,14 @@ export function DiagramViewer({ files, codeIndex, className, onNavigateToFile }:
       />
 
       {/* Title bar */}
-      {diagram && (
+      {activeDiagram && (
         <div className="px-4 py-1.5 border-b border-foreground/[0.06] bg-background">
-          <h3 className="text-xs font-medium text-text-secondary">{diagram.title}</h3>
+          <h3 className="text-xs font-medium text-text-secondary">{activeDiagram.title}</h3>
         </div>
       )}
 
       {/* Content */}
-      {!analysis && codeIndex.totalFiles > 0 && !diagram ? (
+      {!analysis && codeIndex.totalFiles > 0 && !activeDiagram ? (
         <div className="flex-1 flex items-center justify-center">
           <div className="flex flex-col items-center gap-3">
             <Loader2 className="h-6 w-6 animate-spin text-text-secondary" />
@@ -264,12 +282,12 @@ export function DiagramViewer({ files, codeIndex, className, onNavigateToFile }:
               onContextMenu={handleContextMenu}
             >
               <div className="w-full h-full" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: 'center center' }}>
-                {diagram ? (
-                  isTreemap && diagram.type === 'treemap' ? (
-                    <TreemapChart ref={treemapRef} data={(diagram as TreemapDiagramResult).data} width={containerSize.width} height={containerSize.height} onNodeClick={handleTreemapClick} />
-                  ) : diagram.type !== 'treemap' && diagram.type !== 'summary' ? (
+                {activeDiagram ? (
+                  isTreemap && activeDiagram.type === 'treemap' ? (
+                    <TreemapChart ref={treemapRef} data={(activeDiagram as TreemapDiagramResult).data} width={containerSize.width} height={containerSize.height} onNodeClick={handleTreemapClick} />
+                  ) : activeDiagram.type !== 'treemap' && activeDiagram.type !== 'summary' ? (
                     <Suspense fallback={<MermaidDiagramSkeleton />}>
-                      <MermaidDiagram ref={mermaidRef} chart={diagram.chart} className="min-h-[400px] p-4" onNodeClick={handleNodeClick} />
+                      <MermaidDiagram ref={mermaidRef} chart={activeDiagram.chart} className="min-h-[400px] p-4" onNodeClick={handleNodeClick} />
                     </Suspense>
                   ) : null
                 ) : (
@@ -306,9 +324,9 @@ export function DiagramViewer({ files, codeIndex, className, onNavigateToFile }:
       )}
 
       {/* Stats bar */}
-      {diagram && diagram.stats && (
+      {activeDiagram && activeDiagram.stats && (
         <StatsBar
-          stats={diagram.stats}
+          stats={activeDiagram.stats}
           topology={analysis ? {
             clusters: analysis.topology.clusters.length,
             maxDepth: analysis.topology.maxDepth,

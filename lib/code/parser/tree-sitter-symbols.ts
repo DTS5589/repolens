@@ -139,6 +139,16 @@ const QUERIES: Record<string, LanguageQueries> = {
     ]`,
     classes: `(class_declaration name: (identifier) @name body: (declaration_list) @body)`,
   },
+  python: {
+    symbols: `[
+      (class_definition name: (identifier) @name)
+      (function_definition name: (identifier) @name)
+      (decorated_definition definition: (class_definition name: (identifier) @name))
+      (decorated_definition definition: (function_definition name: (identifier) @name))
+    ]`,
+    types: `(class_definition name: (identifier) @name body: (block) @body)`,
+    classes: `(class_definition name: (identifier) @name body: (block) @body)`,
+  },
 }
 
 // ---------------------------------------------------------------------------
@@ -158,6 +168,7 @@ const NODE_KIND_MAP: Record<string, ExtractedSymbol['kind']> = {
   class: 'class', method: 'method', module: 'class', singleton_method: 'method',
   trait_declaration: 'class', object_declaration: 'class',
   protocol_declaration: 'interface', struct_declaration: 'type',
+  class_definition: 'class', decorated_definition: 'class',
 }
 
 function inferSymbolKind(node: TSNode, language: string): ExtractedSymbol['kind'] {
@@ -170,6 +181,13 @@ function inferSymbolKind(node: TSNode, language: string): ExtractedSymbol['kind'
   if (language === 'kotlin' && (parentType === 'class_declaration' || parentType === 'object_declaration')) return 'class'
   if (language === 'swift' && parentType === 'function_declaration') return 'function'
   if (language === 'cpp' && parentType === 'namespace_definition') return 'class'
+  if (language === 'python' && parentType === 'class_definition') return 'class'
+  if (language === 'python' && parentType === 'function_definition') return 'function'
+  if (language === 'python' && parentType === 'decorated_definition') {
+    const definition = node.parent?.childForFieldName('definition')
+    if (definition?.type === 'class_definition') return 'class'
+    return 'function'
+  }
   return NODE_KIND_MAP[parentType] ?? 'function'
 }
 
@@ -203,6 +221,8 @@ function isNodeExported(node: TSNode, language: string): boolean {
         ?? parent.namedChildren.find(c => c.type === 'modifiers')
       return mods ? (mods.text.includes('public') || mods.text.includes('open')) : true
     }
+    case 'python':
+      return !node.text.startsWith('_')
     default:
       return true
   }
@@ -353,6 +373,31 @@ function extractMembersFromBody(
       }
       continue
     }
+    // Python: decorated methods (e.g. @staticmethod, @classmethod, @property)
+    if (type === 'decorated_definition') {
+      const definition = child.childForFieldName('definition')
+      if (definition?.type === 'function_definition') {
+        const name = definition.childForFieldName('name')
+        if (name && name.text !== '__init__') methods.push(name.text)
+      }
+      continue
+    }
+    // Python: typed class attributes (name: type = value)
+    if (language === 'python' && type === 'expression_statement') {
+      const expr = child.namedChildren[0]
+      if (expr?.type === 'assignment') {
+        const left = expr.namedChildren[0]
+        if (left?.type === 'identifier') properties.push(left.text)
+        else if (left?.type === 'type') {
+          const ident = left.namedChildren.find(c => c.type === 'identifier')
+          if (ident) properties.push(ident.text)
+        }
+      } else if (expr?.type === 'type') {
+        const ident = expr.namedChildren.find(c => c.type === 'identifier')
+        if (ident) properties.push(ident.text)
+      }
+      continue
+    }
     if (type === 'field_declaration' || type === 'property_declaration' || type === 'variable_declaration') {
       const name = child.childForFieldName('name')
         ?? child.childForFieldName('declarator')?.childForFieldName('name')
@@ -371,6 +416,13 @@ function findExtends(nameNode: TSNode, language: string): string | null {
     const baseClause = decl.namedChildren.find(c => c.type === 'base_class_clause')
     const first = baseClause?.namedChildren.find(c => c.type === 'type_identifier')
     if (first) return first.text
+  }
+  if (language === 'python') {
+    const argList = decl.childForFieldName('superclasses')
+    if (argList) {
+      const first = argList.namedChildren[0]
+      if (first) return first.text
+    }
   }
   return null
 }

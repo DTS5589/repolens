@@ -10,6 +10,8 @@ import { detectCircularDeps } from './graph'
 import { computeTopology } from './topology'
 import { detectFramework } from './framework-detection'
 
+const JS_TS_LANGS = new Set(['typescript', 'javascript', 'tsx', 'jsx'])
+
 export function analyzeCodebase(codeIndex: CodeIndex): FullAnalysis {
   const files = new Map<string, FileAnalysis>()
   const indexedPaths = new Set(codeIndex.files.keys())
@@ -62,4 +64,36 @@ export function analyzeCodebase(codeIndex: CodeIndex): FullAnalysis {
   const primaryLanguage = detectPrimaryLanguage(files)
 
   return { files, graph, topology, detectedFramework, primaryLanguage }
+}
+
+/**
+ * Async variant of `analyzeCodebase` — enhances non-JS/TS files with
+ * Tree-sitter–based type and class extraction for richer class diagrams.
+ */
+export async function analyzeCodebaseAsync(codeIndex: CodeIndex): Promise<FullAnalysis> {
+  const result = analyzeCodebase(codeIndex)
+
+  const { extractTypesAsync, extractClassesAsync } = await import('./extract-types')
+
+  const enhancePromises: Promise<void>[] = []
+  for (const [path, fileAnalysis] of result.files) {
+    if (JS_TS_LANGS.has(fileAnalysis.language)) continue
+
+    enhancePromises.push((async () => {
+      const content = codeIndex.files.get(path)?.content ?? ''
+      const [asyncTypes, asyncClasses] = await Promise.all([
+        extractTypesAsync(content, fileAnalysis.language),
+        extractClassesAsync(content, fileAnalysis.language),
+      ])
+      if (asyncTypes.length > fileAnalysis.types.length) {
+        fileAnalysis.types = asyncTypes
+      }
+      if (asyncClasses.length > fileAnalysis.classes.length) {
+        fileAnalysis.classes = asyncClasses
+      }
+    })())
+  }
+
+  await Promise.all(enhancePromises)
+  return result
 }

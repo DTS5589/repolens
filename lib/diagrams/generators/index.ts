@@ -58,3 +58,24 @@ export function generateDiagram(
       return generateTopologyDiagram(data)
   }
 }
+
+/**
+ * Async diagram dispatcher — uses Tree-sitter–enhanced analysis for class
+ * diagrams on non-JS/TS repos. Falls back to sync path for other diagram types.
+ */
+export async function generateDiagramAsync(
+  type: DiagramType,
+  codeIndex: CodeIndex,
+  files: FileNode[],
+  analysis?: FullAnalysis,
+  focusTarget?: string,
+  focusHops?: 1 | 2,
+): Promise<AnyDiagramResult> {
+  if (type === 'classes') {
+    const { analyzeCodebaseAsync } = await import('@/lib/code/parser/analyzer')
+    const asyncAnalysis = await analyzeCodebaseAsync(codeIndex)
+    return generateClassDiagram(asyncAnalysis)
+  }
+
+  return generateDiagram(type, codeIndex, files, analysis, focusTarget, focusHops)
+}

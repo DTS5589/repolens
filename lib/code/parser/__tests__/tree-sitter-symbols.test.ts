@@ -478,3 +478,221 @@ describe('extractClassesTreeSitter', () => {
     expect(result![0].properties).toEqual([])
   })
 })
+
+// =========================================================================
+// Python-specific tests
+// =========================================================================
+
+describe('extractSymbolsTreeSitter — Python', () => {
+  it('extracts Python class and function symbols', async () => {
+    const classNode = makeMockNode({
+      text: 'UserService', type: 'identifier', row: 2,
+      parentType: 'class_definition',
+    })
+    const funcNode = makeMockNode({
+      text: 'create_user', type: 'identifier', row: 10,
+      parentType: 'function_definition',
+    })
+
+    mockParseFile.mockResolvedValue(fakeTree())
+    mockQueryTree.mockResolvedValue([makeMatch(classNode), makeMatch(funcNode)])
+
+    const result = await extractSymbolsTreeSitter('code', 'python')
+    expect(result).toEqual([
+      { name: 'UserService', kind: 'class', line: 3, isExported: true },
+      { name: 'create_user', kind: 'function', line: 11, isExported: true },
+    ])
+  })
+
+  it('extracts decorated definitions with correct kinds', async () => {
+    const decoratedClassNode = makeMockNode({
+      text: 'Config', type: 'identifier', row: 5,
+      parentType: 'decorated_definition',
+      parentFields: {
+        definition: { text: 'class Config:', type: 'class_definition' },
+      },
+    })
+    const decoratedFuncNode = makeMockNode({
+      text: 'get_items', type: 'identifier', row: 12,
+      parentType: 'decorated_definition',
+      parentFields: {
+        definition: { text: 'def get_items():', type: 'function_definition' },
+      },
+    })
+
+    mockParseFile.mockResolvedValue(fakeTree())
+    mockQueryTree.mockResolvedValue([makeMatch(decoratedClassNode), makeMatch(decoratedFuncNode)])
+
+    const result = await extractSymbolsTreeSitter('code', 'python')
+    expect(result).toHaveLength(2)
+    expect(result![0]).toMatchObject({ name: 'Config', kind: 'class' })
+    expect(result![1]).toMatchObject({ name: 'get_items', kind: 'function' })
+  })
+
+  it('detects Python underscore-prefixed symbols as not exported', async () => {
+    const privateFunc = makeMockNode({
+      text: '_internal_helper', type: 'identifier', row: 0,
+      parentType: 'function_definition',
+    })
+    const privateClass = makeMockNode({
+      text: '_PrivateModel', type: 'identifier', row: 5,
+      parentType: 'class_definition',
+    })
+
+    mockParseFile.mockResolvedValue(fakeTree())
+    mockQueryTree.mockResolvedValue([makeMatch(privateFunc), makeMatch(privateClass)])
+
+    const result = await extractSymbolsTreeSitter('code', 'python')
+    expect(result![0].isExported).toBe(false)
+    expect(result![1].isExported).toBe(false)
+  })
+
+  it('detects public Python symbols as exported', async () => {
+    const publicFunc = makeMockNode({
+      text: 'process_data', type: 'identifier', row: 0,
+      parentType: 'function_definition',
+    })
+
+    mockParseFile.mockResolvedValue(fakeTree())
+    mockQueryTree.mockResolvedValue([makeMatch(publicFunc)])
+
+    const result = await extractSymbolsTreeSitter('code', 'python')
+    expect(result![0].isExported).toBe(true)
+  })
+})
+
+describe('extractTypesTreeSitter — Python', () => {
+  it('extracts Python class as type with properties', async () => {
+    const nameNode = makeMockNode({
+      text: 'UserModel', type: 'identifier', row: 3,
+      parentType: 'class_definition',
+    })
+    const bodyNode = { text: ':\n  name: str\n  age: int\n  email: str' }
+
+    mockParseFile.mockResolvedValue(fakeTree())
+    mockQueryTree.mockResolvedValue([makeMatch(nameNode, bodyNode)])
+
+    const result = await extractTypesTreeSitter('code', 'python')
+    expect(result).toHaveLength(1)
+    expect(result![0]).toMatchObject({
+      name: 'UserModel',
+      kind: 'interface',
+      exported: true,
+    })
+    expect(result![0].properties.length).toBeGreaterThan(0)
+  })
+
+  it('detects underscore-prefixed Python types as not exported', async () => {
+    const nameNode = makeMockNode({
+      text: '_InternalConfig', type: 'identifier', row: 0,
+      parentType: 'class_definition',
+    })
+    const bodyNode = { text: ':\n  value: int' }
+
+    mockParseFile.mockResolvedValue(fakeTree())
+    mockQueryTree.mockResolvedValue([makeMatch(nameNode, bodyNode)])
+
+    const result = await extractTypesTreeSitter('code', 'python')
+    expect(result![0].exported).toBe(false)
+  })
+})
+
+describe('extractClassesTreeSitter — Python', () => {
+  it('extracts Python class with methods and superclass', async () => {
+    const nameNode = makeMockNode({
+      text: 'AdminUser', type: 'identifier', row: 4,
+      parentType: 'class_definition',
+      parentFields: {
+        superclasses: { text: 'BaseUser', type: 'argument_list' },
+      },
+    })
+
+    const methodChild = {
+      type: 'function_definition',
+      childForFieldName: (n: string) => n === 'name' ? { text: 'get_permissions' } : null,
+      namedChildren: [],
+    }
+    const initChild = {
+      type: 'function_definition',
+      childForFieldName: (n: string) => n === 'name' ? { text: '__init__' } : null,
+      namedChildren: [],
+    }
+    const bodyNode = { text: ':', namedChildren: [initChild, methodChild] }
+
+    mockParseFile.mockResolvedValue(fakeTree())
+    mockQueryTree.mockResolvedValue([{ pattern: 0, captures: { name: [nameNode], body: [bodyNode] } }])
+
+    const result = await extractClassesTreeSitter('code', 'python')
+    expect(result).toHaveLength(1)
+    expect(result![0]).toMatchObject({
+      name: 'AdminUser',
+      methods: ['get_permissions'],
+      exported: true,
+    })
+    // __init__ should be excluded
+    expect(result![0].methods).not.toContain('__init__')
+  })
+
+  it('extracts Python class with decorated methods', async () => {
+    const nameNode = makeMockNode({
+      text: 'Service', type: 'identifier', row: 0,
+      parentType: 'class_definition',
+    })
+
+    const decoratedChild = {
+      type: 'decorated_definition',
+      childForFieldName: (n: string) => {
+        if (n === 'definition') return {
+          type: 'function_definition',
+          childForFieldName: (fn: string) => fn === 'name' ? { text: 'static_method' } : null,
+        }
+        return null
+      },
+      namedChildren: [],
+    }
+    const bodyNode = { text: ':', namedChildren: [decoratedChild] }
+
+    mockParseFile.mockResolvedValue(fakeTree())
+    mockQueryTree.mockResolvedValue([{ pattern: 0, captures: { name: [nameNode], body: [bodyNode] } }])
+
+    const result = await extractClassesTreeSitter('code', 'python')
+    expect(result![0].methods).toContain('static_method')
+  })
+
+  it('extracts Python typed class attributes as properties', async () => {
+    const nameNode = makeMockNode({
+      text: 'Config', type: 'identifier', row: 0,
+      parentType: 'class_definition',
+    })
+
+    const propChild = {
+      type: 'expression_statement',
+      namedChildren: [{
+        type: 'assignment',
+        namedChildren: [{ type: 'identifier', text: 'timeout' }],
+      }],
+      childForFieldName: () => null,
+    }
+    const bodyNode = { text: ':', namedChildren: [propChild] }
+
+    mockParseFile.mockResolvedValue(fakeTree())
+    mockQueryTree.mockResolvedValue([{ pattern: 0, captures: { name: [nameNode], body: [bodyNode] } }])
+
+    const result = await extractClassesTreeSitter('code', 'python')
+    expect(result![0].properties).toContain('timeout')
+  })
+
+  it('detects underscore-prefixed Python class as not exported', async () => {
+    const nameNode = makeMockNode({
+      text: '_InternalService', type: 'identifier', row: 0,
+      parentType: 'class_definition',
+    })
+    const bodyNode = { text: ':', namedChildren: [] }
+
+    mockParseFile.mockResolvedValue(fakeTree())
+    mockQueryTree.mockResolvedValue([{ pattern: 0, captures: { name: [nameNode], body: [bodyNode] } }])
+
+    const result = await extractClassesTreeSitter('code', 'python')
+    expect(result![0].exported).toBe(false)
+  })
+})
