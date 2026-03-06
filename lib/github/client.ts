@@ -102,7 +102,7 @@ function mapProxyUrlToGitHubApi(proxyUrl: string): DirectUrlMapping | null {
     const branch = params.get('branch') ?? ''
     const path = params.get('path') ?? ''
     return {
-      url: `https://raw.githubusercontent.com/${owner}/${name}/${branch}/${path}`,
+      url: `https://raw.githubusercontent.com/${e(owner)}/${e(name)}/${e(branch)}/${path.split('/').map(e).join('/')}`,
       endpoint: 'file',
     }
   }
@@ -186,8 +186,11 @@ async function directFetch(url: string, pat: string): Promise<unknown> {
     if (response.status === 404) {
       throw new Error(ghMessage ?? 'Not found. Make sure the repository exists.')
     }
+    if (response.status === 401) {
+      throw new Error('Invalid or expired GitHub token. Check your PAT in Settings.')
+    }
     if (response.status === 403) {
-      throw new Error('Rate limit exceeded. Try again later.')
+      throw new Error(ghMessage ?? 'Rate limit exceeded. Try again later.')
     }
     if (response.status === 422) {
       throw new Error(ghMessage ?? 'Invalid request.')
@@ -308,7 +311,7 @@ function normalizeCommitDetail(data: any): CommitDetail {
   const commitAuthor = commit.author
   const commitCommitter = commit.committer
   const author = data.author
-  const stats = data.stats
+  const stats = data.stats ?? { additions: 0, deletions: 0, total: 0 }
   const rawFiles = (data.files ?? []) as any[]
   return {
     sha: data.sha as string,
@@ -704,6 +707,9 @@ async function fetchBlameFromApi(
       throw new Error(body.errors[0].message)
     }
 
+    if (!body.data?.repository) {
+      throw new Error('Repository not found or inaccessible')
+    }
     const blob = body.data.repository.object
     if (!blob) {
       throw new Error(`File not found: ${path}`)

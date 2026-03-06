@@ -276,7 +276,7 @@ describe('Direct GitHub API calls (PAT mode)', () => {
 
     it('throws rate-limit error for 403', async () => {
       mockFetch.mockResolvedValueOnce(jsonResponse({ message: 'API rate limit exceeded' }, 403))
-      await expect(fetchRepoViaProxy('X', 'Y')).rejects.toThrow('Rate limit exceeded')
+      await expect(fetchRepoViaProxy('X', 'Y')).rejects.toThrow('API rate limit exceeded')
     })
 
     it('throws generic error for 500', async () => {
