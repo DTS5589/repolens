@@ -2011,4 +2011,107 @@ const output = serialize(data, { unsafe: true })`,
       { ruleId: 'serialize-javascript-exec', line: 1, verdict: 'tp' },
     ],
   },
+
+  // -----------------------------------------------------------------------
+  // 91. command-injection-util-format — TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'cmd-injection-util-format',
+    description: 'util.format used to build a shell command string — TP',
+    file: {
+      path: 'src/utils/media.ts',
+      content: `import { exec } from 'child_process'
+import util from 'util'
+export function convertImage(input: string, output: string) {
+  const cmd = util.format('convert %s -resize 800x600 %s', input, output)
+  exec(cmd)
+}`,
+      language: 'typescript',
+    },
+    expected: [
+      { ruleId: 'command-injection-util-format', line: 4, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 92. eslint-disable — TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'eslint-disable-usage',
+    description: 'Lint suppression comments without justification — TP',
+    file: {
+      path: 'src/services/auth-hack.ts',
+      content: `// eslint-disable-next-line no-console
+console.log('debug auth')
+// @ts-ignore
+let value = getUnsafe()`,
+      language: 'typescript',
+    },
+    expected: [
+      { ruleId: 'eslint-disable', line: 1, verdict: 'tp' },
+      { ruleId: 'eslint-disable', line: 3, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 93. magic-number — TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'magic-number-usage',
+    description: 'Magic numbers in assignments and comparisons — TP',
+    file: {
+      path: 'src/utils/validator.ts',
+      content: `export function checkLimit(count: number) {
+  let limit = 5000
+  if (count >= 9999) {
+    throw new Error('exceeded')
+  }
+}`,
+      language: 'typescript',
+    },
+    expected: [
+      { ruleId: 'magic-number', line: 2, verdict: 'tp' },
+      { ruleId: 'magic-number', line: 3, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 94. todo-fixme — TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'todo-fixme-comments',
+    description: 'TODO and FIXME comments without tracking — TP',
+    file: {
+      path: 'src/services/payment.ts',
+      content: `export function processPayment(amount: number) {
+  // TODO: add retry logic
+  // FIXME: handle currency conversion
+  return charge(amount)
+}`,
+      language: 'typescript',
+    },
+    expected: [
+      { ruleId: 'todo-fixme', line: 2, verdict: 'tp' },
+      { ruleId: 'todo-fixme', line: 3, verdict: 'tp' },
+    ],
+  },
+
+  // -----------------------------------------------------------------------
+  // 95. nextjs-redirect-input — TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'nextjs-redirect-user-input',
+    description: 'redirect() with user-controlled searchParams — TP',
+    file: {
+      path: 'app/actions/navigate.ts',
+      content: `import { redirect } from 'next/navigation'
+export async function navigateAction(searchParams: { dest: string }) {
+  redirect(searchParams.dest)
+}`,
+      language: 'typescript',
+    },
+    expected: [
+      { ruleId: 'nextjs-redirect-input', line: 3, verdict: 'tp' },
+    ],
+  },
 ]

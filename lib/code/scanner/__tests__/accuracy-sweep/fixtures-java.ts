@@ -368,4 +368,27 @@ class SecurityConfig {
       { ruleId: 'spring-permit-all', line: 12, verdict: 'tp' },
     ],
   },
+
+  // -----------------------------------------------------------------------
+  // Java empty-catch — TP
+  // -----------------------------------------------------------------------
+  {
+    name: 'java-empty-catch',
+    description: 'Empty catch block swallowing exceptions silently — TP',
+    file: {
+      path: 'src/main/java/com/app/Service.java',
+      content: `public class Service {
+    public String fetchData(String url) {
+        try {
+            return httpClient.get(url);
+        } catch (Exception e) {}
+        return null;
+    }
+}`,
+      language: 'java',
+    },
+    expected: [
+      { ruleId: 'empty-catch', line: 5, verdict: 'tp' },
+    ],
+  },
 ]
