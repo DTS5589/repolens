@@ -315,8 +315,23 @@ export function DocViewer({ className }: DocViewerProps) {
               </div>
             )}
 
-            {/* Currently generating */}
-            {isGenerating && messages.length > 0 ? (
+            {/* Currently generating — waiting for first chunk */}
+            {isGenerating && messages.length === 0 ? (
+              <div className="flex-1 flex flex-col items-center justify-center p-6">
+                <Loader2 className="h-8 w-8 animate-spin text-text-muted mb-3" />
+                <p className="text-sm text-text-secondary mb-1">Preparing documentation…</p>
+                <p className="text-xs text-text-muted mb-4">Analyzing repository structure</p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={stop}
+                  className="h-7 text-xs gap-1.5 text-text-secondary hover:text-text-primary"
+                >
+                  <Square className="h-3 w-3" />
+                  Stop
+                </Button>
+              </div>
+            ) : isGenerating && messages.length > 0 ? (
               <div className="p-6 max-w-3xl">
                 <div className="flex items-center justify-between mb-4">
                   <ToolActivity messages={messages} />
