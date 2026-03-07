@@ -56,8 +56,8 @@ export function ChatInput({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="resize-none border-0 bg-transparent pr-24 focus-visible:ring-0 focus-visible:ring-offset-0"
-        rows={2}
+        className="resize-none border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0"
+        rows={1}
         onKeyDown={handleKeyDown}
         disabled={isDisabled}
       />

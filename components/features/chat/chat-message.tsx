@@ -12,7 +12,6 @@ import {
   Shapes,
   Info,
   Loader2,
-  CheckCircle2,
   AlertCircle,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -240,7 +239,7 @@ function StatusIcon({ status }: { status: ToolStatus }) {
     case "running":
       return <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-500" />
     case "complete":
-      return <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+      return null
     case "error":
       return <AlertCircle className="h-3.5 w-3.5 text-red-500" />
   }
