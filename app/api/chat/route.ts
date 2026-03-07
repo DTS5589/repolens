@@ -202,6 +202,17 @@ No repository is currently connected. You can still answer general programming q
     return result.toUIMessageStreamResponse({
       originalMessages: messages,
       consumeSseStream: consumeStream,
+      messageMetadata: ({ part }) => {
+        if (part.type === 'finish') {
+          return {
+            usage: {
+              inputTokens: part.totalUsage.inputTokens ?? 0,
+              outputTokens: part.totalUsage.outputTokens ?? 0,
+              totalTokens: part.totalUsage.totalTokens ?? 0,
+            },
+          }
+        }
+      },
     })
   } catch (error) {
     console.error('Chat API error:', error instanceof Error ? error.message : 'Unknown error')

@@ -11,11 +11,26 @@ import {
   Shield,
   Shapes,
   Info,
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer"
-import { memo, useState } from "react"
-import type { UIMessage } from "ai"
+import { Badge } from "@/components/ui/badge"
+import {
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
+} from "@/components/ui/collapsible"
+import {
+  Accordion,
+  AccordionItem,
+  AccordionTrigger,
+  AccordionContent,
+} from "@/components/ui/accordion"
+import { memo, useState, useRef, useEffect, useMemo } from "react"
+import type { UIMessage, ToolUIPart as AiToolUIPart, DynamicToolUIPart } from "ai"
 import { isToolUIPart, getToolName } from "ai"
 
 // ---------------------------------------------------------------------------
@@ -172,43 +187,247 @@ function FormattedObject({ value }: { value: unknown }) {
   )
 }
 
+/** Build a compact summary string from a tool result for inline display */
+function buildToolSummary(toolName: string, result: unknown): string | null {
+  if (result === null || result === undefined) return null
+
+  // Try to parse string results as JSON
+  let value = result
+  if (typeof value === "string") {
+    try {
+      value = JSON.parse(value)
+    } catch {
+      // Not JSON — use string directly
+      const trimmed = (result as string).trim()
+      if (trimmed.length === 0) return null
+      return trimmed.length > 30 ? `${trimmed.slice(0, 30)}…` : trimmed
+    }
+  }
+
+  if (typeof value === "object" && value !== null) {
+    const obj = value as Record<string, unknown>
+    if ("path" in obj && typeof obj.path === "string") {
+      const segments = obj.path.split("/")
+      return segments[segments.length - 1] || obj.path
+    }
+    if ("totalFiles" in obj && typeof obj.totalFiles === "number") {
+      return `${obj.totalFiles} files`
+    }
+    if (Array.isArray(value)) {
+      return `${value.length} items`
+    }
+  }
+
+  // Fallback: byte length
+  const str = typeof result === "string" ? result : JSON.stringify(result)
+  const bytes = new Blob([str]).size
+  if (bytes >= 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`
+  }
+  return `${bytes} B`
+}
+
+type ToolStatus = "running" | "complete" | "error"
+
+function getToolStatus(state: string): ToolStatus {
+  if (state === "output-available") return "complete"
+  if (state === "output-error" || state === "output-denied") return "error"
+  return "running"
+}
+
+const STATUS_BORDER: Record<ToolStatus, string> = {
+  running: "border-blue-500",
+  complete: "border-green-500",
+  error: "border-red-500",
+}
+
+function StatusIcon({ status }: { status: ToolStatus }) {
+  switch (status) {
+    case "running":
+      return <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-500" />
+    case "complete":
+      return <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+    case "error":
+      return <AlertCircle className="h-3.5 w-3.5 text-red-500" />
+  }
+}
+
 function ToolCallIndicator({
   toolName,
   args,
   result,
+  status,
 }: {
   toolName: string
   args: Record<string, unknown>
   result?: unknown
+  status: ToolStatus
 }) {
   const [isExpanded, setIsExpanded] = useState(false)
   const Icon = TOOL_ICONS[toolName] || Code2
   const label = buildToolLabel(toolName, args)
   const hasResult = result !== undefined && result !== null
 
-  return (
-    <div className="my-0.5">
-      <button
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="flex items-center gap-1.5 text-xs text-text-muted hover:text-text-secondary transition-colors w-full text-left"
-      >
-        <ChevronRight
-          className={cn(
-            "h-3 w-3 shrink-0 transition-transform",
-            isExpanded && "rotate-90",
-          )}
-        />
-        <Icon className="h-3 w-3 shrink-0" />
-        <span className="truncate">{label}</span>
-      </button>
+  const startTimeRef = useRef(Date.now())
+  const [elapsed, setElapsed] = useState<number | null>(null)
 
-      {isExpanded && hasResult && (
-        <div className="mt-1 ml-6 max-h-60 overflow-y-auto overflow-x-auto rounded bg-surface-elevated p-2 border border-foreground/[0.06]">
-          <ToolResultContent result={result} />
-        </div>
-      )}
-    </div>
+  useEffect(() => {
+    if (status !== "running" && elapsed === null) {
+      setElapsed((Date.now() - startTimeRef.current) / 1000)
+    }
+  }, [status, elapsed])
+
+  const summary = hasResult ? buildToolSummary(toolName, result) : null
+
+  return (
+    <Collapsible open={isExpanded} onOpenChange={setIsExpanded} className="my-0.5">
+      <div
+        className={cn(
+          "rounded-md bg-muted/50 border-l-2 px-3 py-2",
+          STATUS_BORDER[status],
+          status === "running" && "animate-pulse",
+        )}
+      >
+        <CollapsibleTrigger asChild>
+          <button className="flex items-center gap-1.5 text-xs text-text-muted hover:text-text-secondary transition-colors w-full text-left">
+            <ChevronRight
+              className={cn(
+                "h-3 w-3 shrink-0 transition-transform duration-200",
+                isExpanded && "rotate-90",
+              )}
+            />
+            <StatusIcon status={status} />
+            <Icon className="h-3 w-3 shrink-0" />
+            <span className="truncate">{label}</span>
+            {summary && (
+              <Badge variant="outline" className="text-[10px] ml-1.5 px-1.5 py-0 shrink-0">
+                {summary}
+              </Badge>
+            )}
+            {elapsed !== null && (
+              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 ml-auto shrink-0">
+                {elapsed.toFixed(1)}s
+              </Badge>
+            )}
+          </button>
+        </CollapsibleTrigger>
+      </div>
+
+      <CollapsibleContent>
+        {hasResult && (
+          <div className="mt-1 ml-6 max-h-60 overflow-y-auto overflow-x-auto rounded bg-surface-elevated p-2 border border-foreground/[0.06]">
+            <ToolResultContent result={result} />
+          </div>
+        )}
+      </CollapsibleContent>
+    </Collapsible>
   )
+}
+
+// ---------------------------------------------------------------------------
+// Grouped tool call accordion (3+ consecutive tool calls)
+// ---------------------------------------------------------------------------
+
+type ToolUIPart = AiToolUIPart | DynamicToolUIPart
+
+/** Aggregate status for a group of tool calls */
+function getGroupStatus(parts: ToolUIPart[]): ToolStatus {
+  if (parts.some((p) => getToolStatus(p.state) === "error")) return "error"
+  if (parts.some((p) => getToolStatus(p.state) === "running")) return "running"
+  return "complete"
+}
+
+function ToolCallGroup({ parts }: { parts: ToolUIPart[] }) {
+  const groupStatus = getGroupStatus(parts)
+
+  return (
+    <Accordion type="single" collapsible className="my-0.5">
+      <AccordionItem value="tool-group" className="border-b-0">
+        <AccordionTrigger
+          className={cn(
+            "rounded-md bg-muted/50 border-l-2 px-3 py-2 text-xs text-text-muted hover:text-text-secondary hover:no-underline [&[data-state=open]]:rounded-b-none",
+            STATUS_BORDER[groupStatus],
+            groupStatus === "running" && "animate-pulse",
+          )}
+        >
+          <span className="flex items-center gap-1.5">
+            <StatusIcon status={groupStatus} />
+            <span>
+              {groupStatus === "running" ? "Running tools…" : `Used ${parts.length} tools`}
+            </span>
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+              {parts.length}
+            </Badge>
+          </span>
+        </AccordionTrigger>
+        <AccordionContent className="pb-0 pt-0">
+          <div className="space-y-0.5 pt-1">
+            {parts.map((part, i) => {
+              const toolName = getToolName(part)
+              const args = (part.input ?? {}) as Record<string, unknown>
+              const status = getToolStatus(part.state)
+              const result =
+                part.state === "output-available"
+                  ? part.output
+                  : part.state === "output-error"
+                    ? part.errorText
+                    : undefined
+
+              return (
+                <ToolCallIndicator
+                  key={part.toolCallId}
+                  toolName={toolName}
+                  args={args}
+                  result={result}
+                  status={status}
+                />
+              )
+            })}
+          </div>
+        </AccordionContent>
+      </AccordionItem>
+    </Accordion>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Part grouping helper
+// ---------------------------------------------------------------------------
+
+type MessagePart = UIMessage["parts"][number]
+type PartGroup =
+  | { kind: "single"; part: MessagePart; index: number }
+  | { kind: "tool-group"; parts: ToolUIPart[] }
+
+/** Group consecutive tool UI parts — groups of 3+ become a ToolCallGroup */
+function groupMessageParts(parts: MessagePart[]): PartGroup[] {
+  const groups: PartGroup[] = []
+  let toolBuffer: ToolUIPart[] = []
+
+  function flushToolBuffer() {
+    if (toolBuffer.length === 0) return
+    if (toolBuffer.length >= 3) {
+      groups.push({ kind: "tool-group", parts: [...toolBuffer] })
+    } else {
+      for (const part of toolBuffer) {
+        groups.push({ kind: "single", part, index: -1 })
+      }
+    }
+    toolBuffer = []
+  }
+
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i]
+    if (isToolUIPart(part)) {
+      toolBuffer.push(part as ToolUIPart)
+    } else {
+      flushToolBuffer()
+      groups.push({ kind: "single", part, index: i })
+    }
+  }
+  flushToolBuffer()
+
+  return groups
 }
 
 // ---------------------------------------------------------------------------
@@ -222,7 +441,6 @@ interface ChatMessageProps {
 
 export const ChatMessage = memo(function ChatMessage({ message, className }: ChatMessageProps) {
   const isUser = message.role === "user"
-  const isAssistant = message.role === "assistant"
 
   // Check if there's any renderable content
   const parts = message.parts ?? []
@@ -231,6 +449,8 @@ export const ChatMessage = memo(function ChatMessage({ message, className }: Cha
       (p.type === "text" && p.text.trim().length > 0) ||
       isToolUIPart(p),
   )
+
+  const groupedParts = useMemo(() => groupMessageParts(parts), [parts])
 
   if (!hasContent) return null
 
@@ -250,32 +470,44 @@ export const ChatMessage = memo(function ChatMessage({ message, className }: Cha
             : "bg-transparent text-text-primary",
         )}
       >
-        {parts.map((part, index) => {
+        {groupedParts.map((group, gi) => {
+          if (group.kind === "tool-group") {
+            return <ToolCallGroup key={`tg-${gi}`} parts={group.parts} />
+          }
+
+          const part = group.part
+
           if (part.type === "text" && part.text.trim()) {
             return isUser ? (
               <p
-                key={index}
+                key={gi}
                 className="whitespace-pre-wrap text-sm leading-relaxed"
               >
                 {part.text}
               </p>
             ) : (
-              <MarkdownRenderer key={index} content={part.text} />
+              <MarkdownRenderer key={gi} content={part.text} />
             )
           }
 
           if (isToolUIPart(part)) {
             const toolName = getToolName(part)
             const args = (part.input ?? {}) as Record<string, unknown>
+            const status = getToolStatus(part.state)
             const result =
-              part.state === "output-available" ? part.output : undefined
+              part.state === "output-available"
+                ? part.output
+                : part.state === "output-error"
+                  ? part.errorText
+                  : undefined
 
             return (
               <ToolCallIndicator
-                key={index}
+                key={gi}
                 toolName={toolName}
                 args={args}
                 result={result}
+                status={status}
               />
             )
           }

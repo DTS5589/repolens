@@ -8,6 +8,7 @@ import { ChatMessage } from "./chat-message"
 import { ChatInput } from "./chat-input"
 import { PinnedContextChips } from "./pinned-context-chips"
 import { PinFilePicker } from "./pin-file-picker"
+import { TokenUsageFooter } from "./token-usage-footer"
 import { Bot, AlertCircle, Download } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Switch } from "@/components/ui/switch"
@@ -109,6 +110,18 @@ export function ChatSidebar({ className }: { className?: string }) {
   })
 
   const isLoading = status === 'streaming' || status === 'submitted'
+
+  // Extract cumulative token usage from the last assistant message metadata
+  const tokenUsage = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i]
+      if (msg.role === 'assistant' && (msg as { metadata?: { usage?: { inputTokens: number; outputTokens: number } } }).metadata?.usage) {
+        const usage = (msg as { metadata?: { usage?: { inputTokens: number; outputTokens: number } } }).metadata!.usage!
+        return usage
+      }
+    }
+    return null
+  }, [messages])
 
   const handleSubmit = () => {
     if (!input.trim() || isLoading || !hasValidKey || !selectedModel) return
@@ -235,6 +248,15 @@ export function ChatSidebar({ className }: { className?: string }) {
           </div>
         )}
       </div>
+
+      {/* Token Usage */}
+      {tokenUsage && selectedModel && (
+        <TokenUsageFooter
+          inputTokens={tokenUsage.inputTokens}
+          outputTokens={tokenUsage.outputTokens}
+          model={selectedModel.id}
+        />
+      )}
 
       {/* Input */}
       <div className="p-3">
