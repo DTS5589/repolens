@@ -28,8 +28,15 @@ const MODEL_PRICING: Record<string, { input: number; output: number }> = {
 }
 
 function formatTokenCount(count: number): string {
-  if (count < 1000) return String(count)
-  return `${(count / 1000).toFixed(1)}k`
+  if (count >= 1_000_000) {
+    const m = count / 1_000_000
+    return m % 1 === 0 ? `${m}M` : `${m.toFixed(1)}M`
+  }
+  if (count >= 1_000) {
+    const k = count / 1_000
+    return k % 1 === 0 ? `${k}K` : `${k.toFixed(1)}K`
+  }
+  return String(count)
 }
 
 function getModelPricing(model: string) {
@@ -71,25 +78,26 @@ export function TokenUsageFooter({ inputTokens, outputTokens, model }: TokenUsag
     )
   }
 
+  const progressColor = contextUtilization >= 85
+    ? 'bg-red-500'
+    : contextUtilization >= 60
+      ? 'bg-amber-500'
+      : undefined
+
   return (
     <div className="px-3 pb-1 pt-1.5 space-y-1">
       <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <span>
-          <span title="Input tokens">↑ {formatTokenCount(inputTokens)}</span>
-          {"  "}
-          <span title="Output tokens">↓ {formatTokenCount(outputTokens)}</span>
-          {" tokens"}
+        <span title="Context window usage">
+          {formatTokenCount(totalTokens)} / {formatTokenCount(contextWindow)} ({Math.round(contextUtilization)}%)
         </span>
-        <span className="flex items-center gap-2">
-          {cost !== null && (
-            <span title="Estimated cost">~${cost.toFixed(4)}</span>
-          )}
-          <span title="Context window usage">{formatTokenCount(totalTokens)} / {formatTokenCount(contextWindow)}</span>
-        </span>
+        {cost !== null && (
+          <span title="Estimated cost">~${cost < 0.01 ? cost.toFixed(4) : cost.toFixed(2)}</span>
+        )}
       </div>
       <Progress
         value={contextUtilization}
         className="h-1 bg-foreground/[0.06]"
+        indicatorClassName={progressColor}
       />
     </div>
   )
