@@ -250,10 +250,10 @@ export function ChatSidebar({ className }: { className?: string }) {
       </div>
 
       {/* Token Usage */}
-      {tokenUsage && selectedModel && (
+      {selectedModel && (
         <TokenUsageFooter
-          inputTokens={tokenUsage.inputTokens}
-          outputTokens={tokenUsage.outputTokens}
+          inputTokens={tokenUsage?.inputTokens ?? 0}
+          outputTokens={tokenUsage?.outputTokens ?? 0}
           model={selectedModel.id}
         />
       )}

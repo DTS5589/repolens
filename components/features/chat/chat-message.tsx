@@ -235,12 +235,6 @@ function getToolStatus(state: string): ToolStatus {
   return "running"
 }
 
-const STATUS_BORDER: Record<ToolStatus, string> = {
-  running: "border-blue-500",
-  complete: "border-green-500",
-  error: "border-red-500",
-}
-
 function StatusIcon({ status }: { status: ToolStatus }) {
   switch (status) {
     case "running":
@@ -283,8 +277,7 @@ function ToolCallIndicator({
     <Collapsible open={isExpanded} onOpenChange={setIsExpanded} className="my-0.5">
       <div
         className={cn(
-          "rounded-md bg-muted/50 border-l-2 px-3 py-2",
-          STATUS_BORDER[status],
+          "py-1",
           status === "running" && "animate-pulse",
         )}
       >
@@ -345,8 +338,7 @@ function ToolCallGroup({ parts }: { parts: ToolUIPart[] }) {
       <AccordionItem value="tool-group" className="border-b-0">
         <AccordionTrigger
           className={cn(
-            "rounded-md bg-muted/50 border-l-2 px-3 py-2 text-xs text-text-muted hover:text-text-secondary hover:no-underline [&[data-state=open]]:rounded-b-none",
-            STATUS_BORDER[groupStatus],
+            "py-1 text-xs text-text-muted hover:text-text-secondary hover:no-underline",
             groupStatus === "running" && "animate-pulse",
           )}
         >

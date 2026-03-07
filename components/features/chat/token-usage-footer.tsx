@@ -47,7 +47,15 @@ interface TokenUsageFooterProps {
 }
 
 export function TokenUsageFooter({ inputTokens, outputTokens, model }: TokenUsageFooterProps) {
-  if (inputTokens === 0 && outputTokens === 0) return null
+  if (inputTokens === 0 && outputTokens === 0) {
+    return (
+      <div className="px-3 pb-1 pt-1.5">
+        <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <span>No token usage yet</span>
+        </div>
+      </div>
+    )
+  }
 
   const pricing = useMemo(() => getModelPricing(model), [model])
 
