@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useRef, useEffect } from "react"
 import { useChat } from "@ai-sdk/react"
-import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls } from "ai"
+import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls, isToolUIPart } from "ai"
 import { Button } from "@/components/ui/button"
 import { ChatMessage } from "./chat-message"
 import { ChatInput } from "./chat-input"
@@ -100,7 +100,7 @@ export function ChatSidebar({ className }: { className?: string }) {
     [],
   )
 
-  const { messages, sendMessage, addToolOutput, status, error } = useChat({
+  const { messages, sendMessage, addToolOutput, status, error, stop } = useChat({
     transport,
     id: 'codedoc-chat',
 
@@ -241,6 +241,25 @@ export function ChatSidebar({ className }: { className?: string }) {
           <ChatMessage key={message.id} message={message} />
         ))}
 
+        {isLoading && messages.length > 0 && (() => {
+          const lastMsg = messages[messages.length - 1]
+          const hasContent = lastMsg.role === 'assistant' && lastMsg.parts?.some(
+            p => (p.type === 'text' && p.text.trim().length > 0) || isToolUIPart(p)
+          )
+          if (lastMsg.role === 'user' || !hasContent) {
+            return (
+              <div className="flex items-center gap-1 px-3 py-2">
+                <div className="flex gap-1">
+                  <span className="h-1.5 w-1.5 rounded-full bg-text-muted animate-bounce [animation-delay:0ms]" />
+                  <span className="h-1.5 w-1.5 rounded-full bg-text-muted animate-bounce [animation-delay:150ms]" />
+                  <span className="h-1.5 w-1.5 rounded-full bg-text-muted animate-bounce [animation-delay:300ms]" />
+                </div>
+              </div>
+            )
+          }
+          return null
+        })()}
+
         {error && (
           <div className="flex items-center justify-center gap-2 p-3 bg-status-error/10 rounded-lg mx-auto max-w-sm">
             <AlertCircle className="h-4 w-4 text-status-error shrink-0" />
@@ -265,6 +284,7 @@ export function ChatSidebar({ className }: { className?: string }) {
           onChange={setInput}
           onSubmit={handleSubmit}
           isLoading={isLoading}
+          onStop={stop}
           placeholder={hasValidKey ? "Ask about the codebase..." : "Add API key to chat"}
           disabled={!hasValidKey}
           pinnedChips={
