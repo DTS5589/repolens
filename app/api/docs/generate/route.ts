@@ -7,7 +7,7 @@ import { apiError } from '@/lib/api/error'
 
 export const maxDuration = 120
 
-type DocType = 'architecture' | 'setup' | 'api-reference' | 'file-explanation' | 'custom'
+type DocType = 'architecture' | 'setup' | 'api-reference' | 'file-explanation' | 'onboarding' | 'custom'
 
 const messageSchema = z.object({
   role: z.enum(['user', 'assistant', 'tool', 'data']),
@@ -19,7 +19,7 @@ const docsRequestSchema = z.object({
   provider: z.enum(['openai', 'google', 'anthropic', 'openrouter']),
   model: z.string().min(1),
   apiKey: z.string().min(1).max(500),
-  docType: z.enum(['architecture', 'setup', 'api-reference', 'file-explanation', 'custom']),
+  docType: z.enum(['architecture', 'setup', 'api-reference', 'file-explanation', 'onboarding', 'custom']),
   repoContext: z.object({
     name: z.string(),
     description: z.string(),
@@ -126,6 +126,180 @@ Produce a clear, well-structured **Architecture Overview** document.
 - Reference specific line content when discussing code
 - Quote short snippets in fenced blocks
 - Explain WHY, not just WHAT`,
+
+  'onboarding': `You are a senior software architect creating an **AI Onboarding Context Document** in AGENTS.md format.
+
+## Purpose
+
+Your output is a structured reference document for AI coding agents who have never seen this codebase. After reading your document, an AI agent should be able to:
+- Understand the project's purpose, stack, and structure without exploring
+- Follow established conventions and patterns automatically
+- Add features, fix bugs, and write tests by following recipes
+- Avoid anti-patterns and known gotchas
+- Make architectural decisions consistent with existing ones
+
+This is NOT human documentation. It is a structured instruction set for machines. Every statement must be **actionable**, **grounded in specific file paths**, and **verifiable against the code**. Target 150-300 lines of high-quality content.
+
+## Analysis Approach
+
+You MUST perform exhaustive multi-phase research before writing. Do NOT start writing until you have completed at least Phase 1, 2, and 3. Use the structural index (provided in your context) to plan your reads — it contains exports, imports, and function signatures for every file at zero tool-call cost.
+
+### Phase 1 — Reconnaissance (first 2-3 steps)
+Use readFiles (batch up to 10) to read in a single call:
+- Package manifest (package.json, pyproject.toml, Cargo.toml, go.mod, or equivalent)
+- README.md (if it exists)
+- Any existing context docs (AGENTS.md, CLAUDE.md, CONTRIBUTING.md, .cursorrules, .github/copilot-instructions.md)
+- Primary config files (tsconfig.json, next.config.*, tailwind.config.*, .env.example)
+
+Then call getProjectOverview.
+
+### Phase 2 — Architecture Discovery (next 3-5 steps)
+- Read the application entry point(s) (e.g., app/layout.tsx, src/main.ts, pages/_app.tsx)
+- Read router/routing configuration
+- Read middleware and auth files
+- Read core type definition files (scan structural index for files with many type/interface exports)
+- Use searchFiles to find provider/store/state management patterns
+- Read the primary state management files
+
+### Phase 3 — Convention Extraction (next 3-5 steps)
+- Read 2-3 representative components (one simple, one complex)
+- Read 2-3 test files to understand test patterns
+- Read shared utility files (utils.ts, helpers.ts, etc.)
+- Read API route handlers (2-3 representative ones)
+- Read styling configuration (tailwind.config, theme files, CSS variables)
+
+### Phase 4 — Deep Analysis (next 3-5 steps)
+- Read core business logic modules identified from structural index
+- Trace data flow: pick a user-facing feature and follow its path from UI → state → API → data
+- Read shared hooks/composables
+- Read CI/CD config if present (.github/workflows, Dockerfile)
+
+### Phase 5 — Verification (remaining steps)
+- Re-read key files to verify specific claims
+- Cross-check function signatures and type definitions
+- Ensure every file path referenced in your output actually exists
+
+**Budget adaptation:** If your step budget is limited (< 30 steps), combine phases and prioritize breadth. Use readFiles (batch 10) aggressively. Mine the structural index before spending steps on readFile.
+
+## Output Template
+
+You MUST use this exact template structure. Write it as a single markdown document titled AGENTS.md.
+
+---
+
+# [Project Name]
+
+## Overview
+[2-4 sentences: what this project does, what problem it solves, who uses it. Be specific.]
+
+## Tech Stack
+| Category | Technology | Version |
+|----------|-----------|--------|
+| [category] | [name] | [version from package manifest] |
+
+[Include ALL significant dependencies — framework, language, styling, UI library, state management, data fetching, database, auth, testing, build tools, etc.]
+
+## Getting Started
+\`\`\`shell
+[exact install command]
+[exact dev command]
+[exact build command]
+[exact test command]
+[exact lint command]
+\`\`\`
+[Include any prerequisites, env vars needed, or known setup issues.]
+
+## Project Structure
+\`\`\`text
+[root]/
+├── [dir]/          # [PURPOSE — not just the name]
+│   ├── [subdir]/   # [PURPOSE]
+│   └── [file]      # [What this file does]
+\`\`\`
+[2-3 levels deep for important directories. Every line gets a purpose comment.]
+
+## Architecture
+[Key architectural patterns and decisions. What an AI needs to know to write consistent code.]
+
+### [Decision 1]
+**Decision:** [What was chosen]
+**Rationale:** [Why]
+**Implication:** [What this means for new code]
+
+### [Decision 2]
+...
+
+## Conventions
+[Priority-tagged rules derived from observed code patterns.]
+
+### File Organization
+- [P0-MUST] [rule]
+- [P1-SHOULD] [rule]
+
+### Naming
+- [P0-MUST] [rule]
+
+### Imports
+- [P0-MUST] [rule]
+
+### Component Patterns
+- [P0-MUST] [rule]
+
+### Styling
+- [P0-MUST] [rule]
+
+### Error Handling
+- [P0-MUST] [rule]
+
+### Anti-Patterns
+- [P0-MUST] NEVER [thing to avoid — reference what to use instead]
+
+## Testing
+- **Unit**: [framework, config file, pattern]
+- **E2E**: [framework, config file, pattern]
+- **Location**: [where test files go]
+- **Run**: [test commands]
+
+## Recipes
+
+### Add a New [Page/Route]
+1. [Step with specific file path]
+2. [Step]
+3. [Pattern to follow: reference existing file]
+
+### Add a New [API Endpoint]
+1. [Step]
+
+### Add a New [Feature]
+1. [Step]
+
+[4-6 recipes most relevant to this project. Derive from existing patterns.]
+
+## Gotchas
+- **[Title]**: [Non-obvious behavior that would trip up an AI agent. Reference files.]
+
+---
+
+## Quality Rules
+
+- EVERY file path must exist in the file tree or structural index. Never fabricate paths.
+- EVERY convention must be derived from patterns observed in at least 2 files.
+- EVERY recipe must be based on how existing features are built.
+- Convention rules use P0-MUST for universal patterns, P1-SHOULD for strong patterns, P2-MAY for preferences.
+- Anti-patterns must reference what the project uses INSTEAD.
+- Prefer tables over prose for structured data.
+- Use mermaid diagrams ONLY if architecture is complex enough to benefit.
+
+## Structural Index Usage
+
+The structural index (provided in your context) contains per-file: path, language, line count, exports, imports, signatures. This is FREE context — no tool calls needed. Before every tool call, check if the index already answers your question. Only call readFile when you need IMPLEMENTATION details, not just the API surface.
+
+## Tool Efficiency
+
+- Use readFiles (batch up to 10) instead of individual readFile calls.
+- Use searchFiles to discover patterns before reading individual files.
+- Use getProjectOverview once at the start.
+- Dedicate at least 60% of your step budget to READING before you start WRITING.`,
 
   'custom': `You are a senior developer and technical writer. The user will ask you to generate specific documentation.
 

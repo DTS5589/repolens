@@ -12,12 +12,12 @@ describe('DOC_PRESETS', () => {
     expect(DOC_PRESETS.length).toBeGreaterThan(0)
   })
 
-  it('contains exactly 5 presets', () => {
-    expect(DOC_PRESETS).toHaveLength(5)
+  it('contains exactly 6 presets', () => {
+    expect(DOC_PRESETS).toHaveLength(6)
   })
 
   it('includes all DocType values', () => {
-    const expectedTypes: DocType[] = ['architecture', 'setup', 'api-reference', 'file-explanation', 'custom']
+    const expectedTypes: DocType[] = ['architecture', 'setup', 'api-reference', 'file-explanation', 'onboarding', 'custom']
     const presetIds = DOC_PRESETS.map(p => p.id)
     expect(presetIds).toEqual(expect.arrayContaining(expectedTypes))
   })
@@ -65,6 +65,14 @@ describe('DOC_PRESETS', () => {
     expect(
       preset.prompt.toLowerCase().includes('api') ||
       preset.prompt.toLowerCase().includes('functions'),
+    ).toBe(true)
+  })
+
+  it('onboarding preset prompt mentions onboarding or AI', () => {
+    const preset = DOC_PRESETS.find(p => p.id === 'onboarding')!
+    expect(
+      preset.prompt.toLowerCase().includes('onboarding') ||
+      preset.prompt.toLowerCase().includes('ai'),
     ).toBe(true)
   })
 

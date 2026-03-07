@@ -6,7 +6,7 @@ import type { UIMessage } from 'ai'
 // ---------------------------------------------------------------------------
 
 /** The built-in documentation types available as generation presets. */
-export type DocType = 'architecture' | 'setup' | 'api-reference' | 'file-explanation' | 'custom'
+export type DocType = 'architecture' | 'setup' | 'api-reference' | 'file-explanation' | 'onboarding' | 'custom'
 
 /**
  * A documentation generation preset.
@@ -122,6 +122,14 @@ export const DOC_PRESETS: DocPreset[] = [
     description: 'Deep explanation of a specific file -- purpose, logic, and how it fits',
     icon: null,
     prompt: '', // set dynamically based on selected file
+  },
+  {
+    id: 'onboarding',
+    label: 'AI Onboarding Prompt',
+    description: 'Generate a comprehensive AGENTS.md-style context document that lets any AI agent hit the ground running',
+    icon: null,
+    prompt:
+      'Generate a comprehensive AI onboarding context document for this codebase. Perform exhaustive multi-phase analysis using tools — read entry points, configs, core modules, type definitions, test files, and shared abstractions. Fill out every section of the template with specific, grounded, actionable information. This document will be used by AI coding agents who have never seen this project before.',
   },
   {
     id: 'custom',

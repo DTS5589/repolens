@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useRef, useEffect } from 'react'
 import {
-  FileText, Code, BookOpen, Rocket, FileCode, MessageSquare,
+  FileText, Code, BookOpen, Rocket, FileCode, MessageSquare, Brain,
   Loader2, AlertCircle, Trash2, ChevronDown, Search, X, Plus, Download,
   Square, RefreshCw, Sparkles, ClipboardCopy, Check, Menu,
 } from 'lucide-react'
@@ -39,6 +39,7 @@ const DOC_PRESET_ICONS: Record<DocType, React.ReactNode> = {
   'setup': <Rocket className="h-5 w-5" />,
   'api-reference': <Code className="h-5 w-5" />,
   'file-explanation': <FileCode className="h-5 w-5" />,
+  'onboarding': <Brain className="h-5 w-5" />,
   'custom': <MessageSquare className="h-5 w-5" />,
 }
 
