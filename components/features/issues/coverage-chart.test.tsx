@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import type { ComplianceReport } from '@/lib/code/scanner'
 
 // Mock Recharts — it relies on DOM measurement APIs unavailable in jsdom
@@ -53,9 +53,11 @@ describe('CoverageSummaryChart', () => {
     expect(screen.getByText('60%')).toBeInTheDocument()
   })
 
-  it('renders bar chart component', () => {
+  it('renders bar chart component', async () => {
     render(<CoverageSummaryChart report={createReport()} />)
-    expect(screen.getByTestId('bar-chart')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByTestId('bar-chart')).toBeInTheDocument()
+    })
   })
 
   it('applies emerald colors for high coverage (>=80%)', () => {

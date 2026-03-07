@@ -62,6 +62,116 @@ function buildToolLabel(
   }
 }
 
+/** Strip control-character escape sequences like `<ctrl46>` from display text */
+function cleanControlChars(text: string): string {
+  return text.replace(/<ctrl\d+>/gi, "")
+}
+
+/** Render a tool result in a readable, contained format */
+function ToolResultContent({ result }: { result: unknown }) {
+  if (typeof result === "string") {
+    const cleaned = cleanControlChars(result)
+    // Try parsing as JSON for better formatting
+    try {
+      const parsed: unknown = JSON.parse(cleaned)
+      if (typeof parsed === "object" && parsed !== null) {
+        return <FormattedObject value={parsed} />
+      }
+    } catch {
+      // Not JSON — render as plain text
+    }
+    return (
+      <div className="whitespace-pre-wrap break-words text-[11px] font-mono text-text-secondary">
+        {cleaned}
+      </div>
+    )
+  }
+
+  if (typeof result === "object") {
+    return <FormattedObject value={result as Record<string, unknown>} />
+  }
+
+  return (
+    <div className="text-[11px] font-mono text-text-secondary">
+      {String(result)}
+    </div>
+  )
+}
+
+/** Compact key-value display for objects/arrays */
+function FormattedObject({ value }: { value: unknown }) {
+  if (Array.isArray(value)) {
+    if (value.length === 0) {
+      return (
+        <span className="text-[11px] font-mono text-text-muted italic">
+          Empty list
+        </span>
+      )
+    }
+
+    const allStrings = value.every((v) => typeof v === "string")
+    if (allStrings) {
+      return (
+        <ul className="list-none space-y-0.5 text-[11px] font-mono text-text-secondary">
+          {value.map((item, i) => (
+            <li key={i} className="break-all">
+              {cleanControlChars(String(item))}
+            </li>
+          ))}
+        </ul>
+      )
+    }
+
+    return (
+      <pre className="whitespace-pre-wrap break-words text-[11px] font-mono text-text-secondary">
+        {cleanControlChars(JSON.stringify(value, null, 2))}
+      </pre>
+    )
+  }
+
+  if (typeof value === "object" && value !== null) {
+    const entries = Object.entries(value as Record<string, unknown>)
+    if (entries.length === 0) {
+      return (
+        <span className="text-[11px] font-mono text-text-muted italic">
+          No data
+        </span>
+      )
+    }
+
+    // For objects with few keys, render as key-value pairs
+    if (entries.length <= 8) {
+      return (
+        <dl className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-[11px] font-mono">
+          {entries.map(([key, val]) => (
+            <div key={key} className="contents">
+              <dt className="text-text-muted truncate">{key}:</dt>
+              <dd className="text-text-secondary break-all min-w-0">
+                {typeof val === "object" && val !== null
+                  ? cleanControlChars(JSON.stringify(val))
+                  : cleanControlChars(String(val ?? ""))}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      )
+    }
+
+    // Larger objects: formatted JSON
+    return (
+      <pre className="whitespace-pre-wrap break-words text-[11px] font-mono text-text-secondary">
+        {cleanControlChars(JSON.stringify(value, null, 2))}
+      </pre>
+    )
+  }
+
+  return (
+    <span className="text-[11px] font-mono text-text-secondary">
+      {cleanControlChars(String(value))}
+    </span>
+  )
+}
+
 function ToolCallIndicator({
   toolName,
   args,
@@ -93,11 +203,9 @@ function ToolCallIndicator({
       </button>
 
       {isExpanded && hasResult && (
-        <pre className="mt-1 ml-6 max-h-48 overflow-auto rounded bg-surface-elevated p-2 text-[11px] font-mono text-text-secondary border border-foreground/[0.06]">
-          {typeof result === "string"
-            ? result
-            : JSON.stringify(result, null, 2)}
-        </pre>
+        <div className="mt-1 ml-6 max-h-60 overflow-y-auto overflow-x-auto rounded bg-surface-elevated p-2 border border-foreground/[0.06]">
+          <ToolResultContent result={result} />
+        </div>
       )}
     </div>
   )

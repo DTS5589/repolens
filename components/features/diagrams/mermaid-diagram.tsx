@@ -1,10 +1,9 @@
 "use client"
 
 import { useEffect, useRef, useState, useCallback, useImperativeHandle, type Ref } from 'react'
-import mermaid from 'mermaid'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-import { AlertTriangle, Code } from 'lucide-react'
+import { AlertTriangle, Code, Loader2 } from 'lucide-react'
 import { MermaidToolbar } from './mermaid-toolbar'
 import { MermaidFullscreenDialog } from './mermaid-fullscreen-dialog'
 
@@ -62,8 +61,28 @@ const LIGHT_THEME_CONFIG = {
   },
 }
 
-// Initialize mermaid with dark theme
-mermaid.initialize(DARK_THEME_CONFIG)
+// ---------------------------------------------------------------------------
+// Dynamic mermaid loader (deferred to avoid ~2.8 MB in initial bundle)
+// ---------------------------------------------------------------------------
+
+type MermaidAPI = typeof import('mermaid')['default']
+let mermaidInstance: MermaidAPI | null = null
+let mermaidLoadPromise: Promise<MermaidAPI> | null = null
+
+function getMermaid(): Promise<MermaidAPI> {
+  if (mermaidInstance) return Promise.resolve(mermaidInstance)
+  if (!mermaidLoadPromise) {
+    mermaidLoadPromise = import('mermaid').then(m => {
+      m.default.initialize(DARK_THEME_CONFIG)
+      mermaidInstance = m.default
+      return m.default
+    }).catch(err => {
+      mermaidLoadPromise = null
+      throw err
+    })
+  }
+  return mermaidLoadPromise
+}
 
 /** Lock to prevent concurrent theme-switches from corrupting global mermaid state. */
 let themeRenderLock = false
@@ -270,6 +289,7 @@ export function MermaidDiagram({ chart, className, onNodeClick, onShowRawCode, r
 
         try {
           setError(null)
+          const m = await getMermaid()
           const id = `mermaid_${currentRender}_${Date.now()}`
 
           // Clean up DOM before rendering
@@ -280,12 +300,12 @@ export function MermaidDiagram({ chart, className, onNodeClick, onShowRawCode, r
 
           // Pre-validate with mermaid.parse before attempting render
           let sourceToRender = sanitized
-          const isValid = await mermaid.parse(sanitized, { suppressErrors: true })
+          const isValid = await m.parse(sanitized, { suppressErrors: true })
 
           if (!isValid) {
             // Try aggressive sanitization: force-quote all labels
             const aggressive = forceQuoteAllLabels(sanitized)
-            const retryValid = await mermaid.parse(aggressive, { suppressErrors: true })
+            const retryValid = await m.parse(aggressive, { suppressErrors: true })
 
             if (!retryValid) {
               // All sanitization failed — show error with raw code fallback
@@ -297,7 +317,7 @@ export function MermaidDiagram({ chart, className, onNodeClick, onShowRawCode, r
             sourceToRender = aggressive
           }
 
-          const { svg, bindFunctions } = await mermaid.render(id, sourceToRender)
+          const { svg, bindFunctions } = await m.render(id, sourceToRender)
           // Guard against stale renders
           if (currentRender !== renderIdRef.current) return
           setSvgContent(svg)
@@ -385,17 +405,18 @@ export function MermaidDiagram({ chart, className, onNodeClick, onShowRawCode, r
       if (newTheme === 'light' && !lightSvg) {
         try {
           themeRenderLock = true
-          mermaid.initialize(LIGHT_THEME_CONFIG)
+          const m = await getMermaid()
+          m.initialize(LIGHT_THEME_CONFIG)
           const id = `mermaid_light_${Date.now()}`
           cleanupMermaidDOM(id)
           const sanitizedChart = sanitizeMermaidSource(chart)
 
           // Pre-validate, then try aggressive sanitization
           let sourceToRender = sanitizedChart
-          const isValid = await mermaid.parse(sanitizedChart, { suppressErrors: true })
+          const isValid = await m.parse(sanitizedChart, { suppressErrors: true })
           if (!isValid) {
             const aggressive = forceQuoteAllLabels(sanitizedChart)
-            const retryValid = await mermaid.parse(aggressive, { suppressErrors: true })
+            const retryValid = await m.parse(aggressive, { suppressErrors: true })
             if (!retryValid) {
               toast.error('Failed to render light theme preview')
               return
@@ -403,7 +424,7 @@ export function MermaidDiagram({ chart, className, onNodeClick, onShowRawCode, r
             sourceToRender = aggressive
           }
 
-          const { svg } = await mermaid.render(id, sourceToRender)
+          const { svg } = await m.render(id, sourceToRender)
           setLightSvg(svg)
           // Clean up orphaned render element
           cleanupMermaidDOM(id)
@@ -413,7 +434,8 @@ export function MermaidDiagram({ chart, className, onNodeClick, onShowRawCode, r
           return
         } finally {
           // Always restore dark theme for future renders
-          mermaid.initialize(DARK_THEME_CONFIG)
+          const m = await getMermaid()
+          m.initialize(DARK_THEME_CONFIG)
           themeRenderLock = false
         }
       }

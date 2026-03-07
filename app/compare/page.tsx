@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback, Suspense, lazy } from "react"
+import { useEffect, useRef, useState, useCallback, Suspense, lazy } from "react"
 import { useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { ArrowLeft, Link2, Check, BarChart3, Package } from "lucide-react"
@@ -30,8 +30,10 @@ export default function ComparePage() {
   const [isCopied, setIsCopied] = useState(false)
 
   // Hydrate repos from URL search params on first mount
+  const hasHydrated = useRef(false)
   useEffect(() => {
-    if (repos.size > 0) return // already loaded
+    if (hasHydrated.current) return
+    hasHydrated.current = true
 
     const repoParams = searchParams.getAll("repo")
     if (repoParams.length === 0) return
@@ -40,9 +42,7 @@ export default function ComparePage() {
     for (const url of toLoad) {
       addRepo(url)
     }
-    // Run only on mount
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [repos, searchParams, addRepo])
 
   // Sync URL bar when repos change (without full navigation)
   useEffect(() => {

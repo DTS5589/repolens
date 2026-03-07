@@ -177,17 +177,14 @@ export function DocsProvider({ children }: { children: ReactNode }) {
       setMessages([])
     }
     prevRepoRef.current = repo?.fullName
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [repo?.fullName])
+  }, [repo?.fullName, setMessages])
 
   const clearDocs = useCallback(() => {
     setGeneratedDocs([])
     setActiveDocId(null)
     setShowNewDoc(true)
     setMessages([])
-    // setMessages is a stable ref from @ai-sdk/react useChat — does not need tracking
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [setMessages])
 
   // --- Context values ---
   const stateValue = useMemo<DocsStateContextType>(
@@ -214,9 +211,7 @@ export function DocsProvider({ children }: { children: ReactNode }) {
       isGenerating,
       setGenContext,
     }),
-    // sendMessage, setMessages, stop are stable refs from @ai-sdk/react useChat
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [messages, status, error, isGenerating, setGenContext],
+    [messages, sendMessage, status, setMessages, stop, error, isGenerating, setGenContext],
   )
 
   return (

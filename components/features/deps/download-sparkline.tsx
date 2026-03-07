@@ -1,13 +1,8 @@
 "use client"
 
-import { useId, useMemo } from 'react'
-import {
-  AreaChart,
-  Area,
-  ResponsiveContainer,
-  Tooltip as RechartsTooltip,
-} from 'recharts'
+import { useId, useMemo, useState, useEffect } from 'react'
 import type { DownloadPoint } from '@/lib/deps/types'
+import { loadRecharts, type RechartsModule } from '@/lib/lazy-recharts'
 
 const numberFormatter = new Intl.NumberFormat('en-US', { notation: 'compact' })
 
@@ -50,6 +45,11 @@ export function DownloadSparkline({
 }: DownloadSparklineProps) {
   const id = useId()
   const gradientId = `sparkFill-${id}`
+  const [rc, setRc] = useState<RechartsModule | null>(null)
+
+  useEffect(() => {
+    loadRecharts().then(setRc)
+  }, [])
 
   const chartData = useMemo(
     () => data.map(d => ({ day: d.day, downloads: d.downloads })),
@@ -59,6 +59,16 @@ export function DownloadSparkline({
   if (chartData.length === 0) {
     return <span className="text-xs text-muted-foreground">—</span>
   }
+
+  if (!rc) {
+    return (
+      <div className={className} style={{ width, height }}>
+        <div className="h-full w-full animate-pulse rounded bg-muted" />
+      </div>
+    )
+  }
+
+  const { AreaChart, Area, ResponsiveContainer, Tooltip: RechartsTooltip } = rc
 
   return (
     <div

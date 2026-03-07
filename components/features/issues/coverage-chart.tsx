@@ -1,16 +1,9 @@
 "use client"
 
+import { useState, useEffect } from 'react'
 import type { ComplianceReport } from '@/lib/code/issue-scanner'
 import { cn } from '@/lib/utils'
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  ResponsiveContainer,
-  Cell,
-  Tooltip as RechartsTooltip,
-} from 'recharts'
+import { loadRecharts, type RechartsModule } from '@/lib/lazy-recharts'
 
 interface CoverageSummaryChartProps {
   report: ComplianceReport
@@ -35,6 +28,12 @@ function getCoverageTextClass(percent: number): string {
 }
 
 export function CoverageSummaryChart({ report }: CoverageSummaryChartProps) {
+  const [rc, setRc] = useState<RechartsModule | null>(null)
+
+  useEffect(() => {
+    loadRecharts().then(setRc)
+  }, [])
+
   const data = [
     {
       name: 'OWASP Top 10',
@@ -54,34 +53,38 @@ export function CoverageSummaryChart({ report }: CoverageSummaryChartProps) {
       <div className="flex items-center gap-6">
         {/* Bar chart */}
         <div className="flex-1 h-[80px]" role="img" aria-label={`Code coverage chart showing OWASP Top 10 at ${report.overallOwaspPercent}% and CWE Top 25 at ${report.overallCwePercent}%`}>
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data} layout="vertical" margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
-              <XAxis type="number" domain={[0, 100]} hide />
-              <YAxis
-                type="category"
-                dataKey="name"
-                width={90}
-                tick={{ fontSize: 11, fill: 'var(--text-secondary)' }}
-                axisLine={false}
-                tickLine={false}
-              />
-              <RechartsTooltip
-                contentStyle={{
-                  backgroundColor: 'var(--popover)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '6px',
-                  fontSize: '11px',
-                  color: 'var(--text-primary)',
-                }}
-                formatter={(value: number) => [`${value}%`, 'Coverage']}
-              />
-              <Bar dataKey="coverage" radius={[0, 4, 4, 0]} barSize={16}>
-                {data.map((entry, index) => (
-                  <Cell key={index} fill={entry.fill} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+          {rc ? (
+            <rc.ResponsiveContainer width="100%" height="100%">
+              <rc.BarChart data={data} layout="vertical" margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
+                <rc.XAxis type="number" domain={[0, 100]} hide />
+                <rc.YAxis
+                  type="category"
+                  dataKey="name"
+                  width={90}
+                  tick={{ fontSize: 11, fill: 'var(--text-secondary)' }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <rc.Tooltip
+                  contentStyle={{
+                    backgroundColor: 'var(--popover)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '6px',
+                    fontSize: '11px',
+                    color: 'var(--text-primary)',
+                  }}
+                  formatter={(value: number) => [`${value}%`, 'Coverage']}
+                />
+                <rc.Bar dataKey="coverage" radius={[0, 4, 4, 0]} barSize={16}>
+                  {data.map((entry, index) => (
+                    <rc.Cell key={index} fill={entry.fill} />
+                  ))}
+                </rc.Bar>
+              </rc.BarChart>
+            </rc.ResponsiveContainer>
+          ) : (
+            <div className="h-full w-full animate-pulse rounded bg-muted" />
+          )}
         </div>
 
         {/* Percentage badges */}

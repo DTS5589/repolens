@@ -247,8 +247,7 @@ export function APIKeysProvider({ children }: { children: ReactNode }) {
       }
     }
     fetchAll()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isHydrated]) // Runs once after hydration completes
+  }, [isHydrated, apiKeys, fetchModelsInternal])
 
   const getValidProviders = useCallback((): AIProvider[] => {
     return (Object.keys(apiKeys) as AIProvider[]).filter(
