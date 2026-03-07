@@ -4,13 +4,18 @@ import { z } from "zod"
 import { getAccessToken } from "@/lib/auth/token"
 import { fetchRepoMetadata } from "@/lib/github/fetcher"
 import { apiError } from "@/lib/api/error"
+import { GITHUB_NAME_RE } from "@/lib/github/validation"
+import { applyRateLimit } from "@/lib/api/rate-limit"
 
 const repoQuerySchema = z.object({
-  owner: z.string().min(1),
-  name: z.string().min(1),
+  owner: z.string().min(1).regex(GITHUB_NAME_RE, 'Invalid owner name'),
+  name: z.string().min(1).regex(GITHUB_NAME_RE, 'Invalid repo name'),
 })
 
 export async function GET(request: NextRequest) {
+  const rateLimited = applyRateLimit(request)
+  if (rateLimited) return rateLimited
+
   const params = repoQuerySchema.safeParse({
     owner: request.nextUrl.searchParams.get("owner") ?? undefined,
     name: request.nextUrl.searchParams.get("name") ?? undefined,

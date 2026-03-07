@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { getAccessToken } from '@/lib/auth/token'
 import { apiError } from '@/lib/api/error'
 import { GITHUB_NAME_RE } from '@/lib/github/validation'
+import { applyRateLimit } from '@/lib/api/rate-limit'
 
 const zipballSchema = z.object({
   owner: z.string().min(1).regex(GITHUB_NAME_RE, 'Invalid owner name'),
@@ -12,6 +13,9 @@ const zipballSchema = z.object({
 })
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
+  const rateLimited = applyRateLimit(request)
+  if (rateLimited) return rateLimited
+
   let body: unknown
   try {
     body = await request.json()

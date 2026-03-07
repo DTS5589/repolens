@@ -4,14 +4,19 @@ import { z } from "zod"
 import { getAccessToken } from "@/lib/auth/token"
 import { fetchRepoTree } from "@/lib/github/fetcher"
 import { apiError } from "@/lib/api/error"
+import { GITHUB_NAME_RE } from "@/lib/github/validation"
+import { applyRateLimit } from "@/lib/api/rate-limit"
 
 const treeQuerySchema = z.object({
-  owner: z.string().min(1),
-  name: z.string().min(1),
+  owner: z.string().min(1).regex(GITHUB_NAME_RE, 'Invalid owner name'),
+  name: z.string().min(1).regex(GITHUB_NAME_RE, 'Invalid repo name'),
   sha: z.string().min(1).default("HEAD"),
 })
 
 export async function GET(request: NextRequest) {
+  const rateLimited = applyRateLimit(request)
+  if (rateLimited) return rateLimited
+
   const params = treeQuerySchema.safeParse({
     owner: request.nextUrl.searchParams.get("owner") ?? undefined,
     name: request.nextUrl.searchParams.get("name") ?? undefined,

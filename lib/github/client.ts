@@ -152,7 +152,7 @@ function mapProxyUrlToGitHubApi(proxyUrl: string): DirectUrlMapping | null {
   }
 
   // /api/github/commit/{sha}?owner=X&name=Y
-  const commitMatch = pathname.match(/^\/api\/github\/commit\/(.+)$/)
+  const commitMatch = pathname.match(/^\/api\/github\/commit\/([a-f0-9]{4,40})$/i)
   if (commitMatch) {
     const sha = commitMatch[1]
     return {
@@ -226,9 +226,89 @@ async function directFetchRawFile(url: string, pat: string): Promise<{ content: 
 // These mirror the transformations in lib/github/fetcher.ts.
 // ---------------------------------------------------------------------------
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
+// --- Raw GitHub REST API response shapes (only fields accessed by normalizers) ---
 
-function normalizeRepo(data: any): GitHubRepo {
+interface GitHubApiRepoResponse {
+  owner: { login: string }
+  name: string
+  full_name: string
+  description: string | null
+  default_branch: string
+  stargazers_count: number
+  forks_count: number
+  language: string | null
+  topics?: string[]
+  private: boolean
+  html_url: string
+  size?: number
+  open_issues_count?: number
+  pushed_at?: string
+  license?: { spdx_id?: string } | null
+}
+
+interface GitHubApiTagResponse {
+  name: string
+  commit: { sha: string; url: string }
+  tarball_url?: string
+  zipball_url?: string
+}
+
+interface GitHubApiBranchResponse {
+  name: string
+  commit: { sha: string }
+  protected?: boolean
+}
+
+interface GitHubApiCommitAuthor {
+  name: string
+  email: string
+  date: string
+}
+
+interface GitHubApiCommitResponse {
+  sha: string
+  commit: {
+    message: string
+    author: GitHubApiCommitAuthor
+    committer: GitHubApiCommitAuthor
+  }
+  html_url: string
+  author?: { login?: string; avatar_url?: string } | null
+  parents?: Array<{ sha: string }>
+}
+
+interface GitHubApiFileEntry {
+  filename: string
+  status: string
+  additions: number
+  deletions: number
+  changes: number
+  patch?: string
+  previous_filename?: string
+}
+
+interface GitHubApiCompareResponse {
+  status: string
+  ahead_by: number
+  behind_by: number
+  total_commits: number
+  commits: GitHubApiCommitResponse[]
+  files?: GitHubApiFileEntry[]
+}
+
+interface GitHubApiCommitDetailResponse extends GitHubApiCommitResponse {
+  stats?: { additions: number; deletions: number; total: number }
+  files?: GitHubApiFileEntry[]
+}
+
+interface GitHubApiRateLimitResponse {
+  rate?: { limit: number; remaining: number; reset: number }
+  resources?: { core?: { limit: number; remaining: number; reset: number } }
+}
+
+// --- Normalizer functions ---
+
+function normalizeRepo(data: GitHubApiRepoResponse): GitHubRepo {
   return {
     owner: data.owner.login,
     name: data.name,
@@ -248,106 +328,105 @@ function normalizeRepo(data: any): GitHubRepo {
   }
 }
 
-function normalizeTags(data: any): GitHubTag[] {
-  return (data as any[]).map((tag: any) => ({
-    name: tag.name as string,
-    commitSha: tag.commit.sha as string,
-    commitUrl: tag.commit.url as string,
-    tarballUrl: (tag.tarball_url as string) ?? '',
-    zipballUrl: (tag.zipball_url as string) ?? '',
+function normalizeTags(data: GitHubApiTagResponse[]): GitHubTag[] {
+  return data.map((tag) => ({
+    name: tag.name,
+    commitSha: tag.commit.sha,
+    commitUrl: tag.commit.url,
+    tarballUrl: tag.tarball_url ?? '',
+    zipballUrl: tag.zipball_url ?? '',
   }))
 }
 
-function normalizeBranches(data: any): GitHubBranch[] {
-  return (data as any[]).map((branch: any) => ({
-    name: branch.name as string,
-    commitSha: branch.commit.sha as string,
-    isProtected: (branch.protected as boolean) ?? false,
+function normalizeBranches(data: GitHubApiBranchResponse[]): GitHubBranch[] {
+  return data.map((branch) => ({
+    name: branch.name,
+    commitSha: branch.commit.sha,
+    isProtected: branch.protected ?? false,
   }))
 }
 
-function normalizeCommits(data: any): GitHubCommit[] {
-  return (data as any[]).map((item: any) => {
+function normalizeCommits(data: GitHubApiCommitResponse[]): GitHubCommit[] {
+  return data.map((item) => {
     const commit = item.commit
     const commitAuthor = commit.author
     const commitCommitter = commit.committer
     const author = item.author
     return {
-      sha: item.sha as string,
-      message: commit.message as string,
-      authorName: commitAuthor.name as string,
-      authorEmail: commitAuthor.email as string,
-      authorDate: commitAuthor.date as string,
-      committerName: commitCommitter.name as string,
-      committerDate: commitCommitter.date as string,
-      url: item.html_url as string,
-      authorLogin: (author?.login as string) ?? null,
-      authorAvatarUrl: (author?.avatar_url as string) ?? null,
-      parents: ((item.parents ?? []) as any[]).map((p: any) => ({ sha: p.sha as string })),
+      sha: item.sha,
+      message: commit.message,
+      authorName: commitAuthor.name,
+      authorEmail: commitAuthor.email,
+      authorDate: commitAuthor.date,
+      committerName: commitCommitter.name,
+      committerDate: commitCommitter.date,
+      url: item.html_url,
+      authorLogin: author?.login ?? null,
+      authorAvatarUrl: author?.avatar_url ?? null,
+      parents: (item.parents ?? []).map((p) => ({ sha: p.sha })),
     }
   })
 }
 
-function normalizeCompare(data: any): GitHubComparison {
+function normalizeCompare(data: GitHubApiCompareResponse): GitHubComparison {
   return {
-    status: data.status as string,
-    aheadBy: data.ahead_by as number,
-    behindBy: data.behind_by as number,
-    totalCommits: data.total_commits as number,
+    status: data.status,
+    aheadBy: data.ahead_by,
+    behindBy: data.behind_by,
+    totalCommits: data.total_commits,
     commits: normalizeCommits(data.commits),
-    files: ((data.files ?? []) as any[]).map((file: any) => ({
-      filename: file.filename as string,
-      status: file.status as string,
-      additions: file.additions as number,
-      deletions: file.deletions as number,
-      changes: file.changes as number,
-      patch: file.patch as string | undefined,
+    files: (data.files ?? []).map((file) => ({
+      filename: file.filename,
+      status: file.status,
+      additions: file.additions,
+      deletions: file.deletions,
+      changes: file.changes,
+      patch: file.patch,
     })),
   }
 }
 
-function normalizeCommitDetail(data: any): CommitDetail {
+function normalizeCommitDetail(data: GitHubApiCommitDetailResponse): CommitDetail {
   const commit = data.commit
   const commitAuthor = commit.author
   const commitCommitter = commit.committer
   const author = data.author
   const stats = data.stats ?? { additions: 0, deletions: 0, total: 0 }
-  const rawFiles = (data.files ?? []) as any[]
   return {
-    sha: data.sha as string,
-    message: commit.message as string,
-    authorName: commitAuthor.name as string,
-    authorEmail: commitAuthor.email as string,
-    authorDate: commitAuthor.date as string,
-    committerName: commitCommitter.name as string,
-    committerDate: commitCommitter.date as string,
-    url: data.html_url as string,
-    authorLogin: (author?.login as string) ?? null,
-    authorAvatarUrl: (author?.avatar_url as string) ?? null,
-    parents: ((data.parents ?? []) as any[]).map((p: any) => ({ sha: p.sha as string })),
+    sha: data.sha,
+    message: commit.message,
+    authorName: commitAuthor.name,
+    authorEmail: commitAuthor.email,
+    authorDate: commitAuthor.date,
+    committerName: commitCommitter.name,
+    committerDate: commitCommitter.date,
+    url: data.html_url,
+    authorLogin: author?.login ?? null,
+    authorAvatarUrl: author?.avatar_url ?? null,
+    parents: (data.parents ?? []).map((p) => ({ sha: p.sha })),
     stats: {
-      additions: stats.additions as number,
-      deletions: stats.deletions as number,
-      total: stats.total as number,
+      additions: stats.additions,
+      deletions: stats.deletions,
+      total: stats.total,
     },
-    files: rawFiles.map((file: any): CommitFile => ({
-      filename: file.filename as string,
+    files: (data.files ?? []).map((file): CommitFile => ({
+      filename: file.filename,
       status: file.status as CommitFile['status'],
-      additions: file.additions as number,
-      deletions: file.deletions as number,
-      changes: file.changes as number,
-      patch: file.patch as string | undefined,
-      previousFilename: file.previous_filename as string | undefined,
+      additions: file.additions,
+      deletions: file.deletions,
+      changes: file.changes,
+      patch: file.patch,
+      previousFilename: file.previous_filename,
     })),
   }
 }
 
-function normalizeRateLimit(data: any): { limit: number; remaining: number; reset: number; authenticated: boolean } {
+function normalizeRateLimit(data: GitHubApiRateLimitResponse): { limit: number; remaining: number; reset: number; authenticated: boolean } {
   const core = data.rate ?? data.resources?.core
   return {
-    limit: (core?.limit as number) ?? 0,
-    remaining: (core?.remaining as number) ?? 0,
-    reset: (core?.reset as number) ?? 0,
+    limit: core?.limit ?? 0,
+    remaining: core?.remaining ?? 0,
+    reset: core?.reset ?? 0,
     authenticated: true,
   }
 }
@@ -355,19 +434,17 @@ function normalizeRateLimit(data: any): { limit: number; remaining: number; rese
 /** Apply the appropriate normalization for a given endpoint. */
 function normalizeDirectResponse<T>(data: unknown, endpoint: ProxyEndpoint): T {
   switch (endpoint) {
-    case 'repo':        return normalizeRepo(data) as T
+    case 'repo':        return normalizeRepo(data as GitHubApiRepoResponse) as T
     case 'tree':        return data as T
-    case 'tags':        return normalizeTags(data) as T
-    case 'branches':    return normalizeBranches(data) as T
-    case 'commits':     return normalizeCommits(data) as T
-    case 'compare':     return normalizeCompare(data) as T
-    case 'commit':      return normalizeCommitDetail(data) as T
-    case 'rate-limit':  return normalizeRateLimit(data) as T
+    case 'tags':        return normalizeTags(data as GitHubApiTagResponse[]) as T
+    case 'branches':    return normalizeBranches(data as GitHubApiBranchResponse[]) as T
+    case 'commits':     return normalizeCommits(data as GitHubApiCommitResponse[]) as T
+    case 'compare':     return normalizeCompare(data as GitHubApiCompareResponse) as T
+    case 'commit':      return normalizeCommitDetail(data as GitHubApiCommitDetailResponse) as T
+    case 'rate-limit':  return normalizeRateLimit(data as GitHubApiRateLimitResponse) as T
     default:            return data as T
   }
 }
-
-/* eslint-enable @typescript-eslint/no-explicit-any */
 
 // ---------------------------------------------------------------------------
 // Blame GraphQL query — duplicated from lib/github/fetcher.ts for client-side use
@@ -435,7 +512,7 @@ interface BlameGraphQLResponse {
  * When no PAT is set, falls back to the proxy routes (used by OAuth users).
  */
 async function proxyFetch<T>(url: string): Promise<T> {
-  if (!url.startsWith('/')) {
+  if (!url.startsWith('/') || url.startsWith('//')) {
     throw new Error('proxyFetch only accepts relative URLs')
   }
 
@@ -796,3 +873,6 @@ export function invalidateRepoCache(owner: string, repo: string): void {
   invalidatePattern(`commit-detail:${owner}/${repo}`)
   invalidatePattern(`file-commits:${owner}/${repo}`)
 }
+
+// Exposed for unit tests only — not part of the public API.
+export const _testInternals = { proxyFetch } as const

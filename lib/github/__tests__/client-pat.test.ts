@@ -22,6 +22,7 @@ import {
   getGitHubPAT,
   fetchRepoViaProxy,
   fetchBlameViaProxy,
+  _testInternals,
 } from '../client'
 
 function mockOkResponse<T>(data: T): Response {
@@ -120,6 +121,20 @@ describe('PAT management', () => {
       const callHeaders = mockFetch.mock.calls[0][1]?.headers ?? {}
       expect(callHeaders).not.toHaveProperty('X-GitHub-Token')
       expect(callHeaders).toHaveProperty('Content-Type', 'application/json')
+    })
+  })
+
+  describe('proxyFetch URL guard', () => {
+    it('rejects protocol-relative URLs (//evil.com)', async () => {
+      await expect(_testInternals.proxyFetch('//evil.com/attack')).rejects.toThrow(
+        'proxyFetch only accepts relative URLs',
+      )
+    })
+
+    it('rejects absolute URLs', async () => {
+      await expect(_testInternals.proxyFetch('https://evil.com')).rejects.toThrow(
+        'proxyFetch only accepts relative URLs',
+      )
     })
   })
 })

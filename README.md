@@ -56,6 +56,31 @@ RepoLens works with multiple AI providers. You configure API keys directly in th
 
 ---
 
+## GitHub Personal Access Token
+
+Add a GitHub Personal Access Token (PAT) to access **private repositories** and raise the API rate limit from 60 to **5,000 requests/hour**. When a PAT is configured, GitHub API calls go **directly from your browser to `api.github.com`** — the token never touches the RepoLens server.
+
+### How to Configure
+
+1. [Create a fine-grained PAT](https://github.com/settings/tokens?type=beta) on GitHub.
+2. Grant **Contents: Read-only** and **Metadata: Read-only** permissions (select only the repositories you need, or choose *All repositories*).
+3. In RepoLens, click the **gear icon** (Settings) → **GitHub** tab → paste your token → **Test Connection**.
+
+### Recommended Scopes
+
+| Goal | Scope |
+|---|---|
+| Private repository access | `Contents: Read-only` + `Metadata: Read-only` |
+| Public repos (higher rate limit only) | No additional permissions needed |
+
+### Security
+
+- The token is stored in your browser's `localStorage` — same as AI API keys.
+- API calls are made directly from the browser over HTTPS; the token is **never sent to the RepoLens server**.
+- Already signed in with OAuth? OAuth continues to work through server-side proxy routes. You can use either method, or both.
+
+---
+
 ## Quick Start
 
 ### Prerequisites

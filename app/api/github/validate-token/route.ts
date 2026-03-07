@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 import { apiError } from "@/lib/api/error"
+import { applyRateLimit } from "@/lib/api/rate-limit"
 
 const GITHUB_API_BASE = "https://api.github.com"
 
 export async function POST(request: NextRequest) {
+  const rateLimited = applyRateLimit(request, { limit: 10, windowMs: 60_000 })
+  if (rateLimited) return rateLimited
+
   try {
     const token = request.headers.get("X-GitHub-Token")?.trim()
 
@@ -15,7 +19,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (token.length > 255 || !/^[\w_.-]+$/.test(token)) {
+    if (token.length > 255 || !/^[\w]+$/.test(token)) {
       return NextResponse.json(
         { valid: false, error: "Invalid token format" },
         { status: 400 }

@@ -6,6 +6,7 @@ import { getAccessToken } from "@/lib/auth/token"
 import { fetchCommitDetail } from "@/lib/github/fetcher"
 import { apiError } from "@/lib/api/error"
 import { GITHUB_NAME_RE } from "@/lib/github/validation"
+import { applyRateLimit } from "@/lib/api/rate-limit"
 const SHA_RE = /^[a-f0-9]{4,40}$/i
 
 const commitDetailSchema = z.object({
@@ -17,6 +18,9 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ sha: string }> },
 ) {
+  const rateLimited = applyRateLimit(request)
+  if (rateLimited) return rateLimited
+
   const { sha } = await params
 
   if (!SHA_RE.test(sha)) {

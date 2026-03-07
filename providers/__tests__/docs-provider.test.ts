@@ -140,8 +140,8 @@ describe('buildDocPrompt', () => {
 // ---------------------------------------------------------------------------
 
 describe('DOC_PRESETS', () => {
-  it('has exactly 5 presets', () => {
-    expect(DOC_PRESETS).toHaveLength(5)
+  it('has exactly 6 presets', () => {
+    expect(DOC_PRESETS).toHaveLength(6)
   })
 
   it('each preset has a unique id', () => {

@@ -31,10 +31,10 @@ export async function fetchRepoMetadata(
   
   if (!response.ok) {
     if (response.status === 404) {
-      throw new Error('Repository not found. Make sure the repository exists and is public.')
+      throw new Error('Repository not found. Make sure the repository exists. If it\'s private, add a GitHub token in Settings.')
     }
     if (response.status === 403) {
-      throw new Error('Rate limit exceeded. Please try again later or add a GitHub token.')
+      throw new Error('Rate limit exceeded. Try again later or add a GitHub Personal Access Token in Settings for higher limits.')
     }
     throw new Error(`Failed to fetch repository: ${response.statusText}`)
   }

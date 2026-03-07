@@ -24,10 +24,32 @@ vi.mock('@/providers/api-keys-provider', () => ({
   },
 }))
 
+// Mock the GitHub token provider
+vi.mock('@/providers/github-token-provider', () => ({
+  useGitHubToken: () => ({
+    token: null,
+    isValid: null,
+    isValidating: false,
+    isHydrated: true,
+    username: null,
+    scopes: [],
+    setToken: vi.fn(),
+    validateToken: vi.fn(),
+    removeToken: vi.fn(),
+  }),
+}))
+
 // Mock the APIKeyInput component to isolate SettingsModal tests
 vi.mock('../api-key-input', () => ({
   APIKeyInput: ({ provider }: { provider: string }) => (
     <div data-testid={`api-key-input-${provider}`}>API Key Input for {provider}</div>
+  ),
+}))
+
+// Mock the GitHubTokenInput component
+vi.mock('../github-token-input', () => ({
+  GitHubTokenInput: () => (
+    <div data-testid="github-token-input">GitHub Token Input</div>
   ),
 }))
 
@@ -48,18 +70,19 @@ describe('SettingsModal', () => {
     expect(screen.queryByText('API Settings')).not.toBeInTheDocument()
   })
 
-  it('renders tabs for all four providers', () => {
+  it('renders tabs for all four providers and GitHub', () => {
     render(<SettingsModal open={true} onOpenChange={vi.fn()} />)
+    expect(screen.getByRole('tab', { name: /github/i })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: /openai/i })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: /google/i })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: /anthropic/i })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: /openrouter/i })).toBeInTheDocument()
   })
 
-  it('renders APIKeyInput for the active tab', () => {
+  it('renders GitHubTokenInput for the default active tab', () => {
     render(<SettingsModal open={true} onOpenChange={vi.fn()} />)
-    // Default active tab is "openai"
-    expect(screen.getByTestId('api-key-input-openai')).toBeInTheDocument()
+    // Default active tab is "github"
+    expect(screen.getByTestId('github-token-input')).toBeInTheDocument()
   })
 
   it('switches to another provider tab on click', async () => {

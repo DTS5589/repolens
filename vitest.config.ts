@@ -25,10 +25,12 @@ export default defineConfig({
       reporter: ['text', 'lcov', 'json-summary'],
       include: [
         'lib/**/*.ts',
-        'app/api/**/*.ts',
+        'app/**/*.{ts,tsx}',
         'components/**/*.{ts,tsx}',
         'hooks/**/*.ts',
         'providers/**/*.{ts,tsx}',
+        'config/**/*.ts',
+        'middleware.ts',
       ],
       exclude: [
         '**/*.test.{ts,tsx}',

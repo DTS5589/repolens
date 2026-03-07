@@ -5,15 +5,19 @@ import { getAccessToken } from "@/lib/auth/token"
 import { fetchCompare } from "@/lib/github/fetcher"
 import { apiError } from "@/lib/api/error"
 import { GITHUB_NAME_RE } from "@/lib/github/validation"
+import { applyRateLimit } from "@/lib/api/rate-limit"
 
 const compareQuerySchema = z.object({
   owner: z.string().min(1).regex(GITHUB_NAME_RE, 'Invalid owner name'),
   name: z.string().min(1).regex(GITHUB_NAME_RE, 'Invalid repo name'),
-  base: z.string().min(1).max(256),
-  head: z.string().min(1).max(256),
+  base: z.string().min(1).max(256).regex(/^[^\x00-\x1f\x7f]+$/, 'Invalid ref'),
+  head: z.string().min(1).max(256).regex(/^[^\x00-\x1f\x7f]+$/, 'Invalid ref'),
 })
 
 export async function GET(request: NextRequest) {
+  const rateLimited = applyRateLimit(request)
+  if (rateLimited) return rateLimited
+
   const params = compareQuerySchema.safeParse({
     owner: request.nextUrl.searchParams.get("owner") ?? undefined,
     name: request.nextUrl.searchParams.get("name") ?? undefined,

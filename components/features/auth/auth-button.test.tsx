@@ -8,6 +8,21 @@ vi.mock('next-auth/react', () => ({
   useSession: vi.fn(),
 }))
 
+// Mock the GitHub token provider
+vi.mock('@/providers/github-token-provider', () => ({
+  useGitHubToken: () => ({
+    token: null,
+    isValid: null,
+    isValidating: false,
+    isHydrated: true,
+    username: null,
+    scopes: [],
+    setToken: vi.fn(),
+    validateToken: vi.fn(),
+    removeToken: vi.fn(),
+  }),
+}))
+
 import { useSession } from 'next-auth/react'
 import { AuthButton } from './auth-button'
 
