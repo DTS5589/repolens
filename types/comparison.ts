@@ -1,4 +1,4 @@
-import type { GitHubRepo, FileNode } from "@/types/repository"
+import type { GitHubRepo, FileNode, RepoTreeItem } from "@/types/repository"
 
 export interface RepoMetrics {
   totalFiles: number
@@ -29,6 +29,34 @@ export interface ComparisonRepo {
   status: ComparisonRepoStatus
   error?: string
   dependencies?: RepoDependencies
+  treeItems?: RepoTreeItem[]
 }
 
 export const MAX_COMPARISON_REPOS = 5
+
+export type SimilarityLabel = "likely-clone" | "highly-similar" | "some-overlap" | "different"
+
+export interface SimilaritySignals {
+  shaJaccard: number
+  shaContainment: number
+  pathJaccard: number
+  dependencyOverlap: number
+  languageCosine: number
+}
+
+export interface RepoRelationship {
+  isForkPair: boolean
+  commonParent?: string
+}
+
+export interface SimilarityResult {
+  repoA: string
+  repoB: string
+  score: number
+  label: SimilarityLabel
+  signals: SimilaritySignals
+  relationship: RepoRelationship
+  identicalFiles: string[]
+  isLowConfidence: boolean
+  totalComparedFiles: number
+}

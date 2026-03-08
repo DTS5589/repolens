@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback, Suspense, lazy } from "react"
 import { useSearchParams } from "next/navigation"
 import Link from "next/link"
-import { ArrowLeft, Link2, Check, BarChart3, Package } from "lucide-react"
+import { ArrowLeft, Link2, Check, BarChart3, Package, Fingerprint } from "lucide-react"
 import { Header } from "@/components/layout/header"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -21,6 +21,12 @@ const ComparisonTable = lazy(() =>
 const DependencyOverlap = lazy(() =>
   import("@/components/features/compare/dependency-overlap").then((m) => ({
     default: m.DependencyOverlap,
+  }))
+)
+
+const SimilaritySection = lazy(() =>
+  import("@/components/features/compare/similarity-section").then((m) => ({
+    default: m.SimilaritySection,
   }))
 )
 
@@ -141,6 +147,23 @@ export default function ComparePage() {
                 }
               >
                 <ComparisonTable />
+              </Suspense>
+            </section>
+          )}
+
+          {/* Similarity section */}
+          {hasReadyRepos && (
+            <section className="space-y-4">
+              <div className="flex items-center gap-2">
+                <Fingerprint className="h-4 w-4 text-text-secondary" />
+                <h2 className="text-base font-semibold">Similarity</h2>
+              </div>
+              <Suspense
+                fallback={
+                  <Skeleton className="h-48 w-full rounded-lg" />
+                }
+              >
+                <SimilaritySection />
               </Suspense>
             </section>
           )}

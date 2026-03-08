@@ -17,6 +17,8 @@ export interface GitHubRepo {
   openIssuesCount: number
   pushedAt: string
   license: string | null
+  isFork?: boolean
+  parentFullName?: string | null
 }
 
 export interface RepoFile {

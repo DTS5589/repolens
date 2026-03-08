@@ -57,6 +57,8 @@ export async function fetchRepoMetadata(
     openIssuesCount: data.open_issues_count ?? 0,
     pushedAt: data.pushed_at ?? '',
     license: data.license?.spdx_id ?? null,
+    isFork: data.fork ?? false,
+    parentFullName: data.parent?.full_name ?? null,
   }
 }
 

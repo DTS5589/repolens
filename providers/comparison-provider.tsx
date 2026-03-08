@@ -206,6 +206,7 @@ export function ComparisonProvider({ children }: { children: ReactNode }) {
             metrics,
             status: "ready",
             dependencies,
+            treeItems: tree.tree,
           })
           return next
         })
