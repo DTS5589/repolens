@@ -63,7 +63,7 @@ export function PreviewTabBar({
                   <Lock className="absolute -bottom-0.5 -right-1 h-2 w-2 text-destructive" aria-hidden="true" />
                 )}
               </div>
-              <span className="hidden sm:inline">{tab.label}</span>
+              <span className="hidden xl:inline">{tab.label}</span>
             </button>
           )
         })}
@@ -78,8 +78,8 @@ export function PreviewTabBar({
             title={`Search (${isMac ? '⌘' : 'Ctrl+'}K)`}
           >
             <Search className="h-3 w-3" />
-            <span className="hidden sm:inline">Search</span>
-            <kbd className="hidden sm:inline text-[10px] text-text-muted/60 bg-foreground/[0.04] px-1 py-0.5 rounded font-mono leading-none">{isMac ? '⌘K' : 'Ctrl+K'}</kbd>
+            <span className="hidden xl:inline">Search</span>
+            <kbd className="hidden xl:inline text-[10px] text-text-muted/60 bg-foreground/[0.04] px-1 py-0.5 rounded font-mono leading-none">{isMac ? '⌘K' : 'Ctrl+K'}</kbd>
           </button>
         )}
         {localPreviewUrl && (
