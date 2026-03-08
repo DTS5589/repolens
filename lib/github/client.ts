@@ -649,7 +649,7 @@ export async function fetchTagsViaProxy(
   name: string,
   perPage?: number,
 ): Promise<GitHubTag[]> {
-  const key = `tags:${owner}/${name}`
+  const key = `tags:${owner}/${name}:${perPage ?? 30}`
   const params = new URLSearchParams({
     owner,
     name,
@@ -667,7 +667,7 @@ export async function fetchBranchesViaProxy(
   name: string,
   perPage?: number,
 ): Promise<GitHubBranch[]> {
-  const key = `branches:${owner}/${name}`
+  const key = `branches:${owner}/${name}:${perPage ?? 30}`
   const params = new URLSearchParams({
     owner,
     name,
@@ -694,6 +694,21 @@ export async function fetchCommitsViaProxy(
   const key = `commits:${owner}/${name}:${params.toString()}`
   const url = `/api/github/commits?${params.toString()}`
   return cachedProxyFetch<GitHubCommit[]>(key, url, CACHE_TTL_COMMITS)
+}
+
+/**
+ * Fetch both tags and branches in a single request through the combined refs proxy.
+ */
+export async function fetchRefsViaProxy(
+  owner: string,
+  name: string,
+  perPage?: number,
+): Promise<{ tags: GitHubTag[]; branches: GitHubBranch[] }> {
+  const key = `refs:${owner}/${name}:${perPage ?? 30}`
+  const params = new URLSearchParams({ owner, name })
+  if (perPage !== undefined) params.set('per_page', String(perPage))
+  const url = `/api/github/refs?${params.toString()}`
+  return cachedProxyFetch<{ tags: GitHubTag[]; branches: GitHubBranch[] }>(key, url, CACHE_TTL_TAGS)
 }
 
 /**

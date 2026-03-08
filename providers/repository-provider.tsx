@@ -5,7 +5,8 @@ import type { GitHubRepo, FileNode, ParsedFile, RepositoryContext } from "@/type
 import type { PinnedFile, PinnedContentsResult } from "@/types/types"
 import { PINNED_CONTEXT_CONFIG } from "@/config/constants"
 import { parseGitHubUrl } from "@/lib/github/parser"
-import { fetchRepoMetadata, fetchRepoTree, buildFileTree, fetchFileContent } from "@/lib/github/fetcher"
+import { buildFileTree } from "@/lib/github/fetcher"
+import { fetchRepoViaProxy, fetchTreeViaProxy, fetchFileViaProxy } from "@/lib/github/client"
 import type { CodeIndex } from "@/lib/code/code-index"
 import { createEmptyIndex, batchIndexFiles } from '@/lib/code/code-index'
 import { getCachedRepo } from "@/lib/cache/repo-cache"
@@ -137,13 +138,12 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
       const { owner, repo: repoName } = parsed
 
       // Fetch repository metadata
-      const tokenOpts = githubToken ? { token: githubToken } : {}
-      const repoData = await fetchRepoMetadata(owner, repoName, tokenOpts)
+      const repoData = await fetchRepoViaProxy(owner, repoName)
       setRepo(repoData)
 
       // Fetch file tree
       setLoadingStage('tree')
-      const tree = await fetchRepoTree(owner, repoName, repoData.defaultBranch, tokenOpts)
+      const tree = await fetchTreeViaProxy(owner, repoName, repoData.defaultBranch)
       const fileTree = buildFileTree(tree)
       setFiles(fileTree)
 
@@ -214,7 +214,7 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
     if (!repo) return null
 
     try {
-      const content = await fetchFileContent(repo.owner, repo.name, repo.defaultBranch, path)
+      const content = await fetchFileViaProxy(repo.owner, repo.name, repo.defaultBranch, path)
       return content
     } catch (err) {
       console.error('Failed to load file content:', err)

@@ -192,13 +192,13 @@ describe('memory-cache', () => {
   })
 
   // -----------------------------------------------------------------------
-  // LRU eviction — oldest entry evicted when exceeding MAX_ENTRIES (100)
+  // LRU eviction — oldest entry evicted when exceeding MAX_ENTRIES (500)
   // -----------------------------------------------------------------------
 
   describe('LRU eviction', () => {
-    it('evicts the oldest entry when cache exceeds 100 entries', () => {
-      // Fill 101 entries — the first one should be evicted
-      for (let i = 0; i <= 100; i++) {
+    it('evicts the oldest entry when cache exceeds 500 entries', () => {
+      // Fill 501 entries — the first one should be evicted
+      for (let i = 0; i <= 500; i++) {
         setCache(`key-${i}`, i, 60_000)
       }
 
@@ -207,26 +207,26 @@ describe('memory-cache', () => {
       // key-1 should still exist (now the oldest)
       expect(getCached('key-1')).toBe(1)
       // The latest entry should exist
-      expect(getCached('key-100')).toBe(100)
+      expect(getCached('key-500')).toBe(500)
     })
 
     it('updates insertion order when re-setting an existing key', () => {
-      // Fill exactly 100 entries (keys 0..99)
-      for (let i = 0; i < 100; i++) {
+      // Fill exactly 500 entries (keys 0..499)
+      for (let i = 0; i < 500; i++) {
         setCache(`key-${i}`, i, 60_000)
       }
 
       // Re-set key-0 to move it to the end
       setCache('key-0', 'refreshed', 60_000)
 
-      // Now add key-100 — this makes 101 entries, so the oldest (key-1) is evicted
-      setCache('key-100', 100, 60_000)
+      // Now add key-500 — this makes 501 entries, so the oldest (key-1) is evicted
+      setCache('key-500', 500, 60_000)
 
       // key-0 was refreshed, so it should survive
       expect(getCached('key-0')).toBe('refreshed')
       // key-1 was the oldest after key-0 was refreshed
       expect(getCached('key-1')).toBeNull()
-      expect(getCached('key-100')).toBe(100)
+      expect(getCached('key-500')).toBe(500)
     })
   })
 

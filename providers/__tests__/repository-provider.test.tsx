@@ -6,11 +6,18 @@ import React, { useState } from 'react'
 
 // Mock the GitHub fetcher module
 vi.mock('@/lib/github/fetcher', () => ({
-  fetchRepoMetadata: vi.fn(),
-  fetchRepoTree: vi.fn(),
   buildFileTree: vi.fn(),
-  fetchFileContent: vi.fn(),
   detectLanguage: vi.fn(),
+}))
+
+// Mock the GitHub client module
+vi.mock('@/lib/github/client', () => ({
+  fetchRepoViaProxy: vi.fn(),
+  fetchTreeViaProxy: vi.fn(),
+  fetchFileViaProxy: vi.fn(),
+  setGitHubPAT: vi.fn(),
+  getGitHubPAT: vi.fn(),
+  clearGitHubCache: vi.fn(),
 }))
 
 // Mock the GitHub zipball module
@@ -41,7 +48,7 @@ vi.mock('@/providers/github-token-provider', () => ({
 }))
 
 import { RepositoryProvider, useRepository } from '../repository-provider'
-import { fetchFileContent } from '@/lib/github/fetcher'
+import { fetchFileViaProxy } from '@/lib/github/client'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -84,11 +91,11 @@ describe('loadFileContent (via useRepository)', () => {
     })
 
     expect(content).toBe('const cached = true;')
-    expect(fetchFileContent).not.toHaveBeenCalled()
+    expect(fetchFileViaProxy).not.toHaveBeenCalled()
   })
 
   it('falls back to network fetch when file is NOT in codeIndex', async () => {
-    const mockFetch = vi.mocked(fetchFileContent)
+    const mockFetch = vi.mocked(fetchFileViaProxy)
     mockFetch.mockResolvedValue('const fetched = true;')
 
     const { result } = renderHook(() => useRepository(), {

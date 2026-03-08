@@ -30,7 +30,7 @@ interface IndexingCallbacks {
 /**
  * Downloads, indexes, and caches repository files.
  *
- * Tries a zipball download first (for repos < 50 MB), then falls back to
+ * Tries a zipball download first (for repos < 200 MB), then falls back to
  * per-file fetching with concurrency control.
  */
 export async function startIndexing(
@@ -60,8 +60,8 @@ export async function startIndexing(
   const errors: Array<{ path: string; error: string }> = []
   let zipballUsed = false
 
-  // B1: Try zipball for repos under 50 MB (GitHub API reports size in KB)
-  if (repoData.size != null && repoData.size < 50_000) {
+  // B1: Try zipball for repos under 200 MB (GitHub API reports size in KB)
+  if (repoData.size != null && repoData.size < 200_000) {
     try {
       setLoadingStage('downloading')
       const zipFiles = await fetchRepoZipball(

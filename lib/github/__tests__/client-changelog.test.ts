@@ -96,7 +96,7 @@ describe('GitHub client — changelog proxy functions', () => {
 
       await fetchTagsViaProxy('owner', 'repo')
 
-      expect(cacheMock.getCached).toHaveBeenCalledWith('tags:owner/repo')
+      expect(cacheMock.getCached).toHaveBeenCalledWith('tags:owner/repo:30')
     })
 
     it('uses 10-minute (600,000ms) TTL', async () => {
@@ -156,7 +156,7 @@ describe('GitHub client — changelog proxy functions', () => {
 
       await fetchBranchesViaProxy('owner', 'repo')
 
-      expect(cacheMock.getCached).toHaveBeenCalledWith('branches:owner/repo')
+      expect(cacheMock.getCached).toHaveBeenCalledWith('branches:owner/repo:30')
     })
 
     it('uses 5-minute (300,000ms) TTL', async () => {

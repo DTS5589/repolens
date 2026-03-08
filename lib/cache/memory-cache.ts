@@ -15,7 +15,7 @@ export interface StaleResult<T> {
   isStale: boolean
 }
 
-const MAX_ENTRIES = 100
+const MAX_ENTRIES = 500
 
 const store = new Map<string, CacheEntry<unknown>>()
 

@@ -40,7 +40,9 @@ export async function GET(request: NextRequest) {
       page,
     })
 
-    return NextResponse.json(branches)
+    return NextResponse.json(branches, {
+      headers: { 'Cache-Control': 's-maxage=300, stale-while-revalidate=60' },
+    })
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to fetch branches"
 

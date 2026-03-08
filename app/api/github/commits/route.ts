@@ -53,7 +53,9 @@ export async function GET(request: NextRequest) {
       path,
     })
 
-    return NextResponse.json(commits)
+    return NextResponse.json(commits, {
+      headers: { 'Cache-Control': 's-maxage=300, stale-while-revalidate=60' },
+    })
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to fetch commits"
 

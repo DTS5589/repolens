@@ -36,7 +36,9 @@ export async function GET(request: NextRequest) {
       token,
     })
 
-    return NextResponse.json(tree)
+    return NextResponse.json(tree, {
+      headers: { 'Cache-Control': 's-maxage=600, stale-while-revalidate=120' },
+    })
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to fetch tree"
     return apiError('GITHUB_ERROR', message, 500)
