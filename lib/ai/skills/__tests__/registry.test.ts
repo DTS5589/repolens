@@ -304,6 +304,18 @@ describe('SkillRegistry — lazy loading', () => {
 
     readdirSpy.mockRestore()
   })
+
+  it('reload() clears cache and reloads on next access', () => {
+    const registry = new SkillRegistry()
+    registry.listSkills() // trigger load
+
+    registry.reload()
+
+    const readdirSpy = vi.spyOn(fs, 'readdirSync')
+    registry.listSkills() // should re-read filesystem
+    expect(readdirSpy).toHaveBeenCalled()
+    readdirSpy.mockRestore()
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -330,6 +342,19 @@ describe('SkillRegistry — skill definition frontmatter', () => {
       expect(skill.trigger.length).toBeLessThanOrEqual(500)
       expect(skill.relatedTools.length).toBeGreaterThanOrEqual(1)
     }
+  })
+
+  it('all definition filenames match their frontmatter ID', () => {
+    // All 16 skills loading successfully implies every filename === ID,
+    // because the registry now rejects mismatches.
+    const registry = new SkillRegistry()
+    const skills = registry.listSkills()
+    expect(skills).toHaveLength(16)
+
+    const files = fs.readdirSync(DEFINITIONS_DIR).filter((f) => f.endsWith('.md'))
+    const filenameIds = files.map((f) => path.basename(f, '.md')).sort()
+    const loadedIds = skills.map((s) => s.id).sort()
+    expect(loadedIds).toEqual(filenameIds)
   })
 
   it('each skill definition has non-empty instructions', () => {

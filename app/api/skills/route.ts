@@ -9,5 +9,7 @@ export async function GET(request: NextRequest) {
 
   const skills = skillRegistry.listSkills()
 
-  return NextResponse.json({ skills })
+  return NextResponse.json({ skills }, {
+    headers: { 'Cache-Control': 'public, max-age=3600, s-maxage=86400' }
+  })
 }

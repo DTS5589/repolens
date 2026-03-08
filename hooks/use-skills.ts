@@ -39,3 +39,7 @@ export function useSkills() {
 
   return { skills, isLoading, error }
 }
+
+export function clearSkillCache(): void {
+  cachedSkills = null
+}

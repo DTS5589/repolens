@@ -43,7 +43,7 @@ export class SkillRegistry {
       const filePath = path.resolve(definitionsDir, file)
 
       // Path traversal prevention: resolved path must stay within definitions dir
-      if (!filePath.startsWith(definitionsDir + path.sep) && filePath !== definitionsDir) {
+      if (!filePath.startsWith(definitionsDir + path.sep)) {
         continue
       }
 
@@ -56,7 +56,18 @@ export class SkillRegistry {
         continue
       }
 
+      const expectedId = path.basename(file, '.md')
+      if (parsed.data.id !== expectedId) {
+        console.error(`Skill file ${file} has mismatched ID: expected "${expectedId}", got "${parsed.data.id}"`)
+        continue
+      }
+
       const { id, name, description, trigger, relatedTools } = parsed.data
+
+      if (this.skills.has(id)) {
+        console.error(`Duplicate skill ID "${id}" found in ${file}, skipping`)
+        continue
+      }
 
       this.skills.set(id, {
         id,
@@ -82,6 +93,11 @@ export class SkillRegistry {
     return this.skills.get(id) ?? null
   }
 
+  reload(): void {
+    this.skills.clear()
+    this.loaded = false
+  }
+
   listSkills(): SkillSummary[] {
     this.ensureLoaded()
     return Array.from(this.skills.values()).map(({ id, name, description, trigger, relatedTools, lastReviewed, reviewCycleDays }) => ({
@@ -96,4 +112,15 @@ export class SkillRegistry {
   }
 }
 
-export const skillRegistry = new SkillRegistry()
+function getSkillRegistry(): SkillRegistry {
+  if (process.env.NODE_ENV === 'development') {
+    const globalForSkills = globalThis as unknown as { __skillRegistry?: SkillRegistry }
+    if (!globalForSkills.__skillRegistry) {
+      globalForSkills.__skillRegistry = new SkillRegistry()
+    }
+    return globalForSkills.__skillRegistry
+  }
+  return new SkillRegistry()
+}
+
+export const skillRegistry = getSkillRegistry()
