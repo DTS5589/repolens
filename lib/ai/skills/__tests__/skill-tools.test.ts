@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { z } from 'zod'
 
 // Mock the registry before importing skill-tools
 vi.mock('../registry', () => {
@@ -71,7 +72,7 @@ describe('discoverSkillsTool', () => {
   })
 
   it('returns skill summaries without instructions', async () => {
-    const result = await discoverSkillsTool.execute({}, { toolCallId: 'test', messages: [] })
+    const result = (await discoverSkillsTool.execute!({}, { toolCallId: 'test', messages: [] })) as unknown as { skills: Array<Record<string, unknown>> }
 
     expect(result).toHaveProperty('skills')
     expect(result.skills).toHaveLength(2)
@@ -87,7 +88,7 @@ describe('discoverSkillsTool', () => {
   })
 
   it('returns correct metadata for each skill', async () => {
-    const result = await discoverSkillsTool.execute({}, { toolCallId: 'test', messages: [] })
+    const result = (await discoverSkillsTool.execute!({}, { toolCallId: 'test', messages: [] })) as unknown as { skills: Array<{ id: string }> }
     const ids = result.skills.map((s) => s.id)
     expect(ids).toContain('security-audit')
     expect(ids).toContain('architecture-analysis')
@@ -100,7 +101,7 @@ describe('discoverSkillsTool', () => {
 
 describe('loadSkillTool — valid skill', () => {
   it('returns skill with instructions wrapped in <skill-instructions> delimiters', async () => {
-    const result = await loadSkillTool.execute(
+    const result = await loadSkillTool.execute!(
       { skillId: 'security-audit' },
       { toolCallId: 'test', messages: [] },
     )
@@ -117,7 +118,7 @@ describe('loadSkillTool — valid skill', () => {
   })
 
   it('includes skill content inside the delimiters', async () => {
-    const result = await loadSkillTool.execute(
+    const result = await loadSkillTool.execute!(
       { skillId: 'security-audit' },
       { toolCallId: 'test', messages: [] },
     )
@@ -127,7 +128,7 @@ describe('loadSkillTool — valid skill', () => {
   })
 
   it('includes provenance disclaimer in instructions', async () => {
-    const result = await loadSkillTool.execute(
+    const result = await loadSkillTool.execute!(
       { skillId: 'security-audit' },
       { toolCallId: 'test', messages: [] },
     )
@@ -138,7 +139,7 @@ describe('loadSkillTool — valid skill', () => {
   })
 
   it('includes freshness context with review date and current date', async () => {
-    const result = await loadSkillTool.execute(
+    const result = await loadSkillTool.execute!(
       { skillId: 'security-audit' },
       { toolCallId: 'test', messages: [] },
     )
@@ -149,7 +150,7 @@ describe('loadSkillTool — valid skill', () => {
   })
 
   it('includes pinned standard versions for skills with standards', async () => {
-    const result = await loadSkillTool.execute(
+    const result = await loadSkillTool.execute!(
       { skillId: 'security-audit' },
       { toolCallId: 'test', messages: [] },
     )
@@ -161,7 +162,7 @@ describe('loadSkillTool — valid skill', () => {
   })
 
   it('omits pinned standards note for skills without standards', async () => {
-    const result = await loadSkillTool.execute(
+    const result = await loadSkillTool.execute!(
       { skillId: 'architecture-analysis' },
       { toolCallId: 'test', messages: [] },
     )
@@ -178,7 +179,7 @@ describe('loadSkillTool — valid skill', () => {
 
 describe('loadSkillTool — invalid skill', () => {
   it('returns error for nonexistent skill ID', async () => {
-    const result = await loadSkillTool.execute(
+    const result = await loadSkillTool.execute!(
       { skillId: 'nonexistent' },
       { toolCallId: 'test', messages: [] },
     )
@@ -189,7 +190,7 @@ describe('loadSkillTool — invalid skill', () => {
   })
 
   it('returns error for empty-ish but valid slug', async () => {
-    const result = await loadSkillTool.execute(
+    const result = await loadSkillTool.execute!(
       { skillId: 'does-not-exist' },
       { toolCallId: 'test', messages: [] },
     )
@@ -206,8 +207,7 @@ describe('loadSkillTool — path traversal prevention', () => {
   it('rejects path traversal attempt via slug validation', async () => {
     // The schema itself rejects invalid slugs before execute runs,
     // but getSkill also validates. We test getSkill's validation here.
-    const result = await loadSkillTool.execute(
-      // @ts-expect-error — intentionally bypassing schema for security test
+    const result = await loadSkillTool.execute!(
       { skillId: '../../etc/passwd' },
       { toolCallId: 'test', messages: [] },
     )
@@ -223,7 +223,7 @@ describe('loadSkillTool — path traversal prevention', () => {
 
 describe('loadSkillTool — input schema', () => {
   it('has inputSchema requiring skillId', () => {
-    const schema = loadSkillTool.inputSchema
+    const schema = loadSkillTool.inputSchema as z.ZodType
     expect(schema).toBeDefined()
 
     // Valid slug passes
@@ -240,7 +240,7 @@ describe('loadSkillTool — input schema', () => {
 
 describe('discoverSkillsTool — input schema', () => {
   it('accepts empty object', () => {
-    const schema = discoverSkillsTool.inputSchema
+    const schema = discoverSkillsTool.inputSchema as z.ZodType
     expect(schema.safeParse({}).success).toBe(true)
   })
 })
