@@ -519,14 +519,13 @@ export function createMockCodeIndex(): CodeIndex {
   const files = new Map<string, IndexedFile>()
 
   const addFile = (path: string, content: string, language = 'typescript') => {
-    const lines = content.split('\n')
+    const lineCount = content.split('\n').length
     files.set(path, {
       path,
       name: path.split('/').pop() || path,
       content,
       language,
-      lines,
-      lineCount: lines.length,
+      lineCount,
     })
   }
 
