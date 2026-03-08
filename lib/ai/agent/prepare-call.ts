@@ -60,7 +60,8 @@ function buildAnthropicProviderOptions(mode: CallOptions['mode']) {
 const loggingMiddleware = createLoggingMiddleware()
 
 export function buildPrepareCall() {
-  return ({ options: callOptions }: { options: CallOptions }) => {
+  return (baseCallArgs: { options: CallOptions } & Record<string, unknown>) => {
+    const { options: callOptions } = baseCallArgs
     const { provider, model, apiKey, compactionEnabled } = callOptions
     const contextWindow = getModelContextWindow(model)
     const toolCount = Object.keys(codeTools).length
@@ -83,6 +84,7 @@ export function buildPrepareCall() {
         compactionContext.maxSteps = stepBudget
 
         return {
+          ...baseCallArgs,
           model: wrappedModel,
           instructions: buildChatPrompt({
             repoContext: callOptions.repoContext,
@@ -106,6 +108,7 @@ export function buildPrepareCall() {
         compactionContext.maxSteps = stepBudget
 
         return {
+          ...baseCallArgs,
           model: wrappedModel,
           instructions: buildDocsPrompt({
             docType: callOptions.docType,
@@ -128,6 +131,7 @@ export function buildPrepareCall() {
         compactionContext.maxSteps = stepBudget
 
         return {
+          ...baseCallArgs,
           model: wrappedModel,
           instructions: buildChangelogPrompt({
             changelogType: callOptions.changelogType,
