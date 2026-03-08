@@ -28,11 +28,9 @@ export {
   SYMBOL_PATTERNS,
   IMPORT_REGEX,
 } from './structural-index'
-export type { RichFileMetadata } from './structural-index'
-
 export { executeToolLocally } from './client-tool-executor'
 
-export { createContextCompactor, summarizeCodeForCompaction } from './context-compactor'
+export { createContextCompactor } from './context-compactor'
 
 export { handleToolCall } from './tool-call-handler'
 export type { ToolCallInfo, AddToolOutputFn } from './tool-call-handler'

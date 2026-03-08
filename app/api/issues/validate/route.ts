@@ -1,5 +1,6 @@
 import { generateText } from 'ai'
 import { NextResponse } from 'next/server'
+import type { NextRequest } from 'next/server'
 import * as z from 'zod'
 import { createAIModel } from '@/lib/ai/providers'
 import {
@@ -10,6 +11,7 @@ import {
 } from '@/lib/code/scanner/ai-validator'
 import type { CodeIssue } from '@/lib/code/scanner/types'
 import { apiError } from '@/lib/api/error'
+import { applyRateLimit } from '@/lib/api/rate-limit'
 
 export const maxDuration = 60
 
@@ -37,13 +39,16 @@ const validateRequestSchema = z.object({
   apiKey: z.string().min(1).max(500),
 })
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   let raw: unknown
   try {
     raw = await req.json()
   } catch {
     return apiError('INVALID_JSON', 'Invalid JSON body', 400)
   }
+
+  const rateLimited = applyRateLimit(req)
+  if (rateLimited) return rateLimited
 
   const parsed = validateRequestSchema.safeParse(raw)
   if (!parsed.success) {

@@ -51,6 +51,7 @@ workproject/                    # Next.js application root
 │       ├── github/             # GitHub API proxy routes (blame, commits, tags, branches, compare, zipball)
 │       ├── inline-actions/     # Inline code action AI endpoint
 │       ├── issues/             # Issues-related API routes
+│       ├── skills/             # Skills discovery API endpoint
 │       └── models/             # AI model listing endpoint
 ├── components/
 │   ├── layout/                 # App shell — header, resizable split layout
@@ -97,7 +98,8 @@ workproject/                    # Next.js application root
 │   ├── docs-provider.tsx       # Documentation generation state
 │   ├── changelog-provider.tsx  # Changelog generation state (split contexts)
 │   ├── app-provider.tsx        # Global app state (active tab, selected file, etc.)
-│   └── comparison-provider.tsx # Comparison feature state
+│   ├── comparison-provider.tsx # Comparison feature state
+│   └── github-token-provider.tsx # GitHub token management for authenticated API access
 ├── lib/                        # Core business logic (non-UI)
 │   ├── utils.ts                # cn() helper (clsx + tailwind-merge)
 │   ├── ai/                     # AI integration
@@ -107,7 +109,25 @@ workproject/                    # Next.js application root
 │   │   ├── client-tool-executor.ts  # Client-side tool execution against CodeIndex
 │   │   ├── tool-call-handler.ts # Bridges useChat tool calls to executeToolLocally
 │   │   ├── structural-index.ts # Structural summary builder for AI context
-│   │   └── context-compactor.ts # Context window management
+│   │   ├── context-compactor.ts # Context window management
+│   │   ├── tour-schemas.ts     # Zod schemas for tour creation tool
+│   │   ├── agent/              # ToolLoopAgent AI system
+│   │   │   ├── agent.ts        # ToolLoopAgent singleton with all tools
+│   │   │   ├── options.ts      # callOptionsSchema (discriminated union for chat/docs/changelog)
+│   │   │   ├── prepare-call.ts # Mode-based model, prompt, and stop conditions
+│   │   │   ├── prepare-step.ts # Per-step pruneMessages + progressive tool disclosure
+│   │   │   ├── middleware.ts   # Logging middleware wrapper
+│   │   │   └── prompts/        # Composable system prompt builders
+│   │   │       ├── shared.ts   # Shared prompt sections (role, guidelines, skill discovery)
+│   │   │       ├── chat.ts     # Chat mode system prompt
+│   │   │       ├── docs.ts     # Documentation mode system prompt
+│   │   │       └── changelog.ts# Changelog mode system prompt
+│   │   └── skills/             # AI skills system
+│   │       ├── types.ts        # SkillDefinition, SkillSummary, StandardReference types
+│   │       ├── registry.ts     # SkillRegistry with lazy loading and freshness metadata
+│   │       ├── skill-tools.ts  # discoverSkills and loadSkill server-executed tools
+│   │       ├── index.ts        # Barrel exports
+│   │       └── definitions/    # 16 skill definition .md files with YAML frontmatter
 │   ├── auth/                   # NextAuth config (GitHub OAuth provider)
 │   ├── cache/                  # Caching infrastructure
 │   │   ├── repo-cache.ts       # IndexedDB repo caching (v2, includes tours store)
@@ -168,11 +188,16 @@ workproject/                    # Next.js application root
 │   │   ├── parser.ts           # GitHub URL parsing
 │   │   └── zipball.ts          # Zipball download and extraction
 │   └── parsers/                # Language parsers (TypeScript AST)
+├── lib/api/                    # API utilities
+│   ├── error.ts                # Standardized API error responses
+│   └── rate-limit.ts           # Rate limiting for API routes
 ├── hooks/                      # Custom React hooks
 │   ├── use-changelog-engine.ts # Changelog generation lifecycle
 │   ├── use-docs-engine.ts      # Documentation generation hook
 │   ├── use-git-history.ts      # Git history state management
 │   ├── use-mobile.ts           # Mobile breakpoint detection
+│   ├── use-skills.ts           # Skills discovery and caching hook
+│   ├── use-batch-operations.ts # Batch operation utilities
 │   └── use-toast.ts            # Toast notification hook
 ├── types/                      # Shared TypeScript type definitions
 │   ├── types.ts                # Core app types (AI providers, API keys, etc.)
@@ -237,6 +262,30 @@ workproject/                    # Next.js application root
 
 AI tools (file reading, search, symbol lookup, issue scanning, diagram generation) are defined without `execute` functions in the Vercel AI SDK. The server streams tool call requests; the client executes them locally against the in-memory `CodeIndex`. This keeps all repository data client-side and avoids sending source code to the server.
 
+### ToolLoopAgent Architecture
+
+AI routes (chat, docs, changelog) use a single `ToolLoopAgent` instance from `lib/ai/agent/agent.ts`. The agent handles:
+- **Mode dispatch** via `prepareCall`: Selects model, system prompt, and stop conditions based on the `callOptionsSchema` discriminated union (chat/docs/changelog modes).
+- **Per-step processing** via `prepareStep`: Applies `pruneMessages` for context window management and progressive tool disclosure (skills tools unlocked only after `loadSkill` results detected).
+- **Composable prompts**: System prompts are built from reusable sections in `lib/ai/agent/prompts/` (shared role/guidelines + mode-specific instructions).
+- **Tool repair**: Stateless `experimental_repairToolCall` for malformed tool invocations.
+- **Logging middleware**: Wraps the model with logging via `wrapLanguageModel`.
+
+Routes use `createAgentUIStreamResponse` to stream agent responses, reducing each route handler to ~20 lines.
+
+### Skills System
+
+The skills system provides specialized analysis methodologies that the AI can load on-demand:
+- **16 skill definitions** stored as markdown files with YAML frontmatter in `lib/ai/skills/definitions/`.
+- **SkillRegistry**: Lazy-loads and caches skill definitions. Validates frontmatter via Zod schema. Enforces filename-to-ID consistency.
+- **Server-executed tools**: `discoverSkills` lists available skills; `loadSkill` returns full instructions wrapped in `<skill-instructions>` provenance tags.
+- **Freshness metadata**: Each skill has `lastReviewed` date, `reviewCycleDays`, and optional `standardsReferenced` with pinned versions. `loadSkill` injects temporal context (current date, review date, staleness warning).
+- **UI**: `SkillSelector` component (Popover + Command) lets users pre-select skills. Active skills are sent with chat requests.
+
+### Rate Limiting
+
+All AI API routes apply rate limiting via `lib/api/rate-limit.ts` using `applyRateLimit()`. Error responses use the standardized `apiError()` helper from `lib/api/error.ts`.
+
 ### BYOK (Bring Your Own Key)
 
 Users provide their own API keys for AI providers (OpenAI, Anthropic, Google, OpenRouter). Keys are stored in `localStorage` via `APIKeysProvider` and sent per-request to the API routes. No server-side key management.
@@ -244,7 +293,7 @@ Users provide their own API keys for AI providers (OpenAI, Anthropic, Google, Op
 ### Provider Nesting Order
 
 ```text
-SessionProvider → ThemeProvider → APIKeysProvider → RepositoryProvider → ToursProvider → DocsProvider → ChangelogProvider → AppProvider → ComparisonProvider
+SessionProvider → ThemeProvider → APIKeysProvider → GitHubTokenProvider → RepositoryProvider → ToursProvider → DocsProvider → ChangelogProvider → AppProvider → ComparisonProvider
 ```
 
 Each provider has a clear dependency chain. `RepositoryProvider` depends on no AI state; `ToursProvider` depends on repository context for file lookups; `DocsProvider` and `ChangelogProvider` depend on repository context; `AppProvider` provides global UI state; `ComparisonProvider` wraps children at the end of the chain.
@@ -320,7 +369,7 @@ The GitHub REST API does not support blame. `lib/github/graphql.ts` provides a l
 1. Define the Zod input schema in `lib/ai/tool-schemas.ts`.
 2. Add the tool declaration (no `execute`) in `lib/ai/tool-definitions.ts`.
 3. Implement local execution in `lib/ai/client-tool-executor.ts`.
-4. The tool is automatically available to both chat and docs AI routes.
+4. The tool is automatically available via the `repoLensAgent` ToolLoopAgent (imported in `lib/ai/agent/agent.ts`). Chat, docs, and changelog routes all use the same agent instance.
 
 ### Adding a New Scanner Rule
 
@@ -356,7 +405,15 @@ The GitHub REST API does not support blame. `lib/github/graphql.ts` provides a l
 1. Create `app/api/<route>/route.ts`.
 2. Export named handlers (`GET`, `POST`, etc.).
 3. API keys are passed in request headers/body from the client — never stored server-side.
-4. Use `lib/ai/providers.ts` → `createAIModel()` for AI routes.
+4. For AI routes, use `repoLensAgent` with `createAgentUIStreamResponse` (see chat/docs/changelog routes for the pattern). Apply rate limiting via `applyRateLimit()` from `lib/api/rate-limit.ts`.
+
+### Adding a New Skill
+
+1. Create a `.md` file in `lib/ai/skills/definitions/<skill-id>.md` with YAML frontmatter (`id`, `name`, `description`, `trigger`, `relatedTools`, `lastReviewed`, `reviewCycleDays`, optional `standardsReferenced`).
+2. The filename must match the `id` field (e.g., `security-audit.md` → `id: security-audit`).
+3. Write methodology instructions in the markdown body (phases, severity tables, thresholds, examples, false positives).
+4. The skill is auto-discovered by `SkillRegistry` — no registration needed.
+5. Update `KNOWN_SKILL_IDS` and test counts in `lib/ai/skills/__tests__/registry.test.ts`.
 
 ### CSS Theming
 

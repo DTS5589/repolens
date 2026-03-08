@@ -102,7 +102,7 @@ graph LR
 ### How it works
 
 1. **User sends message** — `ChatSidebar.handleSubmit()` calls `sendMessage()` with the message text and a body containing the selected model, API key, repo context, and structural index.
-2. **Server receives request** — The API route (`/api/chat` or `/api/docs/generate`) validates the request with Zod, creates the AI model via `createAIModel()`, and calls `streamText()` with the `codeTools` definitions.
+2. **Server receives request** — The API route (`/api/chat` or `/api/docs/generate`) validates the request with Zod, applies rate limiting via `applyRateLimit()`, and delegates to `repoLensAgent` which uses `createAgentUIStreamResponse` to stream the response.
 3. **Tools have no `execute`** — The `codeTools` object defines 11 tools using `tool()` from the AI SDK, each with a Zod `inputSchema` but no `execute` function. This means tool calls are streamed to the client instead of being executed on the server.
 4. **Client intercepts tool calls** — The `useChat` hook's `onToolCall` callback fires for each tool call. It delegates to `handleToolCall()`, which calls `executeToolLocally()`.
 5. **Local execution** — `executeToolLocally()` runs the tool against the in-memory `CodeIndex`: reading files, searching content, listing directories, finding symbols, scanning issues, or generating diagrams.
@@ -128,7 +128,7 @@ graph LR
 
 ### Context Compaction
 
-The `createContextCompactor()` function generates a `prepareStep` callback for `streamText()` that trims older tool-result messages. It scales thresholds based on the model's context window:
+The `createContextCompactor()` function generates a `prepareStep` callback used by the ToolLoopAgent's `prepareStep` pipeline that trims older tool-result messages. It scales thresholds based on the model's context window:
 
 - **Large context (500K+ tokens)**: 3x limit multiplier, keep 35% of steps full
 - **Standard context (128K-500K)**: 1x multiplier, keep 25% full
@@ -395,6 +395,8 @@ graph TD
     A5["structural-index.ts"]
     A6["providers.ts"]
     A7["context-compactor.ts"]
+    A8["agent/agent.ts"]
+    A9["skills/registry.ts"]
   end
 
   subgraph LibCode["lib/code"]
@@ -456,10 +458,10 @@ graph TD
   P8 --> A4
   P8 --> A6
 
-  R1 --> A1
+  R1 --> A8
   R1 --> A6
   R1 --> A7
-  R2 --> A1
+  R2 --> A8
   R2 --> A6
   R2 --> A7
   R5 --> DP2
@@ -468,6 +470,10 @@ graph TD
   R7 --> CL2
   R8 --> G5
 
+  A8 --> A1
+  A8 --> A6
+  A8 --> A7
+  A8 --> A9
   A1 --> A2
   A3 --> A2
   A3 --> C1
@@ -524,7 +530,7 @@ The Next.js middleware enables clean URLs (`/owner/repo`) by rewriting to `/?rep
 1. **Define the schema** in `lib/ai/tool-schemas.ts` using Zod.
 2. **Add the tool definition** in `lib/ai/tool-definitions.ts` using `tool()` with a description and `inputSchema` (no `execute`).
 3. **Implement the executor** in `lib/ai/client-tool-executor.ts` — add a case to the `switch (toolName)` in `executeToolLocally()`.
-4. **Update the system prompt** in `app/api/chat/route.ts` and `app/api/docs/generate/route.ts` to describe the new tool to the AI.
+4. The tool is automatically available via the `repoLensAgent` ToolLoopAgent (imported in `lib/ai/agent/agent.ts`). Chat, docs, and changelog routes all use the same agent instance.
 
 ### Adding a New Scanner Rule
 
@@ -553,7 +559,7 @@ The Next.js middleware enables clean URLs (`/owner/repo`) by rewriting to `/?rep
 
 1. **Add the type** to the `DocType` union in `providers/docs-provider.tsx`.
 2. **Add a preset** to `DOC_PRESETS` with label, description, and default prompt.
-3. **Add a system prompt** in `app/api/docs/generate/route.ts` under `DOC_SYSTEM_PROMPTS`.
+3. **Add a system prompt** in `lib/ai/agent/prompts/docs.ts` for the new doc type.
 
 ### Adding a New Preview Tab
 
@@ -571,3 +577,16 @@ The Next.js middleware enables clean URLs (`/owner/repo`) by rewriting to `/?rep
 2. **Define the preset config** in `PRESET_CONFIGS` in `lib/changelog/preset-config.ts` (label, description, system prompt template).
 3. **Template interpolation** — The prompt template supports `{{commits}}` and `{{dateRange}}` placeholders via `lib/changelog/prompt-builder.ts`.
 4. The preset appears automatically in the `NewChangelogView` component selector.
+
+## Skills System
+
+The skills system provides specialized analysis methodologies that the AI can load on-demand. See the `lib/ai/skills/` module for implementation details.
+
+- **16 skill definitions** stored as `.md` files with YAML frontmatter in `lib/ai/skills/definitions/`.
+- **SkillRegistry** lazily loads and caches skill definitions, validates frontmatter via Zod, and enforces filename-to-ID consistency.
+- **Server-executed tools** (`discoverSkills`, `loadSkill`) allow the AI to discover and load skills at runtime.
+- **UI**: `SkillSelector` component lets users pre-select skills before chatting.
+
+## Rate Limiting
+
+All AI API routes apply rate limiting via `lib/api/rate-limit.ts` using `applyRateLimit()`. The function returns `null` if allowed, or a `429` response with `Retry-After` and `X-RateLimit-*` headers if the limit is exceeded. Error responses use the standardized `apiError()` helper from `lib/api/error.ts`.

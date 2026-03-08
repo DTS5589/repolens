@@ -1,7 +1,9 @@
 import { streamText } from 'ai'
+import type { NextRequest } from 'next/server'
 import * as z from 'zod'
 import { createAIModel } from '@/lib/ai/providers'
 import { apiError } from '@/lib/api/error'
+import { applyRateLimit } from '@/lib/api/rate-limit'
 
 export const maxDuration = 60
 
@@ -41,13 +43,16 @@ Use markdown formatting. Be precise and reference specific lines or expressions 
   }
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   let raw: unknown
   try {
     raw = await req.json()
   } catch {
     return apiError('INVALID_JSON', 'Invalid JSON in request body', 400)
   }
+
+  const rateLimited = applyRateLimit(req)
+  if (rateLimited) return rateLimited
 
   try {
     const parsed = inlineActionSchema.safeParse(raw)
