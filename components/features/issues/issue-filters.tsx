@@ -24,6 +24,9 @@ export function IssueFilters({
   return (
     <>
       {/* Summary severity badges */}
+      <div className="flex items-center gap-1.5 mb-1">
+        <span className="text-[10px] text-text-muted">Issues by Severity</span>
+      </div>
       <div className="grid grid-cols-3 gap-2 mb-3">
         {filteredSummary.critical > 0 && (
           <button
