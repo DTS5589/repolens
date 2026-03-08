@@ -185,10 +185,10 @@ describe('Direct GitHub API calls (PAT mode)', () => {
       expect(mockFetch).toHaveBeenCalledWith('https://api.github.com/repos/X/Y/git/trees/abc123?recursive=1', expect.any(Object))
     })
 
-    it('maps file endpoint to raw.githubusercontent.com', async () => {
-      mockFetch.mockResolvedValueOnce(textResponse('console.log("hi")'))
+    it('routes file endpoint through proxy (not raw.githubusercontent.com) to avoid CORS', async () => {
+      mockFetch.mockResolvedValueOnce(jsonResponse({ content: 'console.log("hi")' }))
       await fetchFileViaProxy('X', 'Y', 'main', 'src/index.ts')
-      expect(mockFetch).toHaveBeenCalledWith('https://raw.githubusercontent.com/X/Y/main/src/index.ts', expect.any(Object))
+      expect((mockFetch.mock.calls[0][0] as string)).toMatch(/^\/api\/github\/file/)
     })
 
     it('maps tags endpoint with per_page', async () => {
@@ -289,8 +289,8 @@ describe('Direct GitHub API calls (PAT mode)', () => {
       await expect(fetchRepoViaProxy('X', 'Y')).rejects.toThrow('Request failed: Bad Gateway')
     })
 
-    it('throws for 404 on raw file fetch', async () => {
-      mockFetch.mockResolvedValueOnce(textResponse('', 404))
+    it('throws for 404 on file fetch via proxy', async () => {
+      mockFetch.mockResolvedValueOnce({ ok: false, status: 404, statusText: 'Not Found', json: () => Promise.resolve({ error: 'File not found' }) } as unknown as Response)
       await expect(fetchFileViaProxy('X', 'Y', 'main', 'missing.ts')).rejects.toThrow('File not found')
     })
   })
@@ -388,8 +388,8 @@ describe('Direct GitHub API calls (PAT mode)', () => {
       expect(result[0]).toMatchObject({ sha: 'commit1', message: 'fix: something', authorName: 'Alice', authorLogin: 'alice' })
     })
 
-    it('wraps raw file content as { content }', async () => {
-      mockFetch.mockResolvedValueOnce(textResponse('export const x = 1'))
+    it('returns file content via proxy', async () => {
+      mockFetch.mockResolvedValueOnce(jsonResponse({ content: 'export const x = 1' }))
       const result = await fetchFileViaProxy('X', 'Y', 'main', 'src/index.ts')
       expect(result).toBe('export const x = 1')
     })

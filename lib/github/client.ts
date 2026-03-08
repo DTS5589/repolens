@@ -519,13 +519,12 @@ async function proxyFetch<T>(url: string): Promise<T> {
   }
 
   // Direct mode: PAT is available — call GitHub API directly
+  // Skip direct mode for file fetches: raw.githubusercontent.com rejects
+  // browser preflight requests triggered by the Authorization header (CORS).
   const pat = getGitHubPAT()
   if (pat) {
     const mapping = mapProxyUrlToGitHubApi(url)
-    if (mapping) {
-      if (mapping.endpoint === 'file') {
-        return directFetchRawFile(mapping.url, pat) as Promise<T>
-      }
+    if (mapping && mapping.endpoint !== 'file') {
       const raw = await directFetch(mapping.url, pat)
       return normalizeDirectResponse<T>(raw, mapping.endpoint)
     }

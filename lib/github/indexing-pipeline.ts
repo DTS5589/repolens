@@ -1,6 +1,7 @@
 import type { Dispatch, SetStateAction } from 'react'
 import type { GitHubRepo, FileNode } from '@/types/repository'
-import { fetchFileContent, detectLanguage } from '@/lib/github/fetcher'
+import { detectLanguage } from '@/lib/github/fetcher'
+import { fetchFileViaProxy } from '@/lib/github/client'
 import type { CodeIndex } from '@/lib/code/code-index'
 import { createEmptyIndex, batchIndexFiles, flattenFiles } from '@/lib/code/code-index'
 import { fetchRepoZipball, isFileIndexable } from '@/lib/github/zipball'
@@ -102,12 +103,11 @@ export async function startIndexing(
         if (signal.aborted) return
 
         try {
-          const content = await fetchFileContent(
+          const content = await fetchFileViaProxy(
             repoData.owner,
             repoData.name,
             repoData.defaultBranch,
             file.path,
-            { token: options.token },
           )
 
           if (signal.aborted) return

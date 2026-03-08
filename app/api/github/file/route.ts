@@ -15,7 +15,7 @@ const fileQuerySchema = z.object({
 })
 
 export async function GET(request: NextRequest) {
-  const rateLimited = applyRateLimit(request)
+  const rateLimited = applyRateLimit(request, { limit: 500, windowMs: 60_000 })
   if (rateLimited) return rateLimited
 
   const params = fileQuerySchema.safeParse({
