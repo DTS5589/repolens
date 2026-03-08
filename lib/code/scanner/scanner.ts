@@ -6,7 +6,7 @@
 // with the same index.
 
 import type { CodeIndex, SearchResult, IndexedFile } from '../code-index'
-import { searchIndex } from '../code-index'
+import { searchIndex, getFileLines } from '../code-index'
 import type { FullAnalysis } from '../import-parser'
 import type { ScanRule, CodeIssue, IssueSeverity, HealthGrade, ScanResults } from './types'
 import { SKIP_VENDORED, detectLanguages } from './constants'
@@ -180,7 +180,7 @@ function runRegexRules(ctx: ScanContext): RegexRulesResult {
 
       // Get all lines for context classification
       const indexedFile = scanCodeIndex.files.get(result.file)
-      const allLines = indexedFile?.lines
+      const allLines = indexedFile ? getFileLines(indexedFile) : undefined
       // Use cached block comment lines (computed once per file across all rules)
       if (!blockCommentCache.has(result.file)) {
         blockCommentCache.set(result.file, allLines ? computeBlockCommentLines(allLines) : undefined)
@@ -315,7 +315,7 @@ function runRegexRules(ctx: ScanContext): RegexRulesResult {
       if (SKIP_VENDORED.test(path)) continue
       if (rule.excludeFiles && rule.excludeFiles.test(path)) continue
 
-      const lines = file.lines
+      const lines = getFileLines(file)
       if (!blockCommentCache.has(path)) {
         blockCommentCache.set(path, lines ? computeBlockCommentLines(lines) : undefined)
       }
@@ -549,7 +549,7 @@ function deduplicateIssues(
     if (!issue.cwe) issue.cwe = 'CWE-94'
     // Apply inline suppression check for normalized issues
     const indexedFile = scanCodeIndex.files.get(issue.file)
-    const allLines = indexedFile?.lines
+    const allLines = indexedFile ? getFileLines(indexedFile) : undefined
     const lineContent = allLines && issue.line >= 1 && issue.line <= allLines.length ? allLines[issue.line - 1] : ''
     const prevLine = allLines && issue.line >= 2 ? allLines[issue.line - 2] : undefined
     if (hasInlineSuppression(lineContent, prevLine, 'eval-usage', true)) {

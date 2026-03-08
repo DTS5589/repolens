@@ -7,8 +7,18 @@ export interface IndexedFile {
   name: string
   content: string
   language?: string
-  lines: string[]
   lineCount: number
+}
+
+const linesCache = new WeakMap<IndexedFile, string[]>()
+
+export function getFileLines(file: IndexedFile): string[] {
+  let lines = linesCache.get(file)
+  if (!lines) {
+    lines = file.content.split('\n')
+    linesCache.set(file, lines)
+  }
+  return lines
 }
 
 export interface SearchResult {
@@ -47,16 +57,15 @@ export function createEmptyIndex(): CodeIndex {
  * Add a file to the index
  */
 export function indexFile(index: CodeIndex, path: string, content: string, language?: string): CodeIndex {
-  const lines = content.split('\n')
   const name = path.split('/').pop() || path
+  const lineCount = content.split('\n').length
   
   const indexed: IndexedFile = {
     path,
     name,
     content,
     language,
-    lines,
-    lineCount: lines.length,
+    lineCount,
   }
   
   const newFiles = new Map(index.files)
@@ -97,9 +106,9 @@ export function batchIndexFiles(
   const newFiles = new Map(index.files)
 
   for (const { path, content, language } of updates) {
-    const lines = content.split('\n')
+    const lineCount = content.split('\n').length
     const name = path.split('/').pop() || path
-    newFiles.set(path, { path, name, content, language, lines, lineCount: lines.length })
+    newFiles.set(path, { path, name, content, language, lineCount })
   }
 
   return {
@@ -164,7 +173,8 @@ export function searchIndex(
   for (const [path, file] of index.files) {
     const matches: SearchMatch[] = []
     
-    file.lines.forEach((line, lineIndex) => {
+    const lines = getFileLines(file)
+    lines.forEach((line, lineIndex) => {
       searchPattern.lastIndex = 0
       let match: RegExpExecArray | null
       
@@ -208,10 +218,11 @@ export function getLineContext(
   const file = index.files.get(path)
   if (!file) return ''
   
+  const fileLines = getFileLines(file)
   const start = Math.max(0, line - 1 - contextLines)
-  const end = Math.min(file.lines.length, line + contextLines)
+  const end = Math.min(fileLines.length, line + contextLines)
   
-  return file.lines.slice(start, end).join('\n')
+  return fileLines.slice(start, end).join('\n')
 }
 
 /**

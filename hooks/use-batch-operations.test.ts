@@ -7,14 +7,13 @@ import { useBatchOperations, type BatchOperationsOptions } from './use-batch-ope
 import type { APIKeysState } from '@/types/types'
 
 function createCodeIndex(files?: Map<string, { content: string }>): CodeIndex {
-  const fileMap = new Map<string, { path: string; name: string; content: string; lines: string[]; lineCount: number }>()
+  const fileMap = new Map<string, { path: string; name: string; content: string; lineCount: number }>()
   if (files) {
     for (const [path, { content }] of files) {
       fileMap.set(path, {
         path,
         name: path.split('/').pop() || path,
         content,
-        lines: content.split('\n'),
         lineCount: content.split('\n').length,
       })
     }

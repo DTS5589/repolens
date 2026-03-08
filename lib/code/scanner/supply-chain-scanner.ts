@@ -2,6 +2,7 @@
 // GitHub Actions workflows, and Python dependency files.
 
 import type { CodeIndex } from '../code-index'
+import { getFileLines } from '../code-index'
 import type { CodeIssue } from './types'
 
 // ---------------------------------------------------------------------------
@@ -582,7 +583,8 @@ export function scanSupplyChain(codeIndex: CodeIndex): CodeIssue[] {
   const issues: CodeIssue[] = []
 
   for (const [path, file] of codeIndex.files) {
-    const { content, lines } = file
+    const content = file.content
+    const lines = getFileLines(file)
     const filename = path.split('/').pop() || ''
 
     if (filename === 'package.json') {

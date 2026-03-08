@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 import { useRepository } from "@/providers"
+import { getFileLines } from "@/lib/code/code-index"
 import type { Tour, TourStop } from "@/types/tours"
 
 interface TourPlaybackProps {
@@ -38,8 +39,8 @@ export function TourPlayback({
   const snippet = useMemo(() => {
     if (!currentStop || !codeIndex) return null
     const file = codeIndex.files.get(currentStop.filePath)
-    if (!file?.lines) return null
-    const lines = file.lines.slice(
+    if (!file) return null
+    const lines = getFileLines(file).slice(
       Math.max(0, currentStop.startLine - 1),
       currentStop.endLine,
     )

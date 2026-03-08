@@ -10,6 +10,7 @@ import * as t from '@babel/types'
 import type { ParseResult } from '@babel/parser'
 import type { File } from '@babel/types'
 import type { IndexedFile } from '../code-index'
+import { getFileLines } from '../code-index'
 import type { CodeIssue, IssueSeverity } from './types'
 
 // CJS/ESM interop (same pattern as ast-analysis.ts)
@@ -247,7 +248,7 @@ export function trackTaint(
   const flows: TaintFlow[] = []
 
   // Guard: skip taint analysis on very large files to avoid UI freezing
-  if (file.content.length > MAX_TAINT_FILE_BYTES || file.lines.length > MAX_TAINT_FILE_LINES) {
+  if (file.content.length > MAX_TAINT_FILE_BYTES || getFileLines(file).length > MAX_TAINT_FILE_LINES) {
     return flows
   }
 
@@ -265,17 +266,17 @@ export function trackTaint(
 
         // Mark function params with source-like names as tainted
         for (const param of node.params) {
-          markParamTaint(param, state, sources, file.lines)
+          markParamTaint(param, state, sources, getFileLines(file))
         }
 
         // Walk the function body to track taint propagation
         fnPath.traverse({
           VariableDeclarator(path: NodePath<t.VariableDeclarator>) {
-            processDeclarator(path.node, state, sources, sanitizers, file.lines)
+            processDeclarator(path.node, state, sources, sanitizers, getFileLines(file))
           },
 
           AssignmentExpression(path: NodePath<t.AssignmentExpression>) {
-            processAssignment(path.node, state, sources, sanitizers, file.lines)
+            processAssignment(path.node, state, sources, sanitizers, getFileLines(file))
             checkAssignmentSink(path.node, state, sinks, flows, file)
           },
 
@@ -489,14 +490,14 @@ function checkCallSink(
   file: IndexedFile,
   sources: TaintSource[],
 ): void {
-  const callText = nodeToSource(node, file.lines)
+  const callText = nodeToSource(node, getFileLines(file))
   const sink = matchesSink(callText, sinks)
   if (!sink) return
 
   for (const arg of node.arguments) {
     if (!t.isExpression(arg)) continue
 
-    const argText = nodeToSource(arg, file.lines)
+    const argText = nodeToSource(arg, getFileLines(file))
 
     // Direct source in argument
     const directSource = matchesSource(argText, sources)
@@ -539,7 +540,7 @@ function checkAssignmentSink(
   flows: TaintFlow[],
   file: IndexedFile,
 ): void {
-  const lhsText = nodeToSource(node.left, file.lines)
+  const lhsText = nodeToSource(node.left, getFileLines(file))
   const fullText = `${lhsText} = `
   const sink = matchesSink(fullText, sinks)
   if (!sink) return

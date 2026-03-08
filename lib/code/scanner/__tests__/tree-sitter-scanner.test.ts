@@ -27,7 +27,6 @@ const mockedGetLanguageForFile = vi.mocked(getLanguageForFile)
 function makeFile(content: string): IndexedFile {
   return {
     content,
-    lines: content.split('\n'),
     language: 'python',
     path: 'test.py',
     size: content.length,

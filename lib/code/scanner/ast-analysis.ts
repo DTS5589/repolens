@@ -12,6 +12,7 @@ const traverse = (typeof _traverse === 'function' ? _traverse : (_traverse as un
 import type { ParseResult } from '@babel/parser'
 import type { File } from '@babel/types'
 import type { IndexedFile } from '../code-index'
+import { getFileLines } from '../code-index'
 import type { CodeIssue, IssueCategory, IssueSeverity } from './types'
 
 /** Common variable names expected to be reused across scopes (loop vars, error vars, etc.) */
@@ -84,8 +85,9 @@ function createASTIssue(
   },
 ): CodeIssue {
   const lineIdx = opts.line - 1
-  const snippet = (lineIdx >= 0 && lineIdx < file.lines.length)
-    ? file.lines[lineIdx].trim()
+  const fileLines = getFileLines(file)
+  const snippet = (lineIdx >= 0 && lineIdx < fileLines.length)
+    ? fileLines[lineIdx].trim()
     : ''
 
   return {

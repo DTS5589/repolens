@@ -15,14 +15,12 @@ import type { IndexedFile } from '../code-index'
 // ============================================================================
 
 function makeFile(content: string, language = 'typescript'): IndexedFile {
-  const lines = content.split('\n')
   return {
     path: 'test.ts',
     name: 'test.ts',
     content,
     language,
-    lines,
-    lineCount: lines.length,
+    lineCount: content.split('\n').length,
   }
 }
 

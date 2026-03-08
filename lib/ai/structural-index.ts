@@ -1,4 +1,5 @@
 import type { CodeIndex, IndexedFile } from '@/lib/code/code-index'
+import { getFileLines } from '@/lib/code/code-index'
 
 export interface RichFileMetadata {
   path: string
@@ -230,7 +231,7 @@ export function extractExports(file: IndexedFile): string[] {
   const exportRegex = getExportRegex(language)
   const exports: string[] = []
 
-  for (const line of file.lines) {
+  for (const line of getFileLines(file)) {
     if (exportRegex) {
       const exportMatch = exportRegex.exec(line)
       if (exportMatch) {
@@ -289,7 +290,7 @@ export function extractSignatures(file: IndexedFile): string[] {
   const symbolPatterns = getLanguagePatterns(language)
   const symbols = new Set<string>()
 
-  for (const line of file.lines) {
+  for (const line of getFileLines(file)) {
     for (const pat of symbolPatterns) {
       pat.regex.lastIndex = 0
       let sm: RegExpExecArray | null

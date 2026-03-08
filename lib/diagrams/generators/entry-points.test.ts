@@ -106,14 +106,12 @@ describe('generateEntryPoints', () => {
     // Add route content to the code index
     const codeIndex = createMinimalCodeIndex()
     const routeContent = 'app.get("/api/users", handler)\napp.post("/api/login", loginHandler)\n'
-    const lines = routeContent.split('\n')
     codeIndex.files.set('src/services/api.ts', {
       path: 'src/services/api.ts',
       name: 'api.ts',
       content: routeContent,
       language: 'typescript',
-      lines,
-      lineCount: lines.length,
+      lineCount: routeContent.split('\n').length,
     })
 
     const result = generateEntryPoints(analysis, codeIndex, [])

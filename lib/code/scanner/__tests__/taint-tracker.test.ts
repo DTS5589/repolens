@@ -16,14 +16,12 @@ import type { TaintFlow } from '../taint-tracker'
 // ---------------------------------------------------------------------------
 
 function makeFile(code: string, path = 'test.ts'): IndexedFile {
-  const lines = code.split('\n')
   return {
     path,
     name: path.split('/').pop() ?? path,
     content: code,
     language: 'typescript',
-    lines,
-    lineCount: lines.length,
+    lineCount: code.split('\n').length,
   }
 }
 

@@ -2,6 +2,7 @@
 // patterns. The danger comes from the combination, not a single line.
 
 import type { CodeIndex } from '../code-index'
+import { getFileLines } from '../code-index'
 import type { CompositeRule, CodeIssue } from './types'
 import { JS_TS, PY, SKIP_VENDORED } from './constants'
 import { isExampleOrDocsFile, hasInlineSuppression } from './context-classifier'
@@ -538,6 +539,7 @@ export function scanCompositeRules(codeIndex: CodeIndex): CodeIssue[] {
   for (const [path, file] of codeIndex.files) {
     // Check file extension
     const ext = '.' + (path.split('.').pop() || '').toLowerCase()
+    const fileLines = getFileLines(file)
     
     for (const rule of COMPOSITE_RULES) {
       if (!rule.fileFilter.includes(ext)) continue
@@ -567,11 +569,11 @@ export function scanCompositeRules(codeIndex: CodeIndex): CodeIssue[] {
       if (rule.sourceBeforeSink && rule.requiredPatterns.length >= 2) {
         let sourceLine = -1
         let sinkMatchLine = -1
-        for (let i = 0; i < file.lines.length; i++) {
-          if (sourceLine === -1 && rule.requiredPatterns[0].test(file.lines[i])) {
+        for (let i = 0; i < fileLines.length; i++) {
+          if (sourceLine === -1 && rule.requiredPatterns[0].test(fileLines[i])) {
             sourceLine = i
           }
-          if (sinkMatchLine === -1 && rule.requiredPatterns[1].test(file.lines[i])) {
+          if (sinkMatchLine === -1 && rule.requiredPatterns[1].test(fileLines[i])) {
             sinkMatchLine = i
           }
           if (sourceLine !== -1 && sinkMatchLine !== -1) break
@@ -583,8 +585,8 @@ export function scanCompositeRules(codeIndex: CodeIndex): CodeIssue[] {
       if (rule.maxLineDistance !== undefined) {
         const matchLines: number[] = []
         for (const pattern of rule.requiredPatterns) {
-          for (let i = 0; i < file.lines.length; i++) {
-            if (pattern.test(file.lines[i])) {
+          for (let i = 0; i < fileLines.length; i++) {
+            if (pattern.test(fileLines[i])) {
               matchLines.push(i)
               break
             }
@@ -598,9 +600,9 @@ export function scanCompositeRules(codeIndex: CodeIndex): CodeIssue[] {
 
       // Find ALL sink lines (where the dangerous operations happen)
       const sinkMatches: Array<{ line: number; snippet: string }> = []
-      for (let i = 0; i < file.lines.length; i++) {
-        if (rule.sinkPattern.test(file.lines[i])) {
-          sinkMatches.push({ line: i + 1, snippet: file.lines[i].trim() })
+      for (let i = 0; i < fileLines.length; i++) {
+        if (rule.sinkPattern.test(fileLines[i])) {
+          sinkMatches.push({ line: i + 1, snippet: fileLines[i].trim() })
         }
       }
       if (sinkMatches.length === 0) {
@@ -615,15 +617,15 @@ export function scanCompositeRules(codeIndex: CodeIndex): CodeIssue[] {
 
       // Inline suppression: check first required pattern's match line
       let firstPatternMatchLine = -1
-      for (let i = 0; i < file.lines.length; i++) {
-        if (rule.requiredPatterns[0].test(file.lines[i])) {
+      for (let i = 0; i < fileLines.length; i++) {
+        if (rule.requiredPatterns[0].test(fileLines[i])) {
           firstPatternMatchLine = i
           break
         }
       }
       if (firstPatternMatchLine >= 0) {
-        const matchLineContent = file.lines[firstPatternMatchLine]
-        const prevLineContent = firstPatternMatchLine > 0 ? file.lines[firstPatternMatchLine - 1] : undefined
+        const matchLineContent = fileLines[firstPatternMatchLine]
+        const prevLineContent = firstPatternMatchLine > 0 ? fileLines[firstPatternMatchLine - 1] : undefined
         if (hasInlineSuppression(matchLineContent, prevLineContent, rule.id)) continue
       }
 

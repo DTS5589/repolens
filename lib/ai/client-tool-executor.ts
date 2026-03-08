@@ -1,5 +1,5 @@
 import type { CodeIndex, IndexedFile } from '@/lib/code/code-index'
-import { createEmptyIndex, indexFile, searchIndex } from '@/lib/code/code-index'
+import { createEmptyIndex, indexFile, searchIndex, getFileLines } from '@/lib/code/code-index'
 import { scanIssues } from '@/lib/code/scanner/scanner'
 import { LANG_EXTENSIONS } from '@/lib/code/scanner/constants'
 import { SYMBOL_PATTERNS } from '@/lib/ai/structural-index'
@@ -289,12 +289,13 @@ function executeSearchFiles(
       // Show up to 5 match locations per file with ±3 lines of context
       for (const match of sr.matches.slice(0, 5)) {
         const contextLines: string[] = []
-        const lineIdx = match.line - 1 // 0-based index into file.lines
+        const lineIdx = match.line - 1 // 0-based index into file lines
+        const fileLines = getFileLines(file)
 
         for (let offset = -3; offset <= 3; offset++) {
           const idx = lineIdx + offset
-          if (idx >= 0 && idx < file.lines.length) {
-            contextLines.push(`L${idx + 1}: ${file.lines[idx].trim().slice(0, 200)}`)
+          if (idx >= 0 && idx < fileLines.length) {
+            contextLines.push(`L${idx + 1}: ${fileLines[idx].trim().slice(0, 200)}`)
           }
         }
 
@@ -372,7 +373,7 @@ function executeFindSymbol(
   const nameL = input.name.toLowerCase()
 
   for (const [filePath, file] of codeIndex.files) {
-    const lines = file.lines
+    const lines = getFileLines(file)
     for (let i = 0; i < lines.length; i++) {
       for (const pat of patterns) {
         if (input.kind && input.kind !== 'any' && pat.kind !== input.kind) continue
@@ -405,7 +406,7 @@ function executeGetFileStats(
   const file = findFile(codeIndex, input.path)
   if (!file) return { error: `File not found: ${input.path}` }
 
-  const lines = file.lines
+  const lines = getFileLines(file)
   const ext = file.path.split('.').pop() || ''
   const importLines = lines.filter(l => l.match(/^import\s/))
   const exportLines = lines.filter(l => l.match(/^export\s/))
@@ -944,8 +945,8 @@ function executeGenerateTour(
 
   // Build tour stops
   const stops: TourStop[] = selected.map(({ path, file }) => {
-    const { startLine, endLine, title } = findSignificantRange(file.lines)
-    const annotation = generateAnnotation(path, file.lines, title)
+    const { startLine, endLine, title } = findSignificantRange(getFileLines(file))
+    const annotation = generateAnnotation(path, getFileLines(file), title)
 
     return {
       id: crypto.randomUUID(),

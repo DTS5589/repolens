@@ -7,6 +7,7 @@
 // Must be called from an async context (scanIssuesAsync or the scanner worker).
 
 import type { IndexedFile } from '../code-index'
+import { getFileLines } from '../code-index'
 import type { CodeIssue } from './types'
 import {
   initTreeSitter,
@@ -199,6 +200,7 @@ async function runRuleOnFileAsync(
 
 /** Extract a trimmed snippet from the file at the given 1-based line number. */
 function getSnippetAtLine(file: IndexedFile, line: number): string {
-  if (line < 1 || line > file.lines.length) return ''
-  return file.lines[line - 1].trim()
+  const fileLines = getFileLines(file)
+  if (line < 1 || line > fileLines.length) return ''
+  return fileLines[line - 1].trim()
 }
