@@ -7,6 +7,15 @@ relatedTools:
   - searchFiles
   - readFile
   - scanIssues
+lastReviewed: "2026-03-08"
+reviewCycleDays: 180
+standardsReferenced:
+  - name: WCAG
+    pinnedVersion: "2.2"
+  - name: WAI-ARIA
+    pinnedVersion: "1.2"
+  - name: EU Accessibility Act
+    pinnedVersion: "2025"
 ---
 
 ## Purpose

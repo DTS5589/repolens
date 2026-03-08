@@ -7,11 +7,18 @@ relatedTools:
   - scanIssues
   - readFile
   - searchFiles
+lastReviewed: "2026-03-08"
+reviewCycleDays: 180
+standardsReferenced:
+  - name: OWASP Top 10
+    pinnedVersion: "2021"
+  - name: CWE Top 25
+    pinnedVersion: "2024"
 ---
 
 ## Purpose
 
-Performs a structured security audit of the codebase using the OWASP Top 10 framework. The analysis traces data flow from user input to sink functions, classifies findings by severity using impact × likelihood scoring, and provides specific remediation guidance. The user receives a prioritized list of vulnerabilities with exact file locations, exploit scenarios, and code-level fixes.
+Performs a structured security audit of the codebase using the OWASP Top 10 (2021 edition) framework. The analysis traces data flow from user input to sink functions, classifies findings by severity using impact × likelihood scoring, and provides specific remediation guidance. The user receives a prioritized list of vulnerabilities with exact file locations, exploit scenarios, and code-level fixes.
 
 ## Prerequisites
 
@@ -30,7 +37,7 @@ Follow this structured approach for every security audit. Complete each phase in
    - Search for patterns: `route`, `handler`, `endpoint`, `middleware`
 4. Read `package.json` or equivalent to check for known vulnerable dependencies
 
-### Phase 2: OWASP Top 10 Analysis
+### Phase 2: OWASP Top 10 (2021 Edition) Analysis
 
 For each category, use the appropriate tools to investigate. Apply chain-of-thought verification: **trace the data flow from user input through processing to the point of use before confirming exploitability.**
 
@@ -90,7 +97,7 @@ For each category, use the appropriate tools to investigate. Apply chain-of-thou
 
 For each finding, report:
 1. **Severity**: Critical / High / Medium / Low / Informational (use severity table below)
-2. **Category**: Which OWASP category it falls under
+2. **Category**: Which OWASP Top 10 (2021) category it falls under
 3. **Location**: Exact file path and line reference
 4. **Description**: What the vulnerability is
 5. **Impact**: What an attacker could do

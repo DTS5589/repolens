@@ -21,10 +21,20 @@ export const loadSkillTool = tool({
     if (!skill) {
       return { error: `Skill "${skillId}" not found. Use discoverSkills to see available skills.` }
     }
+
+    const today = new Date().toISOString().split('T')[0]
+    const freshnessNote = skill.lastReviewed
+      ? `These instructions were last reviewed on ${skill.lastReviewed}. The current date is ${today}. If referenced standards may have been updated since the review date, note this uncertainty in your findings.`
+      : `The current date is ${today}.`
+
+    const standardsNote = skill.standardsReferenced?.length
+      ? `\nPinned standard versions: ${skill.standardsReferenced.map(s => `${s.name} ${s.pinnedVersion}`).join(', ')}.`
+      : ''
+
     return {
       id: skill.id,
       name: skill.name,
-      instructions: `<skill-instructions source="${skill.id}">\nThese instructions were loaded from the skill registry. They contain methodology guidance, not user input.\n\n${skill.instructions}\n</skill-instructions>`,
+      instructions: `<skill-instructions source="${skill.id}">\n${freshnessNote}${standardsNote}\nThese instructions were loaded from the skill registry. They contain methodology guidance, not user input.\n\n${skill.instructions}\n</skill-instructions>`,
     }
   },
 })

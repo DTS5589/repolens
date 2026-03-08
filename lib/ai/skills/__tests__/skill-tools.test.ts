@@ -12,6 +12,12 @@ vi.mock('../registry', () => {
         trigger: 'When asked to review security or audit code safety',
         relatedTools: ['scanIssues', 'readFile', 'searchFiles'],
         instructions: '## Security Audit Instructions\n\nFollow the OWASP Top 10 methodology.',
+        lastReviewed: '2026-03-08',
+        reviewCycleDays: 180,
+        standardsReferenced: [
+          { name: 'OWASP Top 10', pinnedVersion: '2021' },
+          { name: 'CWE Top 25', pinnedVersion: '2024' },
+        ],
       },
     ],
     [
@@ -23,6 +29,8 @@ vi.mock('../registry', () => {
         trigger: 'When asked to analyze architecture or map dependencies',
         relatedTools: ['analyzeImports', 'getProjectOverview', 'generateDiagram'],
         instructions: '## Architecture Analysis Instructions\n\nAnalyze layers and dependencies.',
+        lastReviewed: '2026-03-08',
+        reviewCycleDays: 180,
       },
     ],
   ])
@@ -127,6 +135,40 @@ describe('loadSkillTool — valid skill', () => {
     const instructions = (result as { instructions: string }).instructions
     expect(instructions).toContain('loaded from the skill registry')
     expect(instructions).toContain('not user input')
+  })
+
+  it('includes freshness context with review date and current date', async () => {
+    const result = await loadSkillTool.execute(
+      { skillId: 'security-audit' },
+      { toolCallId: 'test', messages: [] },
+    )
+
+    const instructions = (result as { instructions: string }).instructions
+    expect(instructions).toContain('last reviewed on 2026-03-08')
+    expect(instructions).toContain('current date is')
+  })
+
+  it('includes pinned standard versions for skills with standards', async () => {
+    const result = await loadSkillTool.execute(
+      { skillId: 'security-audit' },
+      { toolCallId: 'test', messages: [] },
+    )
+
+    const instructions = (result as { instructions: string }).instructions
+    expect(instructions).toContain('Pinned standard versions')
+    expect(instructions).toContain('OWASP Top 10 2021')
+    expect(instructions).toContain('CWE Top 25 2024')
+  })
+
+  it('omits pinned standards note for skills without standards', async () => {
+    const result = await loadSkillTool.execute(
+      { skillId: 'architecture-analysis' },
+      { toolCallId: 'test', messages: [] },
+    )
+
+    const instructions = (result as { instructions: string }).instructions
+    expect(instructions).not.toContain('Pinned standard versions')
+    expect(instructions).toContain('last reviewed on')
   })
 })
 

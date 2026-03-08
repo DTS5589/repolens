@@ -8,6 +8,11 @@ relatedTools:
   - readFile
   - searchFiles
   - analyzeImports
+lastReviewed: "2026-03-08"
+reviewCycleDays: 180
+standardsReferenced:
+  - name: Core Web Vitals
+    pinnedVersion: "2024"
 ---
 
 ## Purpose

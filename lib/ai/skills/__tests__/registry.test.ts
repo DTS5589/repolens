@@ -61,6 +61,8 @@ describe('SkillRegistry — listSkills', () => {
       expect(skill.description.length).toBeGreaterThan(0)
       expect(skill.trigger.length).toBeGreaterThan(0)
       expect(skill.relatedTools.length).toBeGreaterThan(0)
+      expect(skill.lastReviewed).toBeDefined()
+      expect(skill.reviewCycleDays).toBeDefined()
     }
   })
 
@@ -196,6 +198,19 @@ describe('SkillRegistry — getSkill', () => {
     expect(skill).not.toBeNull()
     expect(skill!.id).toBe('type-safety-audit')
     expect(skill!.name).toBe('Type Safety Audit')
+  })
+
+  it('skills with standards have standardsReferenced', () => {
+    const securitySkill = registry.getSkill('security-audit')
+    expect(securitySkill!.standardsReferenced).toBeDefined()
+    expect(securitySkill!.standardsReferenced!.length).toBeGreaterThan(0)
+    expect(securitySkill!.standardsReferenced![0]).toHaveProperty('name')
+    expect(securitySkill!.standardsReferenced![0]).toHaveProperty('pinnedVersion')
+  })
+
+  it('skills without standards omit standardsReferenced', () => {
+    const gitSkill = registry.getSkill('git-analysis')
+    expect(gitSkill!.standardsReferenced).toBeUndefined()
   })
 
   it('returns null for nonexistent skill', () => {

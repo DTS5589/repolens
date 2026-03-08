@@ -7,6 +7,13 @@ relatedTools:
   - readFile
   - searchFiles
   - getProjectOverview
+lastReviewed: "2026-03-08"
+reviewCycleDays: 180
+standardsReferenced:
+  - name: SPDX License List
+    pinnedVersion: "3.25"
+  - name: CVE Database (NVD)
+    pinnedVersion: "2024"
 ---
 
 ## Purpose

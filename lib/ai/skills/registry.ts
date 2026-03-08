@@ -6,12 +6,20 @@ import { SKILL_ID_SCHEMA, type SkillDefinition, type SkillSummary } from './type
 
 const DEFINITIONS_DIR = path.join(process.cwd(), 'lib', 'ai', 'skills', 'definitions')
 
+const standardReferenceSchema = z.object({
+  name: z.string().min(1),
+  pinnedVersion: z.string().min(1),
+})
+
 const frontmatterSchema = z.object({
   id: SKILL_ID_SCHEMA,
   name: z.string().min(1).max(200),
   description: z.string().min(1).max(500),
   trigger: z.string().min(1).max(500),
   relatedTools: z.array(z.string().min(1)).min(1),
+  lastReviewed: z.string().date().optional(),
+  reviewCycleDays: z.number().int().positive().optional(),
+  standardsReferenced: z.array(standardReferenceSchema).optional(),
 })
 
 export class SkillRegistry {
@@ -57,6 +65,9 @@ export class SkillRegistry {
         trigger,
         relatedTools,
         instructions: content.trim(),
+        lastReviewed: parsed.data.lastReviewed,
+        reviewCycleDays: parsed.data.reviewCycleDays,
+        standardsReferenced: parsed.data.standardsReferenced,
       })
     }
 
@@ -73,12 +84,14 @@ export class SkillRegistry {
 
   listSkills(): SkillSummary[] {
     this.ensureLoaded()
-    return Array.from(this.skills.values()).map(({ id, name, description, trigger, relatedTools }) => ({
+    return Array.from(this.skills.values()).map(({ id, name, description, trigger, relatedTools, lastReviewed, reviewCycleDays }) => ({
       id,
       name,
       description,
       trigger,
       relatedTools,
+      lastReviewed,
+      reviewCycleDays,
     }))
   }
 }

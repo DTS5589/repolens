@@ -6,6 +6,8 @@ trigger: When asked to analyze git history, contributor patterns, change frequen
 relatedTools:
   - getGitHistory
   - readFile
+lastReviewed: "2026-03-08"
+reviewCycleDays: 180
 ---
 
 ## Purpose
