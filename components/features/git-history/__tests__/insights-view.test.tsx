@@ -344,6 +344,8 @@ describe('Git History integration', () => {
       useApp: vi.fn(() => ({ selectedFilePath: null, setSelectedFilePath: vi.fn() })),
       useRepository: vi.fn(() => ({
         repo: { owner: 'test', name: 'repo', defaultBranch: 'main' },
+        getTabCache: vi.fn(() => undefined),
+        setTabCache: vi.fn(),
       })),
     }))
 

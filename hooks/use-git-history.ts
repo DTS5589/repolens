@@ -60,6 +60,8 @@ interface UseGitHistoryReturn {
   clearError: () => void
   /** Reset all state */
   reset: () => void
+  /** Hydrate commits from cached data */
+  hydrateCommits: (data: { commits: GitHubCommit[]; hasMore: boolean }) => void
 }
 
 export function useGitHistory(): UseGitHistoryReturn {
@@ -194,6 +196,11 @@ export function useGitHistory(): UseGitHistoryReturn {
     setCurrentPage(1)
   }, [])
 
+  const hydrateCommits = useCallback((data: { commits: GitHubCommit[]; hasMore: boolean }) => {
+    setCommits(data.commits)
+    setHasMore(data.hasMore)
+  }, [])
+
   return {
     viewMode,
     blameData,
@@ -214,5 +221,6 @@ export function useGitHistory(): UseGitHistoryReturn {
     setViewMode,
     clearError,
     reset,
+    hydrateCommits,
   }
 }

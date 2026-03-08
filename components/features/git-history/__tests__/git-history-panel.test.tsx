@@ -9,6 +9,8 @@ vi.mock('@/providers', () => ({
   useApp: vi.fn(() => ({ selectedFilePath: null, setSelectedFilePath: vi.fn() })),
   useRepository: vi.fn(() => ({
     repo: { owner: 'test', name: 'repo', defaultBranch: 'main' },
+    getTabCache: vi.fn(() => undefined),
+    setTabCache: vi.fn(),
   })),
 }))
 
@@ -48,6 +50,8 @@ describe('GitHistoryPanel', () => {
     } as unknown as ReturnType<typeof useApp>)
     vi.mocked(useRepository).mockReturnValue({
       repo: { owner: 'test', name: 'repo', defaultBranch: 'main' },
+      getTabCache: vi.fn(() => undefined),
+      setTabCache: vi.fn(),
     } as unknown as ReturnType<typeof useRepository>)
   })
 
@@ -60,7 +64,7 @@ describe('GitHistoryPanel', () => {
   })
 
   it('shows "no repo" message when repo is null', () => {
-    vi.mocked(useRepository).mockReturnValue({ repo: null } as ReturnType<typeof useRepository>)
+    vi.mocked(useRepository).mockReturnValue({ repo: null, getTabCache: vi.fn(() => undefined), setTabCache: vi.fn() } as ReturnType<typeof useRepository>)
 
     render(<GitHistoryPanel />)
 

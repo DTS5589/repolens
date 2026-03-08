@@ -10,6 +10,7 @@ import { compareVersions, isOutdated } from '@/lib/deps/version-checker'
 import type { DependencyHealth, NpmPackageMeta } from '@/lib/deps/types'
 import { cn } from '@/lib/utils'
 import { Package, RefreshCw } from 'lucide-react'
+import { useRepository } from '@/providers'
 import { DepsSummary } from './deps-summary'
 import { DepsTable } from './deps-table'
 import { DepsDetailDrawer } from './deps-detail-drawer'
@@ -27,6 +28,7 @@ export function DepsPanel({ codeIndex }: DepsPanelProps) {
   const [depTypes, setDepTypes] = useState<Map<string, 'production' | 'dev'>>(new Map())
   const [cveResults, setCveResults] = useState<CveResult[]>([])
   const [selectedDep, setSelectedDep] = useState<DependencyHealth | null>(null)
+  const { getTabCache, setTabCache } = useRepository()
 
   const loadDependencies = useCallback(async () => {
     setLoadState('loading')
@@ -98,20 +100,29 @@ export function DepsPanel({ codeIndex }: DepsPanelProps) {
 
       setHealthData(results)
       setLoadState('loaded')
+      setTabCache('deps', { healthData: results, depTypes: typeMap, cveResults: cves })
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       console.error('[deps-panel] Failed to load dependencies:', message)
       setErrorMessage(message)
       setLoadState('error')
     }
-  }, [codeIndex])
+  }, [codeIndex, setTabCache])
 
   // Load on mount / codeIndex change
   useEffect(() => {
     if (codeIndex.totalFiles > 0) {
+      const cached = getTabCache<{ healthData: DependencyHealth[]; depTypes: Map<string, 'production' | 'dev'>; cveResults: CveResult[] }>('deps')
+      if (cached) {
+        setHealthData(cached.healthData)
+        setDepTypes(cached.depTypes)
+        setCveResults(cached.cveResults)
+        setLoadState('loaded')
+        return
+      }
       loadDependencies()
     }
-  }, [codeIndex, loadDependencies])
+  }, [codeIndex, loadDependencies, getTabCache])
 
   // CVEs for selected dep
   const selectedCves = useMemo(() => {

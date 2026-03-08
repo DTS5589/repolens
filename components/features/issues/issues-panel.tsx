@@ -50,7 +50,7 @@ export function IssuesPanel({ codeIndex, onNavigateToFile }: IssuesPanelProps) {
   const validatingIssuesRef = useRef(validatingIssues)
   validatingIssuesRef.current = validatingIssues
 
-  const { codebaseAnalysis: analysis } = useRepository()
+  const { codebaseAnalysis: analysis, getTabCache, setTabCache } = useRepository()
   const { selectedProvider, selectedModel, apiKeys } = useAPIKeys()
 
   const [results, setResults] = useState<ScanResults | null>(null)
@@ -62,6 +62,12 @@ export function IssuesPanel({ codeIndex, onNavigateToFile }: IssuesPanelProps) {
       return
     }
 
+    const cached = getTabCache<ScanResults>('issues')
+    if (cached) {
+      setResults(cached)
+      return
+    }
+
     let stale = false
     setScanLoading(true)
 
@@ -69,6 +75,7 @@ export function IssuesPanel({ codeIndex, onNavigateToFile }: IssuesPanelProps) {
       .then(scanResults => {
         if (stale) return
         setResults(scanResults)
+        setTabCache('issues', scanResults)
       })
       .catch(err => {
         if (stale) return
@@ -79,7 +86,7 @@ export function IssuesPanel({ codeIndex, onNavigateToFile }: IssuesPanelProps) {
       })
 
     return () => { stale = true }
-  }, [codeIndex, analysis])
+  }, [codeIndex, analysis, getTabCache, setTabCache])
 
   const {
     batchValidate,

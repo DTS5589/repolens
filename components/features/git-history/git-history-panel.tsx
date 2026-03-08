@@ -41,7 +41,7 @@ const VIEW_TABS: Array<{ id: GitHistoryView; label: string; icon: typeof History
 
 export function GitHistoryPanel({ navigateToFile }: GitHistoryPanelProps) {
   const { selectedFilePath } = useApp()
-  const { repo } = useRepository()
+  const { repo, getTabCache, setTabCache } = useRepository()
   const { data: session } = useSession()
 
   const {
@@ -63,6 +63,7 @@ export function GitHistoryPanel({ navigateToFile }: GitHistoryPanelProps) {
     setViewMode,
     clearError,
     reset,
+    hydrateCommits,
   } = useGitHistory()
 
   const owner = repo?.owner ?? ''
@@ -86,12 +87,24 @@ export function GitHistoryPanel({ navigateToFile }: GitHistoryPanelProps) {
     let cancelled = false
     if (!owner || !name) return
     if ((viewMode === 'timeline' || viewMode === 'insights') && commits.length === 0 && !isLoading) {
+      const cached = getTabCache<{ commits: typeof commits; hasMore: boolean }>('gitHistory')
+      if (cached && cached.commits.length > 0) {
+        hydrateCommits(cached)
+        return
+      }
       fetchCommits(owner, name).then(() => {
         if (cancelled) return
       })
     }
     return () => { cancelled = true }
   }, [owner, name, viewMode]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Cache commits when they change
+  useEffect(() => {
+    if (commits.length > 0) {
+      setTabCache('gitHistory', { commits, hasMore })
+    }
+  }, [commits, hasMore, setTabCache])
 
   // Auto-load blame & file history when file changes (or when navigated to)
   useEffect(() => {

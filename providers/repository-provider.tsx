@@ -59,6 +59,10 @@ interface RepositoryContextType extends RepositoryContext {
   isPinned: (path: string) => boolean
   /** Assemble pinned file contents for system prompt injection. */
   getPinnedContents: () => PinnedContentsResult
+  /** Get cached tab data by key. Returns undefined if no cache for that key. */
+  getTabCache: <T>(key: string) => T | undefined
+  /** Store tab data in cache by key. */
+  setTabCache: (key: string, value: unknown) => void
 }
 
 const RepositoryContextDefault: RepositoryContext = {
@@ -87,6 +91,7 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
   const [isCacheHit, setIsCacheHit] = useState(false)
   const [loadingStage, setLoadingStage] = useState<LoadingStage>('idle')
   const [pinnedFiles, setPinnedFiles] = useState<Map<string, PinnedFile>>(new Map())
+  const tabCacheRef = useRef<Record<string, unknown>>({})
 
   const { token: githubToken } = useGitHubToken()
 
@@ -124,6 +129,7 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
     setCodeIndex(createEmptyIndex())
     setIndexingProgress(DEFAULT_INDEXING_PROGRESS)
     setFailedFiles([])
+    tabCacheRef.current = {}
     setIsCacheHit(false)
     setCodebaseAnalysis(null)
     setLoadingStage('metadata')
@@ -200,6 +206,7 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
     setIsCacheHit(false)
     setLoadingStage('idle')
     setPinnedFiles(new Map())
+    tabCacheRef.current = {}
   }, [])
   
   const updateCodeIndex = useCallback((index: CodeIndex) => {
@@ -260,6 +267,14 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
 
   const clearPins = useCallback(() => {
     setPinnedFiles(new Map())
+  }, [])
+
+  const getTabCache = useCallback(<T,>(key: string): T | undefined => {
+    return tabCacheRef.current[key] as T | undefined
+  }, [])
+
+  const setTabCache = useCallback((key: string, value: unknown) => {
+    tabCacheRef.current[key] = value
   }, [])
 
   const isPinned = useCallback((path: string): boolean => {
@@ -363,6 +378,8 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
     clearPins,
     isPinned,
     getPinnedContents,
+    getTabCache,
+    setTabCache,
   }), [
     repo, files, parsedFiles, isLoading, error,
     connectRepository, disconnectRepository, loadFileContent, getFileByPath,
@@ -371,6 +388,7 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
     modifiedContents, setModifiedContents, getFileContent,
     codebaseAnalysis, failedFiles, isCacheHit, loadingStage,
     pinnedFiles, pinFile, unpinFile, clearPins, isPinned, getPinnedContents,
+    getTabCache, setTabCache,
   ])
 
   return (

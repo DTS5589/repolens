@@ -52,6 +52,17 @@ vi.mock('@/components/ui/tooltip', () => ({
   TooltipProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }))
 
+vi.mock('@/providers', () => {
+  const getTabCache = vi.fn(() => undefined)
+  const setTabCache = vi.fn()
+  return {
+    useRepository: () => ({
+      getTabCache,
+      setTabCache,
+    }),
+  }
+})
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------

@@ -97,6 +97,8 @@ vi.mock('@/lib/code/issue-scanner', () => ({
 vi.mock('@/providers', () => ({
   useRepository: () => ({
     codebaseAnalysis: { files: new Map() },
+    getTabCache: () => undefined,
+    setTabCache: () => {},
   }),
 }))
 
