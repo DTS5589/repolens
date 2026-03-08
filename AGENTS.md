@@ -24,7 +24,7 @@
 | Forms | react-hook-form + zod | ^7.60 / 3.25.x |
 | Charts | Recharts | 2.15.4 |
 | Icons | lucide-react | ^0.454.0 |
-| Archive Handling | JSZip | ^3.10.1 |
+| Archive Handling | fflate | ^0.8.2 |
 | Package Manager | pnpm | — |
 | Unit Testing | Vitest + Testing Library | ^4.0.18 |
 | E2E Testing | Playwright | ^1.58.2 |

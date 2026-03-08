@@ -5,12 +5,23 @@ import path from 'path';
 export default defineConfig({
   plugins: [react()],
   resolve: {
-    alias: { '@': path.resolve(__dirname, '.') },
+    alias: {
+      '@': path.resolve(__dirname, '.'),
+    },
+    // Prefer Node.js-compatible builds for packages like fflate whose browser builds
+    // use Web Workers that don't function in jsdom.
+    conditions: ['node'],
   },
   test: {
     globals: true,
     environment: 'jsdom',
     setupFiles: ['./test/setup.ts'],
+    server: {
+      deps: {
+        // Inline fflate so Vite doesn't pre-bundle it (avoids breaking binary ops)
+        inline: ['fflate'],
+      },
+    },
     include: [
       'lib/**/*.test.ts',
       'app/**/*.test.ts',

@@ -1,6 +1,6 @@
 // Zipball API — bulk-download all repo files in a single request via GitHub's zipball endpoint.
 
-import JSZip from 'jszip'
+import { unzip, strFromU8 } from 'fflate'
 
 /** Extensions considered indexable for code search and AI context. */
 export const INDEXABLE_EXTENSIONS = new Set([
@@ -11,6 +11,22 @@ export const INDEXABLE_EXTENSIONS = new Set([
   'json', 'yaml', 'yml', 'md', 'mdx', 'sql', 'graphql',
   'sh', 'bash', 'zsh', 'dockerfile',
 ])
+
+/**
+ * Wrap fflate's callback-based `unzip()` in a Promise.
+ * The async API auto-spawns Web Workers for parallel decompression.
+ */
+function unzipAsync(
+  data: Uint8Array,
+  filter?: (file: { name: string; originalSize: number }) => boolean,
+): Promise<Record<string, Uint8Array>> {
+  return new Promise((resolve, reject) => {
+    unzip(data, filter ? { filter } : {}, (err, result) => {
+      if (err) reject(err)
+      else resolve(result)
+    })
+  })
+}
 
 /** Maximum file size (in bytes) that we'll index. */
 const MAX_FILE_SIZE = 500_000
@@ -73,7 +89,24 @@ export async function fetchRepoZipball(
   }
 
   const arrayBuffer = await response.arrayBuffer()
-  const zip = await JSZip.loadAsync(arrayBuffer)
+  const data = new Uint8Array(arrayBuffer)
+
+  // Use fflate's async unzip with a filter that skips non-indexable files
+  // BEFORE decompression — this avoids wasting CPU on files we'd discard anyway.
+  const extracted = await unzipAsync(data, (file) => {
+    // Skip directory entries (paths ending in /)
+    if (file.name.endsWith('/')) return false
+
+    // Strip root prefix and check extension
+    const slashIndex = file.name.indexOf('/')
+    if (slashIndex === -1) return false
+
+    const relativePath = file.name.substring(slashIndex + 1)
+    if (!relativePath) return false
+
+    const ext = relativePath.split('/').pop()?.split('.').pop()?.toLowerCase()
+    return ext ? INDEXABLE_EXTENSIONS.has(ext) : false
+  })
 
   const files = new Map<string, string>()
   const MAX_TOTAL_EXTRACTED_SIZE = 200_000_000 // 200 MB cumulative limit
@@ -81,48 +114,25 @@ export async function fetchRepoZipball(
 
   // GitHub zipball wraps everything in a top-level directory: {owner}-{repo}-{sha}/
   // We strip this prefix so paths are relative to the repo root.
-  // Collect eligible entries first, then extract in parallel batches.
-  const entries: Array<{ path: string; zipEntry: JSZip.JSZipObject }> = []
-
-  for (const [zipPath, zipEntry] of Object.entries(zip.files)) {
-    if (zipEntry.dir) continue
-
+  for (const [zipPath, rawContent] of Object.entries(extracted)) {
     const slashIndex = zipPath.indexOf('/')
     if (slashIndex === -1) continue
 
     const relativePath = zipPath.substring(slashIndex + 1)
     if (!relativePath) continue
 
-    // Check extension before extracting content (avoid wasting time on non-indexable files)
-    const ext = relativePath.split('/').pop()?.split('.').pop()?.toLowerCase()
-    if (!ext || !INDEXABLE_EXTENSIONS.has(ext)) continue
+    const content = strFromU8(rawContent)
 
-    entries.push({ path: relativePath, zipEntry })
-  }
+    // Skip files that exceed the per-file size limit
+    if (content.length > MAX_FILE_SIZE) continue
 
-  // Extract in parallel batches of 50 for performance
-  const BATCH_SIZE = 50
-  for (let i = 0; i < entries.length; i += BATCH_SIZE) {
-    const batch = entries.slice(i, i + BATCH_SIZE)
-    const results = await Promise.all(
-      batch.map(async ({ path, zipEntry }) => {
-        const content = await zipEntry.async('string')
-        return { path, content }
-      }),
-    )
-
-    for (const { path, content } of results) {
-      // Skip files that exceed the per-file size limit
-      if (content.length > MAX_FILE_SIZE) continue
-
-      totalExtracted += content.length
-      if (totalExtracted > MAX_TOTAL_EXTRACTED_SIZE) {
-        console.warn(`Zipball extraction exceeded ${MAX_TOTAL_EXTRACTED_SIZE} bytes — aborting remaining files`)
-        return files
-      }
-
-      files.set(path, content)
+    totalExtracted += content.length
+    if (totalExtracted > MAX_TOTAL_EXTRACTED_SIZE) {
+      console.warn(`Zipball extraction exceeded ${MAX_TOTAL_EXTRACTED_SIZE} bytes — aborting remaining files`)
+      return files
     }
+
+    files.set(relativePath, content)
   }
 
   return files

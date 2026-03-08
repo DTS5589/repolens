@@ -1,24 +1,27 @@
+// @vitest-environment node
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import JSZip from 'jszip'
+import { zipSync, strToU8, unzipSync, strFromU8, unzip } from 'fflate'
 import { isFileIndexable, fetchRepoZipball, INDEXABLE_EXTENSIONS } from '../zipball'
 
 // ---------------------------------------------------------------------------
-// Helpers — create mock ZIP archives with JSZip
+// Helpers — create mock ZIP archives with fflate
 // ---------------------------------------------------------------------------
 
 /**
  * Build a minimal ZIP ArrayBuffer mimicking GitHub's zipball structure.
  * GitHub wraps everything in a `{owner}-{repo}-{sha}/` root directory.
  */
-async function createMockZip(
+function createMockZip(
   files: Record<string, string>,
   rootPrefix = 'owner-repo-abc123',
-): Promise<ArrayBuffer> {
-  const zip = new JSZip()
+): ArrayBuffer {
+  const archive: Record<string, Uint8Array> = {}
   for (const [path, content] of Object.entries(files)) {
-    zip.file(`${rootPrefix}/${path}`, content)
+    archive[`${rootPrefix}/${path}`] = strToU8(content)
   }
-  return zip.generateAsync({ type: 'arraybuffer' })
+  const compressed = zipSync(archive)
+  // zipSync may return a view into a larger buffer — slice to get exact bytes
+  return compressed.buffer.slice(compressed.byteOffset, compressed.byteOffset + compressed.byteLength) as ArrayBuffer
 }
 
 // ---------------------------------------------------------------------------
@@ -73,8 +76,52 @@ describe('fetchRepoZipball', () => {
     vi.restoreAllMocks()
   })
 
+  it('DEBUG: fflate unzip works in this environment', async () => {
+    // Import the native Node.js module directly, bypassing Vite's transformation
+    const nodeFflate = await vi.importActual<typeof import('fflate')>('fflate')
+    const archive: Record<string, Uint8Array> = { 'root/test.ts': nodeFflate.strToU8('hello') }
+    const compressed = nodeFflate.zipSync(archive)
+    console.log('NODE zipSync length:', compressed.length)
+    console.log('NODE first 4 bytes:', Array.from(compressed.slice(0, 4)))
+
+    const buf = compressed.buffer.slice(compressed.byteOffset, compressed.byteOffset + compressed.byteLength)
+    const data = new Uint8Array(buf)
+
+    // Try unzipSync from the Vite-transformed module
+    const syncResult = unzipSync(data)
+    console.log('VITE UNZIP KEYS:', JSON.stringify(Object.keys(syncResult)))
+    for (const [k, v] of Object.entries(syncResult)) {
+      console.log(`KEY: "${k}" -> length: ${v.length}, content: "${strFromU8(v)}"`)
+    }
+
+    expect(true).toBe(true)
+  })
+
+  it('DEBUG: Response.arrayBuffer round-trip', async () => {
+    const archive: Record<string, Uint8Array> = { 'root/test.ts': strToU8('hello') }
+    const compressed = zipSync(archive)
+    const buf = compressed.buffer.slice(compressed.byteOffset, compressed.byteOffset + compressed.byteLength) as ArrayBuffer
+
+    const response = new Response(buf, { status: 200 })
+    const ab = await response.arrayBuffer()
+    console.log('original length:', buf.byteLength, 'response ab length:', ab.byteLength)
+
+    const data = new Uint8Array(ab)
+    console.log('first 4 bytes:', Array.from(data.slice(0, 4)))
+
+    const result = await new Promise<Record<string, Uint8Array>>((resolve, reject) => {
+      unzip(data, {}, (err, res) => {
+        if (err) reject(err)
+        else resolve(res)
+      })
+    })
+
+    console.log('unzip result keys:', Object.keys(result))
+    expect(Object.keys(result).length).toBeGreaterThan(0)
+  })
+
   it('parses a ZIP and returns indexable files with stripped root prefix', async () => {
-    const zipBuffer = await createMockZip({
+    const zipBuffer = createMockZip({
       'src/index.ts': 'export const x = 1;',
       'src/utils.ts': 'export function add(a: number, b: number) { return a + b; }',
       'README.md': '# Hello',
@@ -93,7 +140,7 @@ describe('fetchRepoZipball', () => {
   })
 
   it('filters out non-indexable extensions', async () => {
-    const zipBuffer = await createMockZip({
+    const zipBuffer = createMockZip({
       'src/app.ts': 'const app = true;',
       'assets/logo.png': 'binary-data-here',
       'fonts/custom.woff': 'font-data',
@@ -113,7 +160,7 @@ describe('fetchRepoZipball', () => {
 
   it('excludes files exceeding the 500KB size limit', async () => {
     const hugeContent = 'x'.repeat(500_001)
-    const zipBuffer = await createMockZip({
+    const zipBuffer = createMockZip({
       'small.ts': 'const x = 1;',
       'huge.ts': hugeContent,
     })
@@ -130,8 +177,7 @@ describe('fetchRepoZipball', () => {
   })
 
   it('returns an empty Map for an empty ZIP', async () => {
-    const zip = new JSZip()
-    const zipBuffer = await zip.generateAsync({ type: 'arraybuffer' })
+    const zipBuffer = zipSync({}).buffer as ArrayBuffer
 
     vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
       new Response(zipBuffer, { status: 200 }),
@@ -173,7 +219,7 @@ describe('fetchRepoZipball', () => {
   })
 
   it('sends a POST to the proxy API with owner, repo, ref in body', async () => {
-    const zipBuffer = await createMockZip({ 'file.ts': 'x' })
+    const zipBuffer = createMockZip({ 'file.ts': 'x' })
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
       new Response(zipBuffer, { status: 200 }),
     )

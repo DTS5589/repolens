@@ -138,7 +138,7 @@ AI keys are configured in the UI — no environment variables required for basic
 | AI | [Vercel AI SDK v6](https://sdk.vercel.ai) |
 | Diagrams | [Mermaid.js](https://mermaid.js.org) |
 | Syntax highlighting | [Shiki](https://shiki.style) |
-| Repo extraction | [JSZip](https://stuk.github.io/jszip/) |
+| Repo extraction | [fflate](https://github.com/101arrowz/fflate) |
 | Testing | [Vitest](https://vitest.dev), [Playwright](https://playwright.dev) |
 | Deployment | [Vercel](https://vercel.com) |
 

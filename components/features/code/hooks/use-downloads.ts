@@ -61,16 +61,18 @@ export function useDownloads({
   const downloadAllModified = useCallback(async () => {
     if (modifiedTabs.length === 0) return
 
-    const JSZip = (await import('jszip')).default
-    const zip = new JSZip()
+    const { zipSync, strToU8 } = await import('fflate')
+    const archive: Record<string, Uint8Array> = {}
 
     for (const tab of modifiedTabs) {
       if (tab.content) {
-        zip.file(tab.path, tab.content)
+        archive[tab.path] = strToU8(tab.content)
       }
     }
 
-    const blob = await zip.generateAsync({ type: 'blob' })
+    const compressed = zipSync(archive)
+    const buf = compressed.buffer.slice(compressed.byteOffset, compressed.byteOffset + compressed.byteLength) as ArrayBuffer
+    const blob = new Blob([buf], { type: 'application/zip' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
@@ -105,8 +107,8 @@ export function useDownloads({
 
   // Download a folder from the explorer as a zip
   const downloadExplorerFolder = useCallback(async (node: FileNode) => {
-    const JSZip = (await import('jszip')).default
-    const zip = new JSZip()
+    const { zipSync, strToU8 } = await import('fflate')
+    const archive: Record<string, Uint8Array> = {}
 
     const fileNodes: FileNode[] = []
     const collectNodes = (n: FileNode) => {
@@ -130,11 +132,13 @@ export function useDownloads({
         const relativePath = result.value.path.startsWith(node.path + '/')
           ? result.value.path.slice(node.path.length + 1)
           : result.value.path.split('/').pop() || result.value.path
-        zip.file(relativePath, result.value.content!)
+        archive[relativePath] = strToU8(result.value.content!)
       }
     }
 
-    const blob = await zip.generateAsync({ type: 'blob' })
+    const compressed = zipSync(archive)
+    const buf = compressed.buffer.slice(compressed.byteOffset, compressed.byteOffset + compressed.byteLength) as ArrayBuffer
+    const blob = new Blob([buf], { type: 'application/zip' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
@@ -149,8 +153,8 @@ export function useDownloads({
   const downloadFullProject = useCallback(async () => {
     if (files.length === 0) return
 
-    const JSZip = (await import('jszip')).default
-    const zip = new JSZip()
+    const { zipSync, strToU8 } = await import('fflate')
+    const archive: Record<string, Uint8Array> = {}
 
     const allFiles = flattenFiles(files)
 
@@ -166,11 +170,13 @@ export function useDownloads({
 
     for (const result of results) {
       if (result.status === 'fulfilled' && result.value.content !== null) {
-        zip.file(result.value.path, result.value.content!)
+        archive[result.value.path] = strToU8(result.value.content!)
       }
     }
 
-    const blob = await zip.generateAsync({ type: 'blob' })
+    const compressed = zipSync(archive)
+    const buf = compressed.buffer.slice(compressed.byteOffset, compressed.byteOffset + compressed.byteLength) as ArrayBuffer
+    const blob = new Blob([buf], { type: 'application/zip' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
