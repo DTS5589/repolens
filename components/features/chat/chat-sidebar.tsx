@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useRef, useEffect } from "react"
+import { useState, useMemo, useRef, useEffect, useCallback } from "react"
 import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls, isToolUIPart } from "ai"
 import { Button } from "@/components/ui/button"
@@ -8,6 +8,7 @@ import { ChatMessage } from "./chat-message"
 import { ChatInput } from "./chat-input"
 import { PinnedContextChips } from "./pinned-context-chips"
 import { PinFilePicker } from "./pin-file-picker"
+import { SkillSelector } from "./skill-selector"
 import { TokenUsageFooter } from "./token-usage-footer"
 import { Bot, AlertCircle, Download } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -36,6 +37,19 @@ export function ChatSidebar({ className }: { className?: string }) {
   const { token: githubToken } = useGitHubToken()
   const [input, setInput] = useState("")
   const [compactionEnabled, setCompactionEnabled] = useState(false)
+  const [activeSkills, setActiveSkills] = useState<Set<string>>(new Set())
+
+  const handleSkillToggle = useCallback((skillId: string) => {
+    setActiveSkills(prev => {
+      const next = new Set(prev)
+      if (next.has(skillId)) {
+        next.delete(skillId)
+      } else {
+        next.add(skillId)
+      }
+      return next
+    })
+  }, [])
 
   // Memoize pinned contents to avoid recomputing every render
   const pinnedResult = useMemo(() => getPinnedContents(), [getPinnedContents])
@@ -185,6 +199,7 @@ export function ChatSidebar({ className }: { className?: string }) {
           pinnedContext: pinnedResult.content || undefined,
           maxSteps: 50,
           compactionEnabled,
+          ...(activeSkills.size > 0 ? { activeSkills: Array.from(activeSkills) } : {}),
         },
       },
     )
@@ -346,6 +361,12 @@ export function ChatSidebar({ className }: { className?: string }) {
                 onUnpin={unpinFile}
               />
             ) : undefined
+          }
+          skillPicker={
+            <SkillSelector
+              activeSkills={activeSkills}
+              onToggle={handleSkillToggle}
+            />
           }
         />
       </div>

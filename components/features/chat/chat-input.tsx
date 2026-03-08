@@ -17,6 +17,8 @@ interface ChatInputProps {
   pinnedChips?: ReactNode
   /** Slot rendered next to ModelSelector in the bottom bar (e.g. pin file picker). */
   pinPicker?: ReactNode
+  /** Slot rendered next to pinPicker in the bottom bar (e.g. skill selector). */
+  skillPicker?: ReactNode
   /** Called to abort an in-progress stream. */
   onStop?: () => void
 }
@@ -31,6 +33,7 @@ export function ChatInput({
   disabled = false,
   pinnedChips,
   pinPicker,
+  skillPicker,
   onStop,
 }: ChatInputProps) {
   const formRef = useRef<HTMLFormElement>(null)
@@ -65,6 +68,7 @@ export function ChatInput({
         <div className="flex items-center gap-1">
           <ModelSelector />
           {pinPicker}
+          {skillPicker}
         </div>
         <div className="flex items-center gap-1">
           {isLoading && onStop ? (
