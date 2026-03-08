@@ -33,6 +33,7 @@ vi.mock('@/providers', () => ({
   useApp: () => mockUseApp(),
   useRepository: () => mockUseRepository(),
   useAPIKeys: () => mockUseAPIKeys(),
+  useGitHubToken: () => ({ isHydrated: true }),
 }))
 
 vi.mock('@/lib/code/code-index', () => ({

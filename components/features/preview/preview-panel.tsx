@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense } from "react"
 import { cn } from "@/lib/utils"
-import { useApp, useRepository, useAPIKeys } from "@/providers"
+import { useApp, useRepository, useAPIKeys, useGitHubToken } from "@/providers"
 import { LoadingProgress } from "@/components/features/loading/loading-progress"
 import { ProjectSummaryPanel } from "@/components/features/repo/project-summary"
 import { flattenFiles } from "@/lib/code/code-index"
@@ -62,6 +62,7 @@ export function PreviewPanel({ className }: { className?: string }) {
   } = useRepository()
   const { getValidProviders, isHydrated } = useAPIKeys()
   const hasApiKey = isHydrated && getValidProviders().length > 0
+  const { isHydrated: isTokenHydrated } = useGitHubToken()
   const [localPreviewUrl, setLocalPreviewUrl] = useState<string | null>(null)
 
   // Show "Ready!" state briefly before transitioning to loaded view
@@ -92,14 +93,14 @@ export function PreviewPanel({ className }: { className?: string }) {
   // Shareable URL: auto-connect from URL params on mount
   const hasAutoLoaded = useRef(false)
   useEffect(() => {
-    if (hasAutoLoaded.current || repo) return
+    if (!isTokenHydrated || hasAutoLoaded.current || repo) return
     const shared = parseShareableUrl()
     if (!shared) return
     hasAutoLoaded.current = true
     setRepoUrl(shared.repoUrl)
     connectRepository(shared.repoUrl)
     if (shared.view) setActiveTab(shared.view)
-  }, [repo, connectRepository])
+  }, [isTokenHydrated, repo, connectRepository])
 
   // Shareable URL: sync URL bar when repo or tab changes
   useEffect(() => {
