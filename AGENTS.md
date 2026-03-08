@@ -47,8 +47,10 @@ workproject/                    # Next.js application root
 │       ├── changelog/          # AI changelog generation endpoint
 │       ├── chat/               # AI chat streaming endpoint
 │       ├── deps/               # Dependency health endpoint
+│       │   └── cve/            # CVE proxy for OSV API
 │       ├── docs/               # AI documentation generation endpoint
 │       ├── github/             # GitHub API proxy routes (blame, commits, tags, branches, compare, zipball)
+│       │   └── refs/           # Combined tags+branches endpoint
 │       ├── inline-actions/     # Inline code action AI endpoint
 │       ├── issues/             # Issues-related API routes
 │       ├── skills/             # Skills discovery API endpoint
@@ -66,6 +68,7 @@ workproject/                    # Next.js application root
 │       ├── chat/               # Chat sidebar, message display, input, model selector
 │       ├── code/               # Code browser, file tree, syntax viewer
 │       ├── compare/            # Side-by-side repo comparison UI
+│       │   └── similarity-section.tsx # Similarity/clone detection UI section
 │       ├── deps/               # Dependency health dashboard
 │       │   ├── deps-panel.tsx      # Main deps container
 │       │   ├── deps-summary.tsx    # Overall health summary
@@ -83,7 +86,12 @@ workproject/                    # Next.js application root
 │       │   ├── commit-timeline.tsx # Commit list grouped by date
 │       │   ├── file-history-list.tsx # File-specific commit history
 │       │   ├── commit-detail-view.tsx # Commit detail with unified diffs
-│       │   └── git-history-helpers.tsx # AuthorAvatar, CommitRow, DiffStats
+│       │   ├── git-history-helpers.tsx # AuthorAvatar, CommitRow, DiffStats
+│       │   ├── insights-view.tsx    # Insights container/orchestrator
+│       │   ├── insights-pulse-cards.tsx # Summary metric cards
+│       │   ├── insights-hours-chart.tsx # Estimated hours over time chart
+│       │   ├── insights-punchcard.tsx # Day × hour activity heatmap
+│       │   └── insights-author-chart.tsx # Per-author contribution breakdown
 │       ├── issues/             # Issue scanner results display
 │       ├── landing/            # Landing page hero/CTA
 │       ├── loading/            # Loading skeletons and progress indicators
@@ -166,6 +174,7 @@ workproject/                    # Next.js application root
 │   │       ├── types.ts              # Scanner type definitions
 │   │       └── index.ts              # Barrel exports
 │   ├── compare/                # Repository comparison logic
+│   │   └── similarity-utils.ts # Multi-signal repo similarity/clone detection scoring
 │   ├── deps/                   # Dependency health scoring
 │   │   ├── types.ts            # Dependency health types
 │   │   ├── health-scorer.ts    # Health scoring algorithm
@@ -179,6 +188,7 @@ workproject/                    # Next.js application root
 │   │   ├── blame-utils.ts      # Blame range expansion/stats
 │   │   ├── commit-utils.ts     # Commit grouping/stats
 │   │   ├── diff-utils.ts       # Unified diff parsing
+│   │   ├── hours-estimation.ts # Session-based coding hours estimation algorithm
 │   │   └── index.ts            # Barrel exports
 │   ├── github/                 # GitHub API client
 │   │   ├── client.ts           # Authenticated GitHub API wrapper + cached proxy functions
@@ -202,7 +212,7 @@ workproject/                    # Next.js application root
 ├── types/                      # Shared TypeScript type definitions
 │   ├── types.ts                # Core app types (AI providers, API keys, etc.)
 │   ├── repository.ts           # Repository-related types (FileNode, GitHubRepo)
-│   ├── comparison.ts           # Comparison feature types
+│   ├── comparison.ts           # Comparison feature types (includes SimilarityResult, SimilaritySignal, clone detection signals, treeItems)
 │   ├── tours.ts                # Tour and stop types
 │   └── git-history.ts          # Blame and commit detail types
 ├── config/
@@ -300,7 +310,7 @@ Each provider has a clear dependency chain. `RepositoryProvider` depends on no A
 
 ### Repository Loading Pipeline
 
-1. Parse GitHub URL → fetch metadata → fetch tree via API or zipball download
+1. Parse GitHub URL → fetch metadata → fetch tree via API or zipball download (zipball for repos under 200 MB)
 2. Extract files → build `CodeIndex` (in-memory search index) → cache in IndexedDB
 3. On repeat visits, compare tree SHA to serve from cache (LRU, max 5 repos)
 
@@ -326,7 +336,7 @@ The GitHub REST API does not support blame. `lib/github/graphql.ts` provides a l
 
 ### In-Memory SWR Cache
 
-`lib/cache/memory-cache.ts` provides a FIFO cache with configurable TTL and stale-while-revalidate semantics. GitHub API proxy functions in `lib/github/client.ts` use it to cache responses, serving stale data immediately while revalidating in the background. Max 100 entries with 5-minute TTL and 1-minute SWR window by default.
+`lib/cache/memory-cache.ts` provides a FIFO cache with configurable TTL and stale-while-revalidate semantics. GitHub API proxy functions in `lib/github/client.ts` use it to cache responses, serving stale data immediately while revalidating in the background. Max 500 entries with 5-minute TTL and 1-minute SWR window by default.
 
 ## BUILD_AND_TEST
 

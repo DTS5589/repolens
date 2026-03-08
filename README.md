@@ -30,7 +30,8 @@ https://github.com/user-attachments/assets/b8e775c1-0b64-4c0d-a58f-0a66b784496c
 - **Diagrams** — Auto-generated architecture diagrams using Mermaid.js — dependency graphs, component relationships, and more
 - **Documentation Generator** — AI-powered docs generation including README, Architecture Overview, API Reference, and Contributing Guide
 - **AI Chat** — Ask questions about any codebase with full context awareness and 9 specialized AI tools for deep analysis
-- **Compare** — Side-by-side repository comparison to evaluate alternatives
+- **Compare** — Side-by-side repository comparison with similarity/clone detection scoring to evaluate alternatives
+- **Git Insights** — Coding hours estimation, activity punchcard, and per-author contribution charts derived from commit history
 
 ---
 
@@ -123,6 +124,7 @@ AI keys are configured in the UI — no environment variables required for basic
 | Generate docs | Open the **Docs** tab and select a document type |
 | Chat with AI | Open the **Chat** tab and ask questions about the codebase |
 | Compare repos | Navigate to the **Compare** tab to evaluate repositories side-by-side |
+| View git insights | Open the **Git History** tab → **Insights** sub-tab for coding hours, activity heatmaps, and author charts |
 
 ---
 
