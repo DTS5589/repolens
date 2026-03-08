@@ -14,14 +14,18 @@ const KNOWN_SKILL_IDS = [
   'api-design-review',
   'architecture-analysis',
   'code-complexity',
+  'database-query-review',
   'dependency-health',
   'documentation-quality',
   'error-handling-review',
   'git-analysis',
+  'migration-planning',
   'performance-analysis',
   'security-audit',
+  'state-management-review',
   'testing-quality',
   'tour-creation',
+  'type-safety-audit',
 ]
 
 // ---------------------------------------------------------------------------
@@ -35,9 +39,9 @@ describe('SkillRegistry — listSkills', () => {
     registry = new SkillRegistry()
   })
 
-  it('returns all 12 skill summaries', () => {
+  it('returns all 16 skill summaries', () => {
     const skills = registry.listSkills()
-    expect(skills).toHaveLength(12)
+    expect(skills).toHaveLength(16)
   })
 
   it('returns correct IDs for all skills', () => {
@@ -166,6 +170,34 @@ describe('SkillRegistry — getSkill', () => {
     expect(skill!.name).toBe('Accessibility Audit')
   })
 
+  it('returns full definition for database-query-review', () => {
+    const skill = registry.getSkill('database-query-review')
+    expect(skill).not.toBeNull()
+    expect(skill!.id).toBe('database-query-review')
+    expect(skill!.name).toBe('Database Query Review')
+  })
+
+  it('returns full definition for migration-planning', () => {
+    const skill = registry.getSkill('migration-planning')
+    expect(skill).not.toBeNull()
+    expect(skill!.id).toBe('migration-planning')
+    expect(skill!.name).toBe('Migration Planning')
+  })
+
+  it('returns full definition for state-management-review', () => {
+    const skill = registry.getSkill('state-management-review')
+    expect(skill).not.toBeNull()
+    expect(skill!.id).toBe('state-management-review')
+    expect(skill!.name).toBe('State Management Review')
+  })
+
+  it('returns full definition for type-safety-audit', () => {
+    const skill = registry.getSkill('type-safety-audit')
+    expect(skill).not.toBeNull()
+    expect(skill!.id).toBe('type-safety-audit')
+    expect(skill!.name).toBe('Type Safety Audit')
+  })
+
   it('returns null for nonexistent skill', () => {
     expect(registry.getSkill('nonexistent')).toBeNull()
   })
@@ -264,9 +296,9 @@ describe('SkillRegistry — lazy loading', () => {
 // ---------------------------------------------------------------------------
 
 describe('SkillRegistry — skill definition frontmatter', () => {
-  it('all 12 definition files exist on disk', () => {
+  it('all 16 definition files exist on disk', () => {
     const files = fs.readdirSync(DEFINITIONS_DIR).filter((f) => f.endsWith('.md'))
-    expect(files).toHaveLength(12)
+    expect(files).toHaveLength(16)
   })
 
   it('all definitions have valid parseable frontmatter', () => {
@@ -274,8 +306,8 @@ describe('SkillRegistry — skill definition frontmatter', () => {
     const skills = registry.listSkills()
 
     // If frontmatter were invalid, the skill would be skipped.
-    // We verify all 12 are loaded.
-    expect(skills).toHaveLength(12)
+    // We verify all 16 are loaded.
+    expect(skills).toHaveLength(16)
     for (const skill of skills) {
       expect(skill.id).toMatch(/^[a-z0-9-]+$/)
       expect(skill.name.length).toBeLessThanOrEqual(200)
