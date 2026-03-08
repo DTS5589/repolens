@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useRef, useEffect } from 'react'
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import {
   FileText, Code, BookOpen, Rocket, FileCode, MessageSquare, Brain,
   Loader2, AlertCircle, Trash2, ChevronDown, Search, X, Plus, Download,
@@ -32,6 +32,7 @@ import {
   type GeneratedDoc,
 } from '@/providers/docs-provider'
 import { useDocsEngine } from '@/hooks/use-docs-engine'
+import { SkillSelector } from '@/components/features/chat/skill-selector'
 
 // Icon mapping for doc presets (kept in the UI layer)
 const DOC_PRESET_ICONS: Record<DocType, React.ReactNode> = {
@@ -86,6 +87,19 @@ export function DocViewer({ className }: DocViewerProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [qualityLevel, setQualityLevel] = useState<QualityLevel>('balanced')
   const [compactionEnabled, setCompactionEnabled] = useState(false)
+  const [activeSkills, setActiveSkills] = useState<Set<string>>(new Set())
+
+  const handleSkillToggle = useCallback((skillId: string) => {
+    setActiveSkills(prev => {
+      const next = new Set(prev)
+      if (next.has(skillId)) {
+        next.delete(skillId)
+      } else {
+        next.add(skillId)
+      }
+      return next
+    })
+  }, [])
 
   const isMobile = useIsMobile()
 
@@ -129,7 +143,7 @@ export function DocViewer({ className }: DocViewerProps) {
     }
 
     setSelectedPreset(preset.id)
-    handleGenerate(preset, targetFile, customPrompt, QUALITY_STEPS[qualityLevel], compactionEnabled)
+    handleGenerate(preset, targetFile, customPrompt, QUALITY_STEPS[qualityLevel], compactionEnabled, Array.from(activeSkills))
   }
 
   const onRegenerate = (doc: GeneratedDoc) => {
@@ -398,6 +412,7 @@ export function DocViewer({ className }: DocViewerProps) {
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
+                    <SkillSelector activeSkills={activeSkills} onToggle={handleSkillToggle} />
                   </div>
 
                   {error && !isGenerating && (

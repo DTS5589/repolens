@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useRef, useEffect } from 'react'
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import {
   History, AlertCircle, Trash2, Plus, Download,
   RefreshCw, ClipboardCopy, Check,
@@ -31,6 +31,7 @@ import {
   type RefSource,
 } from './changelog-helpers'
 import { NewChangelogView } from './new-changelog-view'
+import { SkillSelector } from '@/components/features/chat/skill-selector'
 
 interface ChangelogViewerProps {
   className?: string
@@ -57,6 +58,19 @@ export function ChangelogViewer({ className }: ChangelogViewerProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [qualityLevel, setQualityLevel] = useState<QualityLevel>('balanced')
   const [compactionEnabled, setCompactionEnabled] = useState(false)
+  const [activeSkills, setActiveSkills] = useState<Set<string>>(new Set())
+
+  const handleSkillToggle = useCallback((skillId: string) => {
+    setActiveSkills(prev => {
+      const next = new Set(prev)
+      if (next.has(skillId)) {
+        next.delete(skillId)
+      } else {
+        next.add(skillId)
+      }
+      return next
+    })
+  }, [])
 
   // --- Tags/Branches fetching ---
   const [tags, setTags] = useState<GitHubTag[]>([])
@@ -146,7 +160,7 @@ export function ChangelogViewer({ className }: ChangelogViewerProps) {
         comparison.files.map(f => `- ${f.status} ${f.filename} (+${f.additions} -${f.deletions})`).join('\n'),
       ].join('\n')
       setIsFetchingCommits(false)
-      handleGenerate(preset, fromRef, toRef, customPrompt, commitData, QUALITY_STEPS[qualityLevel], compactionEnabled)
+      handleGenerate(preset, fromRef, toRef, customPrompt, commitData, QUALITY_STEPS[qualityLevel], compactionEnabled, Array.from(activeSkills))
     } catch (err) {
       setIsFetchingCommits(false)
       setCommitFetchError(err instanceof Error ? err.message : 'Failed to fetch commit data for the selected range.')
@@ -278,6 +292,7 @@ export function ChangelogViewer({ className }: ChangelogViewerProps) {
             fromRef={fromRef} setFromRef={setFromRef} toRef={toRef} setToRef={setToRef}
             qualityLevel={qualityLevel} setQualityLevel={setQualityLevel}
             compactionEnabled={compactionEnabled} setCompactionEnabled={setCompactionEnabled}
+            activeSkills={activeSkills} onSkillToggle={handleSkillToggle}
             commitFetchError={commitFetchError} error={error}
             selectedPreset={selectedPreset} setSelectedPreset={setSelectedPreset}
             customPrompt={customPrompt} setCustomPrompt={setCustomPrompt}

@@ -154,6 +154,7 @@ export function ChangelogProvider({ children }: { children: ReactNode }) {
               commitData: ctx.commitData,
               maxSteps: ctx.maxSteps,
               compactionEnabled: ctx.compactionEnabled ?? false,
+              ...(ctx.activeSkills && ctx.activeSkills.length > 0 ? { activeSkills: ctx.activeSkills } : {}),
             },
           }
         },

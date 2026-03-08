@@ -19,6 +19,7 @@ import {
   getPresetIcon, ChangelogToolActivity, ChangelogMarkdownContent,
   type QualityLevel, type RefSource,
 } from './changelog-helpers'
+import { SkillSelector } from '@/components/features/chat/skill-selector'
 
 interface NewChangelogViewProps {
   contentRef: RefObject<HTMLDivElement | null>
@@ -46,6 +47,8 @@ interface NewChangelogViewProps {
   setQualityLevel: (level: QualityLevel) => void
   compactionEnabled: boolean
   setCompactionEnabled: (enabled: boolean) => void
+  activeSkills: Set<string>
+  onSkillToggle: (skillId: string) => void
   commitFetchError: string | null
   error: Error | null | undefined
   selectedPreset: string | null
@@ -62,6 +65,7 @@ export function NewChangelogView(props: NewChangelogViewProps) {
     refSource, setRefSource, tags, branches, refsLoading, refsError, refOptions,
     fromRef, setFromRef, toRef, setToRef,
     qualityLevel, setQualityLevel, compactionEnabled, setCompactionEnabled,
+    activeSkills, onSkillToggle,
     commitFetchError, error, selectedPreset, setSelectedPreset,
     customPrompt, setCustomPrompt, onGenerate,
   } = props
@@ -112,7 +116,8 @@ export function NewChangelogView(props: NewChangelogViewProps) {
               refsLoading={refsLoading} refsError={refsError} refOptions={refOptions}
               fromRef={fromRef} setFromRef={setFromRef} toRef={toRef} setToRef={setToRef} />
             <QualitySelector qualityLevel={qualityLevel} setQualityLevel={setQualityLevel}
-              compactionEnabled={compactionEnabled} setCompactionEnabled={setCompactionEnabled} />
+              compactionEnabled={compactionEnabled} setCompactionEnabled={setCompactionEnabled}
+              activeSkills={activeSkills} onSkillToggle={onSkillToggle} />
             <ErrorDisplays commitFetchError={commitFetchError} error={error}
               isGenerating={isGenerating} selectedPreset={selectedPreset} onGenerate={onGenerate} />
             <PresetPicker isGenerating={isGenerating} isFetchingCommits={isFetchingCommits}
@@ -176,9 +181,10 @@ function RefRangeSelector({ refSource, setRefSource, tags, branches, refsLoading
   )
 }
 
-function QualitySelector({ qualityLevel, setQualityLevel, compactionEnabled, setCompactionEnabled }: {
+function QualitySelector({ qualityLevel, setQualityLevel, compactionEnabled, setCompactionEnabled, activeSkills, onSkillToggle }: {
   qualityLevel: QualityLevel; setQualityLevel: (l: QualityLevel) => void
   compactionEnabled: boolean; setCompactionEnabled: (e: boolean) => void
+  activeSkills: Set<string>; onSkillToggle: (skillId: string) => void
 }) {
   return (
     <div className="flex items-center justify-center gap-4 text-sm mb-4">
@@ -205,6 +211,7 @@ function QualitySelector({ qualityLevel, setQualityLevel, compactionEnabled, set
           <TooltipContent side="bottom" className="max-w-[200px]"><p className="text-xs">Compacts old tool results to save context window space.</p></TooltipContent>
         </Tooltip>
       </TooltipProvider>
+      <SkillSelector activeSkills={activeSkills} onToggle={onSkillToggle} />
     </div>
   )
 }
