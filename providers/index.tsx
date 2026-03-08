@@ -17,7 +17,7 @@ interface ProvidersProps {
 
 export function Providers({ children }: ProvidersProps) {
   return (
-    <SessionProvider>
+    <SessionProvider refetchOnWindowFocus={false}>
       <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
         <APIKeysProvider>
           <GitHubTokenProvider>

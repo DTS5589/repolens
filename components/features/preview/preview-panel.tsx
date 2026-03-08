@@ -67,13 +67,18 @@ export function PreviewPanel({ className }: { className?: string }) {
 
   // Show "Ready!" state briefly before transitioning to loaded view
   const [showReadyState, setShowReadyState] = useState(false)
+  const prevStageRef = useRef(loadingStage)
   useEffect(() => {
-    if (loadingStage === 'ready' || loadingStage === 'cached') {
+    const wasReady = prevStageRef.current === 'ready' || prevStageRef.current === 'cached'
+    const isReady = loadingStage === 'ready' || loadingStage === 'cached'
+    prevStageRef.current = loadingStage
+
+    // Only animate on transition TO ready, not if already ready on mount/remount
+    if (isReady && !wasReady) {
       setShowReadyState(true)
       const timer = setTimeout(() => setShowReadyState(false), 1500)
       return () => clearTimeout(timer)
     }
-    setShowReadyState(false)
   }, [loadingStage])
 
   // Sync local state with global state
