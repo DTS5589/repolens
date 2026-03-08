@@ -49,6 +49,48 @@ export function CodeBrowser({ navigateToFile, navigateToLine, onNavigateComplete
   // Sidebar state
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>('explorer')
 
+  // Sidebar resize
+  const [sidebarWidth, setSidebarWidth] = useState(240)
+  const isResizingRef = useRef(false)
+  const sidebarRef = useRef<HTMLDivElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  const handleSidebarMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    isResizingRef.current = true
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+  }, [])
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizingRef.current || !containerRef.current) return
+      const containerRect = containerRef.current.getBoundingClientRect()
+      const newWidth = e.clientX - containerRect.left - 48
+      const clampedWidth = Math.max(160, Math.min(400, newWidth))
+      if (sidebarRef.current) {
+        sidebarRef.current.style.width = `${clampedWidth}px`
+      }
+    }
+
+    const handleMouseUp = () => {
+      if (!isResizingRef.current) return
+      isResizingRef.current = false
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+      if (sidebarRef.current) {
+        setSidebarWidth(sidebarRef.current.offsetWidth)
+      }
+    }
+
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [])
+
   // Search state – persisted at provider level
   const { searchState, setSearchState } = useRepository()
   const {
@@ -363,12 +405,16 @@ export function CodeBrowser({ navigateToFile, navigateToLine, onNavigateComplete
   }
   
   return (
-    <div className="flex h-full bg-background">
+    <div ref={containerRef} className="flex h-full bg-background">
       {/* Activity Bar */}
       <CodeActivityBar sidebarMode={sidebarMode} onModeChange={setSidebarMode} />
       
       {/* Sidebar */}
-      <div className="w-60 shrink-0 bg-background border-r border-foreground/[0.06] flex flex-col">
+      <div ref={sidebarRef} className="relative shrink-0 bg-background border-r border-foreground/[0.06] flex flex-col" style={{ width: sidebarWidth }}>
+        <div
+          className="absolute right-0 top-0 h-full w-1 cursor-col-resize z-10 hover:bg-primary/20 active:bg-primary/30 transition-colors"
+          onMouseDown={handleSidebarMouseDown}
+        />
         {sidebarMode === 'explorer' ? (
           <CodeExplorerSidebar
             files={files}
