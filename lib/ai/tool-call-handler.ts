@@ -2,6 +2,12 @@ import type { MutableRefObject } from 'react'
 import type { CodeIndex } from '@/lib/code/code-index'
 import { executeToolLocally, MAX_FILE_CONTENT_CHARS, type ToolExecutorOptions } from './client-tool-executor'
 import { fetchFileContent } from '@/lib/github/fetcher'
+import {
+  fetchCommitsViaProxy,
+  fetchFileCommitsViaProxy,
+  fetchBlameViaProxy,
+  fetchCommitDetailViaProxy,
+} from '@/lib/github/client'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -53,6 +59,91 @@ export async function handleToolCall(
   options?: ToolExecutorOptions,
 ): Promise<void> {
   if (toolCall.dynamic) return
+
+  // ── getGitHistory: async handler (must run before executeToolLocally) ──
+  if (toolCall.toolName === 'getGitHistory') {
+    const input = toolCall.input as Record<string, unknown>
+    const repoInfo = options?.repoInfo
+    if (!repoInfo) {
+      addToolOutput({
+        state: 'output-error' as const,
+        tool: toolCall.toolName as never,
+        toolCallId: toolCall.toolCallId,
+        errorText: 'Repository context is required for git history. Connect a GitHub repository first.',
+      })
+      return
+    }
+    const { owner, name, defaultBranch } = repoInfo
+    try {
+      let output: unknown
+      const mode = input.mode as string
+
+      if (mode === 'commits') {
+        const maxResults = (input.maxResults as number | undefined) ?? 20
+        const path = input.path as string | undefined
+        const sha = input.sha as string | undefined
+        const commits = path
+          ? await fetchFileCommitsViaProxy(owner, name, path, { perPage: maxResults })
+          : await fetchCommitsViaProxy(owner, name, { sha, perPage: maxResults })
+        output = {
+          commits: commits.map(c => ({
+            sha: c.sha,
+            messageHeadline: c.message.split('\n')[0],
+            authorName: c.authorName,
+            authorDate: c.authorDate,
+          })),
+          total: commits.length,
+        }
+      } else if (mode === 'blame') {
+        const path = input.path as string
+        const ref = (input.ref as string | undefined) ?? defaultBranch
+        const blameData = await fetchBlameViaProxy(owner, name, ref, path)
+        const authorStats: Record<string, number> = {}
+        for (const range of blameData.ranges) {
+          const authorName = range.commit.author?.name ?? 'Unknown'
+          const lineCount = range.endingLine - range.startingLine + 1
+          authorStats[authorName] = (authorStats[authorName] ?? 0) + lineCount
+        }
+        output = {
+          ranges: blameData.ranges.slice(0, 20).map(r => ({
+            startingLine: r.startingLine,
+            endingLine: r.endingLine,
+            age: r.age,
+            commitSha: r.commit.abbreviatedOid,
+            message: r.commit.messageHeadline,
+            author: r.commit.author?.name ?? 'Unknown',
+            date: r.commit.committedDate,
+          })),
+          authorStats,
+          totalRanges: blameData.ranges.length,
+        }
+      } else if (mode === 'commit-detail') {
+        const sha = input.sha as string
+        const detail = await fetchCommitDetailViaProxy(owner, name, sha)
+        output = {
+          ...detail,
+          files: detail.files.slice(0, 50).map(({ patch, ...rest }) => rest),
+          totalFiles: detail.files.length,
+        }
+      } else {
+        throw new Error(`Unsupported git history mode: ${String(input.mode)}`)
+      }
+
+      addToolOutput({
+        tool: toolCall.toolName as never,
+        toolCallId: toolCall.toolCallId,
+        output: JSON.stringify(output),
+      })
+    } catch (err) {
+      addToolOutput({
+        state: 'output-error' as const,
+        tool: toolCall.toolName as never,
+        toolCallId: toolCall.toolCallId,
+        errorText: err instanceof Error ? err.message : 'Failed to fetch git history',
+      })
+    }
+    return
+  }
 
   try {
     const result = executeToolLocally(

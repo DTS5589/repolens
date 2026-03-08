@@ -10,6 +10,7 @@ import {
   scanIssuesSchema,
   generateDiagramSchema,
   getProjectOverviewSchema,
+  getGitHistorySchema,
 } from './tool-schemas'
 import { generateTourSchema } from './tour-schemas'
 
@@ -67,5 +68,10 @@ export const codeTools = {
     description:
       'Generate an annotated guided tour of the codebase. The tour consists of ordered stops, each pointing to a file and line range with a markdown explanation. Optionally focus the tour on a specific theme (e.g., "authentication flow", "data fetching", "error handling"). Returns a structured tour object.',
     inputSchema: generateTourSchema,
+  }),
+  getGitHistory: tool({
+    description:
+      'Retrieve git history data from the repository. Three modes: (1) "commits" — list recent commits, optionally filtered to a file path; (2) "blame" — get line-by-line authorship for a file; (3) "commit-detail" — get full details of a single commit including changed files and diff stats. Requires a connected GitHub repository.',
+    inputSchema: getGitHistorySchema,
   }),
 }

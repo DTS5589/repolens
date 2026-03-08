@@ -53,5 +53,23 @@ export const generateDiagramSchema = z.object({
 
 export const getProjectOverviewSchema = z.object({})
 
+export const getGitHistorySchema = z.discriminatedUnion('mode', [
+  z.object({
+    mode: z.literal('commits').describe('Fetch recent commits for the repository or a specific file'),
+    sha: z.string().optional().describe('Branch name or commit SHA to start listing from'),
+    path: z.string().optional().describe('File path to get commits for. When provided, returns only commits that touched this file'),
+    maxResults: z.number().int().positive().max(100).default(20).describe('Maximum number of commits to return (default 20, max 100)'),
+  }),
+  z.object({
+    mode: z.literal('blame').describe('Get line-by-line blame (authorship) data for a file'),
+    path: z.string().describe('File path relative to repo root to get blame for'),
+    ref: z.string().optional().describe('Git ref (branch or commit SHA) to blame at. Defaults to the default branch'),
+  }),
+  z.object({
+    mode: z.literal('commit-detail').describe('Get full details of a single commit including file changes and stats'),
+    sha: z.string().describe('The commit SHA to get details for'),
+  }),
+])
+
 // Re-export tour schema for convenience
 export { generateTourSchema } from './tour-schemas'

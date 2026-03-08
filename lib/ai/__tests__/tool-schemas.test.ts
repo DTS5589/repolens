@@ -10,6 +10,7 @@ import {
   scanIssuesSchema,
   generateDiagramSchema,
   getProjectOverviewSchema,
+  getGitHistorySchema,
 } from '../tool-schemas'
 
 // ---------------------------------------------------------------------------
@@ -209,5 +210,105 @@ describe('getProjectOverviewSchema', () => {
   it('accepts empty object', () => {
     const result = getProjectOverviewSchema.safeParse({})
     expect(result.success).toBe(true)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// getGitHistorySchema
+// ---------------------------------------------------------------------------
+
+describe('getGitHistorySchema', () => {
+  // ── mode: commits ──
+
+  it('accepts valid commits mode with no optional fields', () => {
+    const result = getGitHistorySchema.safeParse({ mode: 'commits' })
+    expect(result.success).toBe(true)
+  })
+
+  it('accepts commits mode with sha, path, and maxResults', () => {
+    const result = getGitHistorySchema.safeParse({
+      mode: 'commits',
+      sha: 'main',
+      path: 'src/index.ts',
+      maxResults: 50,
+    })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.mode).toBe('commits')
+    }
+  })
+
+  it('applies default maxResults of 20 for commits mode', () => {
+    const result = getGitHistorySchema.safeParse({ mode: 'commits' })
+    expect(result.success).toBe(true)
+    if (result.success && result.data.mode === 'commits') {
+      expect(result.data.maxResults).toBe(20)
+    }
+  })
+
+  it('rejects commits mode with maxResults exceeding 100', () => {
+    const result = getGitHistorySchema.safeParse({ mode: 'commits', maxResults: 101 })
+    expect(result.success).toBe(false)
+  })
+
+  // ── mode: blame ──
+
+  it('accepts valid blame mode with path only', () => {
+    const result = getGitHistorySchema.safeParse({ mode: 'blame', path: 'src/utils.ts' })
+    expect(result.success).toBe(true)
+  })
+
+  it('accepts blame mode with path and ref', () => {
+    const result = getGitHistorySchema.safeParse({
+      mode: 'blame',
+      path: 'src/utils.ts',
+      ref: 'feature-branch',
+    })
+    expect(result.success).toBe(true)
+    if (result.success && result.data.mode === 'blame') {
+      expect(result.data.ref).toBe('feature-branch')
+    }
+  })
+
+  it('rejects blame mode without required path', () => {
+    const result = getGitHistorySchema.safeParse({ mode: 'blame' })
+    expect(result.success).toBe(false)
+  })
+
+  // ── mode: commit-detail ──
+
+  it('accepts valid commit-detail mode with sha', () => {
+    const result = getGitHistorySchema.safeParse({ mode: 'commit-detail', sha: 'abc123' })
+    expect(result.success).toBe(true)
+  })
+
+  it('rejects commit-detail mode without required sha', () => {
+    const result = getGitHistorySchema.safeParse({ mode: 'commit-detail' })
+    expect(result.success).toBe(false)
+  })
+
+  // ── invalid inputs ──
+
+  it('rejects input with missing mode field', () => {
+    const result = getGitHistorySchema.safeParse({})
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects an invalid mode value', () => {
+    const result = getGitHistorySchema.safeParse({ mode: 'invalid' })
+    expect(result.success).toBe(false)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// codeTools — tool definition verification
+// ---------------------------------------------------------------------------
+
+describe('codeTools', () => {
+  it('includes getGitHistory with the correct schema', async () => {
+    const { codeTools } = await import('../tool-definitions')
+    expect(codeTools).toHaveProperty('getGitHistory')
+    const toolDef = codeTools.getGitHistory
+    expect(toolDef).toBeDefined()
   })
 })
