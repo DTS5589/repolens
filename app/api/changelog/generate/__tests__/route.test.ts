@@ -4,30 +4,17 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // Mocks — set up before importing the route
 // ---------------------------------------------------------------------------
 
-const mockStreamText = vi.fn()
-const mockConvertToModelMessages = vi.fn()
-const mockCreateAIModel = vi.fn()
-const mockGetModelContextWindow = vi.fn()
-const mockCreateContextCompactor = vi.fn()
+const mockCreateAgentUIStreamResponse = vi.fn()
 
 vi.mock('ai', () => ({
-  streamText: (...args: unknown[]) => mockStreamText(...args),
-  convertToModelMessages: (...args: unknown[]) => mockConvertToModelMessages(...args),
-  stepCountIs: (count: number) => `stopAt:${count}`,
+  createAgentUIStreamResponse: (...args: unknown[]) => mockCreateAgentUIStreamResponse(...args),
+  smoothStream: () => 'smooth-transform',
   consumeStream: vi.fn(),
+  ToolLoopAgent: vi.fn(),
 }))
 
-vi.mock('@/lib/ai/providers', () => ({
-  createAIModel: (...args: unknown[]) => mockCreateAIModel(...args),
-  getModelContextWindow: (...args: unknown[]) => mockGetModelContextWindow(...args),
-}))
-
-vi.mock('@/lib/ai/context-compactor', () => ({
-  createContextCompactor: (...args: unknown[]) => mockCreateContextCompactor(...args),
-}))
-
-vi.mock('@/lib/ai/tool-definitions', () => ({
-  codeTools: { readFile: {}, searchFiles: {} },
+vi.mock('@/lib/ai/agent', () => ({
+  repoLensAgent: { id: 'mock-agent' },
 }))
 
 vi.mock('@/lib/api/error', () => ({
@@ -39,7 +26,12 @@ vi.mock('@/lib/api/error', () => ({
   },
 }))
 
+vi.mock('@/lib/api/rate-limit', () => ({
+  applyRateLimit: () => null,
+}))
+
 import { POST } from '@/app/api/changelog/generate/route'
+import { NextRequest } from 'next/server'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -64,8 +56,8 @@ function validBody(overrides: Record<string, unknown> = {}): Record<string, unkn
   }
 }
 
-function makeRequest(body: unknown): Request {
-  return new Request('http://localhost/api/changelog/generate', {
+function makeRequest(body: unknown): NextRequest {
+  return new NextRequest('http://localhost/api/changelog/generate', {
     method: 'POST',
     body: JSON.stringify(body),
     headers: { 'Content-Type': 'application/json' },
@@ -79,18 +71,15 @@ function makeRequest(body: unknown): Request {
 describe('POST /api/changelog/generate', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockCreateAIModel.mockReturnValue({ id: 'mock-model' })
-    mockGetModelContextWindow.mockReturnValue(128_000)
-    mockConvertToModelMessages.mockResolvedValue([{ role: 'user', content: 'Generate changelog' }])
-    mockStreamText.mockReturnValue({
-      toUIMessageStreamResponse: () => new Response('stream-data', {
+    mockCreateAgentUIStreamResponse.mockReturnValue(
+      new Response('stream-data', {
         headers: { 'Content-Type': 'text/event-stream' },
       }),
-    })
+    )
   })
 
   it('returns 400 for invalid JSON body', async () => {
-    const req = new Request('http://localhost/api/changelog/generate', {
+    const req = new NextRequest('http://localhost/api/changelog/generate', {
       method: 'POST',
       body: 'not json!!!',
       headers: { 'Content-Type': 'application/json' },
@@ -162,19 +151,32 @@ describe('POST /api/changelog/generate', () => {
     expect(text).toBe('stream-data')
   })
 
-  it('calls createAIModel with correct provider, model, and apiKey', async () => {
+  it('passes changelog options with mode to createAgentUIStreamResponse', async () => {
     const req = makeRequest(validBody({
       provider: 'anthropic',
       model: 'claude-3-opus',
       apiKey: 'sk-ant-key',
+      changelogType: 'release-notes',
+      fromRef: 'v3.0.0',
+      toRef: 'v4.0.0',
     }))
 
     await POST(req)
 
-    expect(mockCreateAIModel).toHaveBeenCalledWith('anthropic', 'claude-3-opus', 'sk-ant-key')
+    expect(mockCreateAgentUIStreamResponse).toHaveBeenCalledOnce()
+    const callArgs = mockCreateAgentUIStreamResponse.mock.calls[0][0]
+    expect(callArgs.options).toMatchObject({
+      mode: 'changelog',
+      provider: 'anthropic',
+      model: 'claude-3-opus',
+      apiKey: 'sk-ant-key',
+      changelogType: 'release-notes',
+      fromRef: 'v3.0.0',
+      toRef: 'v4.0.0',
+    })
   })
 
-  it('system prompt includes repo context', async () => {
+  it('passes repoContext in options', async () => {
     const req = makeRequest(validBody({
       repoContext: {
         name: 'my-org/my-repo',
@@ -185,66 +187,21 @@ describe('POST /api/changelog/generate', () => {
 
     await POST(req)
 
-    expect(mockStreamText).toHaveBeenCalledOnce()
-    const callArgs = mockStreamText.mock.calls[0][0]
-    expect(callArgs.system).toContain('my-org/my-repo')
-    expect(callArgs.system).toContain('My awesome project')
+    const callArgs = mockCreateAgentUIStreamResponse.mock.calls[0][0]
+    expect(callArgs.options.repoContext).toMatchObject({
+      name: 'my-org/my-repo',
+      description: 'My awesome project',
+    })
   })
 
-  it('system prompt includes commit data', async () => {
+  it('passes commitData in options', async () => {
     const commitData = 'abc123 feat: add feature\ndef456 fix: fix bug'
     const req = makeRequest(validBody({ commitData }))
 
     await POST(req)
 
-    const callArgs = mockStreamText.mock.calls[0][0]
-    expect(callArgs.system).toContain(commitData)
-  })
-
-  it('system prompt includes fromRef and toRef', async () => {
-    const req = makeRequest(validBody({ fromRef: 'v3.0.0', toRef: 'v4.0.0' }))
-
-    await POST(req)
-
-    const callArgs = mockStreamText.mock.calls[0][0]
-    expect(callArgs.system).toContain('v3.0.0')
-    expect(callArgs.system).toContain('v4.0.0')
-  })
-
-  it('uses conventional system prompt for conventional type', async () => {
-    const req = makeRequest(validBody({ changelogType: 'conventional' }))
-
-    await POST(req)
-
-    const callArgs = mockStreamText.mock.calls[0][0]
-    expect(callArgs.system).toContain('Conventional Commits')
-  })
-
-  it('uses release-notes system prompt for release-notes type', async () => {
-    const req = makeRequest(validBody({ changelogType: 'release-notes' }))
-
-    await POST(req)
-
-    const callArgs = mockStreamText.mock.calls[0][0]
-    expect(callArgs.system).toContain('user-facing release notes')
-  })
-
-  it('uses keep-a-changelog system prompt for keep-a-changelog type', async () => {
-    const req = makeRequest(validBody({ changelogType: 'keep-a-changelog' }))
-
-    await POST(req)
-
-    const callArgs = mockStreamText.mock.calls[0][0]
-    expect(callArgs.system).toContain('Keep a Changelog')
-  })
-
-  it('uses custom system prompt for custom type', async () => {
-    const req = makeRequest(validBody({ changelogType: 'custom' }))
-
-    await POST(req)
-
-    const callArgs = mockStreamText.mock.calls[0][0]
-    expect(callArgs.system).toContain('custom instructions')
+    const callArgs = mockCreateAgentUIStreamResponse.mock.calls[0][0]
+    expect(callArgs.options.commitData).toBe(commitData)
   })
 
   it('accepts optional maxSteps param', async () => {
@@ -253,8 +210,8 @@ describe('POST /api/changelog/generate', () => {
     const res = await POST(req)
     expect(res.status).toBe(200)
 
-    const callArgs = mockStreamText.mock.calls[0][0]
-    expect(callArgs.system).toContain('60')
+    const callArgs = mockCreateAgentUIStreamResponse.mock.calls[0][0]
+    expect(callArgs.options.maxSteps).toBe(60)
   })
 
   it('accepts optional compactionEnabled param', async () => {
@@ -262,6 +219,9 @@ describe('POST /api/changelog/generate', () => {
 
     const res = await POST(req)
     expect(res.status).toBe(200)
+
+    const callArgs = mockCreateAgentUIStreamResponse.mock.calls[0][0]
+    expect(callArgs.options.compactionEnabled).toBe(true)
   })
 
   it('accepts optional structuralIndex param', async () => {
@@ -269,24 +229,25 @@ describe('POST /api/changelog/generate', () => {
 
     const res = await POST(req)
     expect(res.status).toBe(200)
-    const callArgs = mockStreamText.mock.calls[0][0]
-    expect(callArgs.system).toContain('{"files": []}')
+
+    const callArgs = mockCreateAgentUIStreamResponse.mock.calls[0][0]
+    expect(callArgs.options.structuralIndex).toBe('{"files": []}')
   })
 
-  it('returns 500 when streamText throws', async () => {
-    mockStreamText.mockImplementation(() => { throw new Error('AI unavailable') })
+  it('returns 500 when createAgentUIStreamResponse throws', async () => {
+    mockCreateAgentUIStreamResponse.mockImplementation(() => { throw new Error('AI unavailable') })
 
     const req = makeRequest(validBody())
 
     const res = await POST(req)
     expect(res.status).toBe(500)
     const body = await res.json()
-    expect(body.error.message).toBe('AI unavailable')
+    expect(body.error.message).toBe('An unexpected error occurred')
   })
 
-  it('passes abortSignal from request to streamText', async () => {
+  it('passes abortSignal from request', async () => {
     const controller = new AbortController()
-    const req = new Request('http://localhost/api/changelog/generate', {
+    const req = new NextRequest('http://localhost/api/changelog/generate', {
       method: 'POST',
       body: JSON.stringify(validBody()),
       headers: { 'Content-Type': 'application/json' },
@@ -295,8 +256,26 @@ describe('POST /api/changelog/generate', () => {
 
     await POST(req)
 
-    const callArgs = mockStreamText.mock.calls[0][0]
+    const callArgs = mockCreateAgentUIStreamResponse.mock.calls[0][0]
     expect(callArgs.abortSignal).toBeDefined()
+  })
+
+  it('passes the repoLensAgent instance', async () => {
+    const req = makeRequest(validBody())
+
+    await POST(req)
+
+    const callArgs = mockCreateAgentUIStreamResponse.mock.calls[0][0]
+    expect(callArgs.agent).toEqual({ id: 'mock-agent' })
+  })
+
+  it('includes uiMessages in the call', async () => {
+    const req = makeRequest(validBody())
+
+    await POST(req)
+
+    const callArgs = mockCreateAgentUIStreamResponse.mock.calls[0][0]
+    expect(callArgs.uiMessages).toBeDefined()
   })
 
   it.each(['openai', 'google', 'anthropic', 'openrouter'])(
