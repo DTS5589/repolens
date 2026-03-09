@@ -3,12 +3,13 @@
 import { createContext, useContext, useState, useCallback, useRef, useEffect, useMemo, type ReactNode, type Dispatch, type SetStateAction } from "react"
 import type { GitHubRepo, FileNode, ParsedFile, RepositoryContext } from "@/types/repository"
 import type { PinnedFile, PinnedContentsResult } from "@/types/types"
-import { PINNED_CONTEXT_CONFIG } from "@/config/constants"
+import { PINNED_CONTEXT_CONFIG, IDB_CONTENT_STORE_THRESHOLD_KB } from "@/config/constants"
 import { parseGitHubUrl } from "@/lib/github/parser"
 import { buildFileTree } from "@/lib/github/fetcher"
 import { fetchRepoViaProxy, fetchTreeViaProxy, fetchFileViaProxy } from "@/lib/github/client"
 import type { CodeIndex } from "@/lib/code/code-index"
-import { createEmptyIndex, batchIndexFiles } from '@/lib/code/code-index'
+import { createEmptyIndex, createEmptyIndexWithStore, batchIndexFiles } from '@/lib/code/code-index'
+import { IDBContentStore } from '@/lib/code/content-store'
 import { getCachedRepo } from "@/lib/cache/repo-cache"
 import { analyzeCodebase, type FullAnalysis } from "@/lib/code/import-parser"
 import { startIndexing as runIndexingPipeline } from "@/lib/github/indexing-pipeline"
@@ -159,7 +160,11 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
       const cached = await getCachedRepo(owner, repoName)
       if (cached && cached.sha === tree.sha) {
         // Cache hit — hydrate code index from cached data
-        const index = batchIndexFiles(createEmptyIndex(), cached.files)
+        const useIDB = repoData.size != null && repoData.size >= IDB_CONTENT_STORE_THRESHOLD_KB
+        const baseIndex = useIDB
+          ? createEmptyIndexWithStore(new IDBContentStore(`${owner}/${repoName}`))
+          : createEmptyIndex()
+        const index = batchIndexFiles(baseIndex, cached.files)
         setCodeIndex(index)
         setIndexingProgress({
           current: cached.files.length,

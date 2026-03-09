@@ -1,7 +1,9 @@
-import { describe, it, expect } from 'vitest'
-import { InMemoryContentStore } from '../content-store'
+import { describe, it, expect, beforeEach } from 'vitest'
+import { InMemoryContentStore, IDBContentStore } from '../content-store'
+import { IDBFactory, IDBKeyRange } from 'fake-indexeddb'
 import {
   createEmptyIndex,
+  createEmptyIndexWithStore,
   indexFile,
   batchIndexFiles,
   removeFromIndex,
@@ -249,5 +251,252 @@ describe('CodeIndex Phase 3 dual-write', () => {
     // Phase 3 fields are populated even when starting from a legacy index
     expect(result.meta!.has('legacy.ts')).toBe(true)
     expect(result.contentStore!.has('legacy.ts')).toBe(true)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// IDBContentStore
+// ---------------------------------------------------------------------------
+
+describe('IDBContentStore', () => {
+  beforeEach(() => {
+    globalThis.indexedDB = new IDBFactory()
+    globalThis.IDBKeyRange = IDBKeyRange
+  })
+
+  it('put() and get() round-trip', async () => {
+    const store = new IDBContentStore('owner/repo')
+    store.put('src/index.ts', 'export default 42;')
+
+    // Allow fire-and-forget write to settle
+    await new Promise((r) => setTimeout(r, 10))
+
+    const result = await store.get('src/index.ts')
+    expect(result).toBe('export default 42;')
+  })
+
+  it('getSync() returns null (IDB is async)', () => {
+    const store = new IDBContentStore('owner/repo')
+    store.put('file.ts', 'content')
+
+    expect(store.getSync('file.ts')).toBeNull()
+  })
+
+  it('getBatch() returns multiple files', async () => {
+    const store = new IDBContentStore('owner/repo')
+    store.putBatch([
+      { path: 'a.ts', content: 'aaa' },
+      { path: 'b.ts', content: 'bbb' },
+    ])
+
+    await new Promise((r) => setTimeout(r, 10))
+
+    const result = await store.getBatch(['a.ts', 'b.ts', 'missing.ts'])
+    expect(result.size).toBe(2)
+    expect(result.get('a.ts')).toBe('aaa')
+    expect(result.get('b.ts')).toBe('bbb')
+    expect(result.has('missing.ts')).toBe(false)
+  })
+
+  it('getBatch() returns empty map for empty paths array', async () => {
+    const store = new IDBContentStore('owner/repo')
+    const result = await store.getBatch([])
+    expect(result.size).toBe(0)
+  })
+
+  it('putBatch() stores multiple entries', async () => {
+    const store = new IDBContentStore('owner/repo')
+    store.putBatch([
+      { path: 'x.ts', content: 'x-content' },
+      { path: 'y.ts', content: 'y-content' },
+    ])
+
+    await new Promise((r) => setTimeout(r, 10))
+
+    expect(await store.get('x.ts')).toBe('x-content')
+    expect(await store.get('y.ts')).toBe('y-content')
+  })
+
+  it('has() returns true/false correctly', () => {
+    const store = new IDBContentStore('owner/repo')
+    store.put('exists.ts', 'data')
+
+    expect(store.has('exists.ts')).toBe(true)
+    expect(store.has('missing.ts')).toBe(false)
+  })
+
+  it('delete() removes content', async () => {
+    const store = new IDBContentStore('owner/repo')
+    store.put('temp.ts', 'temporary')
+    expect(store.has('temp.ts')).toBe(true)
+
+    store.delete('temp.ts')
+
+    expect(store.has('temp.ts')).toBe(false)
+    expect(store.size).toBe(0)
+
+    // Allow delete to settle, then verify IDB
+    await new Promise((r) => setTimeout(r, 10))
+    expect(await store.get('temp.ts')).toBeNull()
+  })
+
+  it('size reflects entry count', () => {
+    const store = new IDBContentStore('owner/repo')
+    expect(store.size).toBe(0)
+
+    store.put('one.ts', '1')
+    expect(store.size).toBe(1)
+
+    store.put('two.ts', '2')
+    expect(store.size).toBe(2)
+
+    store.delete('one.ts')
+    expect(store.size).toBe(1)
+  })
+
+  it('getAllSync() throws', () => {
+    const store = new IDBContentStore('owner/repo')
+    expect(() => store.getAllSync()).toThrow(
+      'IDBContentStore does not support synchronous getAllSync()'
+    )
+  })
+
+  it('clear() removes all repo content', async () => {
+    const store = new IDBContentStore('owner/repo')
+    store.putBatch([
+      { path: 'a.ts', content: 'aaa' },
+      { path: 'b.ts', content: 'bbb' },
+    ])
+
+    await new Promise((r) => setTimeout(r, 10))
+
+    await store.clear()
+
+    expect(store.size).toBe(0)
+    expect(store.has('a.ts')).toBe(false)
+    expect(await store.get('a.ts')).toBeNull()
+    expect(await store.get('b.ts')).toBeNull()
+  })
+
+  it('get() returns null for missing paths', async () => {
+    const store = new IDBContentStore('owner/repo')
+    const result = await store.get('nonexistent.ts')
+    expect(result).toBeNull()
+  })
+
+  it('keys are scoped to repoKey (isolation between repos)', async () => {
+    const storeA = new IDBContentStore('alice/repo')
+    const storeB = new IDBContentStore('bob/repo')
+
+    storeA.put('file.ts', 'alice-content')
+    storeB.put('file.ts', 'bob-content')
+
+    await new Promise((r) => setTimeout(r, 10))
+
+    expect(await storeA.get('file.ts')).toBe('alice-content')
+    expect(await storeB.get('file.ts')).toBe('bob-content')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// createEmptyIndexWithStore
+// ---------------------------------------------------------------------------
+
+describe('createEmptyIndexWithStore', () => {
+  it('uses the provided InMemoryContentStore', () => {
+    const store = new InMemoryContentStore(new Map([['a.ts', 'aaa']]))
+    const idx = createEmptyIndexWithStore(store)
+
+    expect(idx.contentStore).toBe(store)
+    expect(idx.files.size).toBe(0)
+    expect(idx.meta!.size).toBe(0)
+  })
+
+  it('uses the provided IDBContentStore', () => {
+    globalThis.indexedDB = new IDBFactory()
+    globalThis.IDBKeyRange = IDBKeyRange
+
+    const store = new IDBContentStore('owner/repo')
+    const idx = createEmptyIndexWithStore(store)
+
+    expect(idx.contentStore).toBe(store)
+    expect(idx.totalFiles).toBe(0)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// CodeIndex operations with IDBContentStore
+// ---------------------------------------------------------------------------
+
+describe('CodeIndex with IDBContentStore', () => {
+  beforeEach(() => {
+    globalThis.indexedDB = new IDBFactory()
+    globalThis.IDBKeyRange = IDBKeyRange
+  })
+
+  it('batchIndexFiles() works with IDBContentStore', () => {
+    const store = new IDBContentStore('owner/repo')
+    const idx = createEmptyIndexWithStore(store)
+
+    const updates = [
+      { path: 'a.ts', content: 'const a = 1;', language: 'typescript' },
+      { path: 'b.py', content: 'b = 2', language: 'python' },
+    ]
+
+    const result = batchIndexFiles(idx, updates)
+
+    expect(result.totalFiles).toBe(2)
+    expect(result.files.has('a.ts')).toBe(true)
+    expect(result.files.has('b.py')).toBe(true)
+    expect(result.meta!.size).toBe(2)
+    // IDB store is the same reference (mutated in-place)
+    expect(result.contentStore).toBe(store)
+    expect(store.has('a.ts')).toBe(true)
+    expect(store.has('b.py')).toBe(true)
+    expect(store.size).toBe(2)
+  })
+
+  it('indexFile() works with IDBContentStore', () => {
+    const store = new IDBContentStore('owner/repo')
+    const idx = createEmptyIndexWithStore(store)
+
+    const result = indexFile(idx, 'src/main.ts', 'const x = 1;', 'typescript')
+
+    expect(result.totalFiles).toBe(1)
+    expect(result.contentStore).toBe(store)
+    expect(store.has('src/main.ts')).toBe(true)
+    expect(store.size).toBe(1)
+  })
+
+  it('removeFromIndex() works with IDBContentStore', () => {
+    const store = new IDBContentStore('owner/repo')
+    let idx = createEmptyIndexWithStore(store)
+    idx = indexFile(idx, 'keep.ts', 'keep', 'typescript')
+    idx = indexFile(idx, 'remove.ts', 'remove', 'typescript')
+
+    idx = removeFromIndex(idx, 'remove.ts')
+
+    expect(idx.files.has('remove.ts')).toBe(false)
+    expect(idx.meta!.has('remove.ts')).toBe(false)
+    expect(store.has('remove.ts')).toBe(false)
+    // Kept file is still there
+    expect(idx.files.has('keep.ts')).toBe(true)
+    expect(store.has('keep.ts')).toBe(true)
+    expect(idx.contentStore).toBe(store)
+  })
+
+  it('IDB store is shared (same reference) across index operations', () => {
+    const store = new IDBContentStore('owner/repo')
+    const idx = createEmptyIndexWithStore(store)
+
+    const idx2 = indexFile(idx, 'a.ts', 'a')
+    const idx3 = indexFile(idx2, 'b.ts', 'b')
+    const idx4 = removeFromIndex(idx3, 'a.ts')
+
+    expect(idx2.contentStore).toBe(store)
+    expect(idx3.contentStore).toBe(store)
+    expect(idx4.contentStore).toBe(store)
+    expect(store.size).toBe(1)
+    expect(store.has('b.ts')).toBe(true)
   })
 })

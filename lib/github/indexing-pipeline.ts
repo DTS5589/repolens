@@ -3,10 +3,12 @@ import type { GitHubRepo, FileNode } from '@/types/repository'
 import { detectLanguage } from '@/lib/github/fetcher'
 import { fetchFileViaProxy } from '@/lib/github/client'
 import type { CodeIndex } from '@/lib/code/code-index'
-import { createEmptyIndex, batchIndexFiles, flattenFiles } from '@/lib/code/code-index'
+import { createEmptyIndex, createEmptyIndexWithStore, batchIndexFiles, flattenFiles } from '@/lib/code/code-index'
+import { IDBContentStore } from '@/lib/code/content-store'
 import { fetchRepoZipball, isFileIndexable } from '@/lib/github/zipball'
 import { setCachedRepo } from '@/lib/cache/repo-cache'
 import { fetchWithConcurrency } from './fetch-utils'
+import { IDB_CONTENT_STORE_THRESHOLD_KB } from '@/config/constants'
 import { toast } from 'sonner'
 
 const CONCURRENCY_LIMIT = 10
@@ -132,7 +134,11 @@ export async function startIndexing(
   setLoadingStage('indexing')
 
   // B3: Batch-index all accumulated files at once (avoids O(N²) Map copies)
-  const finalIndex = batchIndexFiles(createEmptyIndex(), accumulated)
+  const useIDB = repoData.size != null && repoData.size >= IDB_CONTENT_STORE_THRESHOLD_KB
+  const baseIndex = useIDB
+    ? createEmptyIndexWithStore(new IDBContentStore(`${repoData.owner}/${repoData.name}`))
+    : createEmptyIndex()
+  const finalIndex = batchIndexFiles(baseIndex, accumulated)
 
   setCodeIndex(finalIndex)
   setFailedFiles(errors)

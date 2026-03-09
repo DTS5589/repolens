@@ -100,3 +100,173 @@ export class InMemoryContentStore implements ContentStore {
     return this.store.size
   }
 }
+
+// IDB database for runtime content storage (separate from repolens-cache)
+const IDB_CONTENT_DB = 'repolens-content'
+const IDB_CONTENT_STORE = 'files'
+const IDB_CONTENT_VERSION = 1
+
+/**
+ * IndexedDB-backed content store for medium+ repos.
+ * Stores per-file content in IDB to reduce heap memory.
+ *
+ * Key format: `{repoKey}:{path}` where repoKey = `owner/repo`
+ *
+ * NOTE: In Wave 2, this is populated alongside the `files` Map in CodeIndex
+ * (dual-write). Consumers don't read from IDB yet — that's Wave 3.
+ */
+export class IDBContentStore implements ContentStore {
+  private repoKey: string
+  private paths: Set<string> = new Set()
+  private dbPromise: Promise<IDBDatabase> | null = null
+
+  constructor(repoKey: string) {
+    this.repoKey = repoKey
+  }
+
+  private openDB(): Promise<IDBDatabase> {
+    if (!this.dbPromise) {
+      this.dbPromise = new Promise((resolve, reject) => {
+        const request = indexedDB.open(IDB_CONTENT_DB, IDB_CONTENT_VERSION)
+        request.onupgradeneeded = () => {
+          const db = request.result
+          if (!db.objectStoreNames.contains(IDB_CONTENT_STORE)) {
+            db.createObjectStore(IDB_CONTENT_STORE)
+          }
+        }
+        request.onsuccess = () => resolve(request.result)
+        request.onerror = () => reject(request.error)
+      })
+    }
+    return this.dbPromise
+  }
+
+  private idbKey(path: string): string {
+    return `${this.repoKey}:${path}`
+  }
+
+  async get(path: string): Promise<string | null> {
+    try {
+      const db = await this.openDB()
+      return new Promise((resolve) => {
+        const tx = db.transaction(IDB_CONTENT_STORE, 'readonly')
+        const store = tx.objectStore(IDB_CONTENT_STORE)
+        const req = store.get(this.idbKey(path))
+        req.onsuccess = () => resolve(req.result ?? null)
+        req.onerror = () => resolve(null)
+      })
+    } catch {
+      return null
+    }
+  }
+
+  getSync(_path: string): string | null {
+    return null
+  }
+
+  async getBatch(paths: string[]): Promise<Map<string, string>> {
+    const result = new Map<string, string>()
+    try {
+      const db = await this.openDB()
+      return new Promise((resolve) => {
+        const tx = db.transaction(IDB_CONTENT_STORE, 'readonly')
+        const store = tx.objectStore(IDB_CONTENT_STORE)
+        let remaining = paths.length
+        if (remaining === 0) {
+          resolve(result)
+          return
+        }
+
+        for (const p of paths) {
+          const req = store.get(this.idbKey(p))
+          req.onsuccess = () => {
+            if (req.result != null) result.set(p, req.result)
+            if (--remaining === 0) resolve(result)
+          }
+          req.onerror = () => {
+            if (--remaining === 0) resolve(result)
+          }
+        }
+      })
+    } catch {
+      return result
+    }
+  }
+
+  put(path: string, content: string): void {
+    this.paths.add(path)
+    this.openDB()
+      .then((db) => {
+        const tx = db.transaction(IDB_CONTENT_STORE, 'readwrite')
+        tx.objectStore(IDB_CONTENT_STORE).put(content, this.idbKey(path))
+      })
+      .catch(() => {
+        /* non-critical */
+      })
+  }
+
+  putBatch(entries: Array<{ path: string; content: string }>): void {
+    for (const { path } of entries) this.paths.add(path)
+    this.openDB()
+      .then((db) => {
+        const tx = db.transaction(IDB_CONTENT_STORE, 'readwrite')
+        const store = tx.objectStore(IDB_CONTENT_STORE)
+        for (const { path, content } of entries) {
+          store.put(content, this.idbKey(path))
+        }
+      })
+      .catch(() => {
+        /* non-critical */
+      })
+  }
+
+  has(path: string): boolean {
+    return this.paths.has(path)
+  }
+
+  delete(path: string): void {
+    this.paths.delete(path)
+    this.openDB()
+      .then((db) => {
+        const tx = db.transaction(IDB_CONTENT_STORE, 'readwrite')
+        tx.objectStore(IDB_CONTENT_STORE).delete(this.idbKey(path))
+      })
+      .catch(() => {
+        /* non-critical */
+      })
+  }
+
+  getAllSync(): Map<string, string> {
+    throw new Error(
+      'IDBContentStore does not support synchronous getAllSync(). Use getBatch() instead.'
+    )
+  }
+
+  get size(): number {
+    return this.paths.size
+  }
+
+  /** Clear all content for this repo from IDB. */
+  async clear(): Promise<void> {
+    try {
+      const db = await this.openDB()
+      const tx = db.transaction(IDB_CONTENT_STORE, 'readwrite')
+      const store = tx.objectStore(IDB_CONTENT_STORE)
+      for (const path of this.paths) {
+        store.delete(this.idbKey(path))
+      }
+      this.paths.clear()
+      await new Promise<void>((resolve) => {
+        tx.oncomplete = () => resolve()
+        tx.onerror = () => resolve()
+      })
+    } catch {
+      /* non-critical */
+    }
+  }
+
+  /** Reset cached DB connection (for testing). */
+  _resetDBConnection(): void {
+    this.dbPromise = null
+  }
+}

@@ -13,7 +13,7 @@ function cloneContentStore(store: ContentStore | undefined): InMemoryContentStor
 }
 
 export type { ContentStore, CodeIndexMeta } from './content-store'
-export { InMemoryContentStore } from './content-store'
+export { InMemoryContentStore, IDBContentStore } from './content-store'
 
 export interface IndexedFile {
   path: string
@@ -72,6 +72,18 @@ export function createEmptyIndex(): CodeIndex {
   }
 }
 
+/** Create an empty code index with a specific content store. */
+export function createEmptyIndexWithStore(contentStore: ContentStore): CodeIndex {
+  return {
+    files: new Map(),
+    totalFiles: 0,
+    totalLines: 0,
+    isIndexing: false,
+    meta: new Map(),
+    contentStore,
+  }
+}
+
 /**
  * Add a file to the index
  */
@@ -94,8 +106,16 @@ export function indexFile(index: CodeIndex, path: string, content: string, langu
   const newMeta = new Map(index.meta ?? new Map())
   newMeta.set(path, { path, name, language, lineCount })
 
-  const newContentStore = cloneContentStore(index.contentStore)
-  newContentStore.put(path, content)
+  // IDB stores are mutable shared references — mutate in-place.
+  // InMemory stores are cloned for immutability.
+  let newContentStore: ContentStore
+  if (index.contentStore && !(index.contentStore instanceof InMemoryContentStore)) {
+    index.contentStore.put(path, content)
+    newContentStore = index.contentStore
+  } else {
+    newContentStore = cloneContentStore(index.contentStore)
+    newContentStore.put(path, content)
+  }
   
   return {
     ...index,
@@ -118,8 +138,14 @@ export function removeFromIndex(index: CodeIndex, path: string): CodeIndex {
   const newMeta = new Map(index.meta ?? new Map())
   newMeta.delete(path)
 
-  const newContentStore = cloneContentStore(index.contentStore)
-  newContentStore.delete(path)
+  let newContentStore: ContentStore
+  if (index.contentStore && !(index.contentStore instanceof InMemoryContentStore)) {
+    index.contentStore.delete(path)
+    newContentStore = index.contentStore
+  } else {
+    newContentStore = cloneContentStore(index.contentStore)
+    newContentStore.delete(path)
+  }
   
   return {
     ...index,
@@ -142,14 +168,25 @@ export function batchIndexFiles(
 ): CodeIndex {
   const newFiles = new Map(index.files)
   const newMeta = new Map(index.meta ?? new Map())
-  const newContentStore = cloneContentStore(index.contentStore)
+
+  // IDB stores are mutable shared references — putBatch directly.
+  // InMemory stores are cloned for immutability.
+  let newContentStore: ContentStore
+  if (index.contentStore && !(index.contentStore instanceof InMemoryContentStore)) {
+    index.contentStore.putBatch(updates.map(u => ({ path: u.path, content: u.content })))
+    newContentStore = index.contentStore
+  } else {
+    const contentMap = (index.contentStore as InMemoryContentStore)?.getAllSync?.() ?? new Map<string, string>()
+    const store = new InMemoryContentStore(contentMap)
+    store.putBatch(updates.map(u => ({ path: u.path, content: u.content })))
+    newContentStore = store
+  }
 
   for (const { path, content, language } of updates) {
     const lineCount = content.split('\n').length
     const name = path.split('/').pop() || path
     newFiles.set(path, { path, name, content, language, lineCount })
     newMeta.set(path, { path, name, language, lineCount })
-    newContentStore.put(path, content)
   }
 
   return {

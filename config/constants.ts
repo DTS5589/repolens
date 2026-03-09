@@ -39,3 +39,6 @@ export const FILE_STATUS = {
     MODIFIED: 'modified',
     UNCHANGED: 'unchanged',
 } as const
+
+/** Repo size threshold (KB) for using IDB-backed content store. ~50 MB */
+export const IDB_CONTENT_STORE_THRESHOLD_KB = 50_000
