@@ -42,6 +42,7 @@ const nextConfig = {
               //   - Mermaid SVG: securityLevel:'strict' sanitizes output; source is pre-sanitized
               //   - Code blocks: Shiki produces escaped HTML from source text
               "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'",
+              "worker-src 'self' blob:",
               "connect-src 'self' data: blob: https://api.github.com https://raw.githubusercontent.com https://github.com https://cdn.jsdelivr.net",
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: blob: https:",
