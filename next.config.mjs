@@ -12,21 +12,17 @@ const nextConfig = {
   experimental: {
     optimizePackageImports: ["lucide-react", "@radix-ui/react-icons"],
   },
-  webpack(config, { isServer }) {
+  turbopack: {
     // web-tree-sitter contains a Node.js code path that imports 'fs/promises'.
-    // In the browser it uses fetch instead, but webpack still tries to resolve
-    // the Node import. Tell webpack to ignore fs/promises on the client side.
-    if (!isServer) {
-      config.resolve.fallback = {
-        ...config.resolve.fallback,
-        fs: false,
-        'fs/promises': false,
-        module: false,
-        path: false,
-        url: false,
-      };
-    }
-    return config;
+    // In the browser it uses fetch instead, so alias these to empty modules
+    // on the client side.
+    resolveAlias: {
+      fs: { browser: '' },
+      'fs/promises': { browser: '' },
+      module: { browser: '' },
+      path: { browser: '' },
+      url: { browser: '' },
+    },
   },
   async headers() {
     return [
