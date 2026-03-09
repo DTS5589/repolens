@@ -5,6 +5,7 @@ import { codeTools } from '@/lib/ai/tool-definitions'
 import { buildChatPrompt } from './prompts/chat'
 import { buildDocsPrompt } from './prompts/docs'
 import { buildChangelogPrompt } from './prompts/changelog'
+import { buildPRReviewPrompt } from './prompts/pr-review'
 import { createLoggingMiddleware } from './middleware'
 import type { CallOptions } from './options'
 
@@ -26,6 +27,7 @@ const COMPACTION_INSTRUCTIONS: Record<CallOptions['mode'], string> = {
   chat: 'Summarize the codebase analysis so far, preserving: all file paths examined, key code structure findings (exports, imports, patterns), decisions made about the codebase, and what remains to be analyzed.',
   docs: 'Summarize the codebase analysis so far, preserving: all file paths examined, key code structure findings (exports, imports, patterns), decisions made about the codebase, and what remains to be analyzed.',
   changelog: 'Summarize the changelog analysis so far, preserving: all commits examined, key changes identified, categorization decisions made, and what remains to be processed.',
+  'pr-review': 'Summarize the PR review so far, preserving: all files reviewed, findings with severity and line numbers, files still pending review, and key patterns identified across the diff.',
 }
 
 function buildAnthropicProviderOptions(mode: CallOptions['mode']) {
@@ -161,6 +163,34 @@ export function buildPrepareCall() {
           stopWhen: stepCountIs(stepBudget),
           ...(provider === 'anthropic' && {
             providerOptions: buildAnthropicProviderOptions('changelog'),
+          }),
+          experimental_context: compactionContext,
+        }
+      }
+
+      case 'pr-review': {
+        const stepBudget = callOptions.maxSteps ?? 60
+        compactionContext.maxSteps = stepBudget
+
+        return {
+          ...baseCallArgs,
+          model: wrappedModel,
+          instructions: buildPRReviewPrompt({
+            repoContext: callOptions.repoContext,
+            structuralIndex: callOptions.structuralIndex,
+            prNumber: callOptions.prNumber,
+            prTitle: callOptions.prTitle,
+            prBody: callOptions.prBody,
+            baseSha: callOptions.baseSha,
+            headSha: callOptions.headSha,
+            diffSummary: callOptions.diffSummary,
+            stepBudget,
+            model,
+            activeSkills: callOptions.activeSkills,
+          }),
+          stopWhen: stepCountIs(stepBudget),
+          ...(provider === 'anthropic' && {
+            providerOptions: buildAnthropicProviderOptions('pr-review'),
           }),
           experimental_context: compactionContext,
         }

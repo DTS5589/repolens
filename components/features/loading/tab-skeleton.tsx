@@ -262,3 +262,44 @@ export function ToursTabSkeleton() {
     </div>
   )
 }
+
+/**
+ * Skeleton fallback for the PR Review tab.
+ * Mimics a file navigator sidebar + diff viewer layout.
+ */
+export function PRReviewTabSkeleton() {
+  return (
+    <div role="status" aria-label="Loading PR review" className="flex h-full">
+      {/* File navigator sidebar */}
+      <div className="w-60 border-r p-3 flex flex-col gap-2">
+        <Skeleton className="h-8 w-full" />
+        <Skeleton className="h-5 w-[85%]" />
+        {Array.from({ length: 8 }).map((_, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <Skeleton className="h-5 w-8 rounded-full" />
+            <Skeleton className="h-4 flex-1" />
+            <Skeleton className="h-3 w-12" />
+          </div>
+        ))}
+      </div>
+      {/* Diff viewer area */}
+      <div className="flex-1 flex flex-col">
+        <div className="border-b px-4 py-3 flex items-center gap-3">
+          <Skeleton className="h-6 w-6 rounded-full" />
+          <Skeleton className="h-5 w-64" />
+          <div className="flex-1" />
+          <Skeleton className="h-5 w-20" />
+        </div>
+        <div className="flex-1 p-4 flex flex-col gap-1">
+          {Array.from({ length: 20 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <Skeleton className="h-4 w-8" />
+              <Skeleton className="h-4 w-8" />
+              <Skeleton className="h-4" style={{ width: `${25 + ((i * 31) % 55)}%` }} />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}

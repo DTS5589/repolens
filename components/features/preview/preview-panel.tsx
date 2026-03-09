@@ -23,8 +23,10 @@ import {
   DepsTabSkeleton,
   ChangelogTabSkeleton,
   GitHistoryTabSkeleton,
+  PRReviewTabSkeleton,
   ToursTabSkeleton,
 } from "@/components/features/loading/tab-skeleton"
+import { PRReviewProvider } from "@/providers/pr-review-provider"
 import { FeatureErrorBoundary } from "@/components/ui/feature-error-boundary"
 
 // Lazy-loaded heavy tab components (code-split per tab)
@@ -51,6 +53,9 @@ const GitHistoryPanel = lazy(() =>
 )
 const ToursPanel = lazy(() =>
   import("@/components/features/tours/tours-panel").then(m => ({ default: m.ToursPanel }))
+)
+const PRReviewPanel = lazy(() =>
+  import("@/components/features/pr-review/pr-review-panel").then(m => ({ default: m.PRReviewPanel }))
 )
 
 export function PreviewPanel({ className }: { className?: string }) {
@@ -296,6 +301,14 @@ export function PreviewPanel({ className }: { className?: string }) {
             <Suspense fallback={<GitHistoryTabSkeleton />}>
               <GitHistoryPanel navigateToFile={pendingNavigateFile} />
             </Suspense>
+          </FeatureErrorBoundary>
+        ) : activeTab === "pr-review" ? (
+          <FeatureErrorBoundary featureName="PR Review">
+            <PRReviewProvider>
+              <Suspense fallback={<PRReviewTabSkeleton />}>
+                <PRReviewPanel />
+              </Suspense>
+            </PRReviewProvider>
           </FeatureErrorBoundary>
         ) : activeTab === "tours" ? (
           <FeatureErrorBoundary featureName="Tours">

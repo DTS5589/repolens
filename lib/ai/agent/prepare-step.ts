@@ -59,6 +59,7 @@ const SKILL_TOOLS: Record<string, AgentToolName[]> = {
   'architecture-analysis': ['analyzeImports', 'generateDiagram', 'getProjectOverview'],
   'tour-creation': ['generateTour'],
   'git-analysis': ['getGitHistory'],
+  'pr-review': ['reviewPRFile'],
 }
 
 /**

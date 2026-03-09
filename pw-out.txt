@@ -1,0 +1,7 @@
+
+[1A[2K[WebServer] ÔÜá Port 3000 is in use by process 34044, using available port 3002 instead.
+[1A[2K[WebServer] Ô¿» Unable to acquire lock at C:\Users\zeb\Documents\workspace_for_ai\repolens\workproject\.next\dev\lock, is another instance of next dev running?
+
+Error: Process from config.webServer was not able to start. Exit code: 1
+
+[1A[2K

@@ -1,5 +1,6 @@
 import type { GitHubRepo, RepoTree, GitHubTag, GitHubBranch, GitHubCommit, GitHubComparison } from "@/types/repository"
 import type { BlameData, CommitDetail, CommitFile } from "@/types/git-history"
+import type { PRMetadata, PRFile, PRComment } from "@/types/pr-review"
 import {
   getCached,
   getStale,
@@ -22,6 +23,7 @@ const CACHE_TTL_COMMITS    = 300_000  // 5 minutes
 const CACHE_TTL_COMPARE    = 600_000  // 10 minutes
 const CACHE_TTL_BLAME         = 600_000  // 10 minutes
 const CACHE_TTL_COMMIT_DETAIL = 600_000  // 10 minutes
+const CACHE_TTL_PULLS         = 60_000   // 1 minute
 
 // ---------------------------------------------------------------------------
 // PAT management — allows the React provider to inject a token
@@ -868,6 +870,85 @@ export async function fetchCommitDetailViaProxy(
 }
 
 // ---------------------------------------------------------------------------
+// Pull requests — proxy fetch functions
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch pull requests list through the proxy.
+ */
+export async function fetchPullsViaProxy(
+  owner: string,
+  name: string,
+  opts?: { state?: string; perPage?: number; page?: number; sort?: string; direction?: string },
+): Promise<PRMetadata[]> {
+  const params = new URLSearchParams()
+  params.set('owner', owner)
+  params.set('name', name)
+  if (opts?.state) params.set('state', opts.state)
+  if (opts?.perPage !== undefined) params.set('per_page', String(opts.perPage))
+  if (opts?.page !== undefined) params.set('page', String(opts.page))
+  if (opts?.sort) params.set('sort', opts.sort)
+  if (opts?.direction) params.set('direction', opts.direction)
+
+  const key = `pulls:${owner}/${name}:${params.toString()}`
+  const url = `/api/github/pulls?${params.toString()}`
+  return cachedProxyFetch<PRMetadata[]>(key, url, CACHE_TTL_PULLS)
+}
+
+/**
+ * Fetch a single pull request through the proxy.
+ */
+export async function fetchPullRequestViaProxy(
+  owner: string,
+  name: string,
+  number: number,
+): Promise<PRMetadata> {
+  const key = `pr:${owner}/${name}:${number}`
+  const url = `/api/github/pulls/${number}?owner=${encodeURIComponent(owner)}&name=${encodeURIComponent(name)}`
+  return cachedProxyFetch<PRMetadata>(key, url, CACHE_TTL_PULLS)
+}
+
+/**
+ * Fetch pull request files through the proxy.
+ */
+export async function fetchPullRequestFilesViaProxy(
+  owner: string,
+  name: string,
+  number: number,
+  opts?: { perPage?: number; page?: number },
+): Promise<PRFile[]> {
+  const params = new URLSearchParams()
+  params.set('owner', owner)
+  params.set('name', name)
+  if (opts?.perPage !== undefined) params.set('per_page', String(opts.perPage))
+  if (opts?.page !== undefined) params.set('page', String(opts.page))
+
+  const key = `pr-files:${owner}/${name}:${number}:${params.toString()}`
+  const url = `/api/github/pulls/${number}/files?${params.toString()}`
+  return cachedProxyFetch<PRFile[]>(key, url, CACHE_TTL_PULLS)
+}
+
+/**
+ * Fetch pull request review comments through the proxy.
+ */
+export async function fetchPullRequestCommentsViaProxy(
+  owner: string,
+  name: string,
+  number: number,
+  opts?: { perPage?: number; page?: number },
+): Promise<PRComment[]> {
+  const params = new URLSearchParams()
+  params.set('owner', owner)
+  params.set('name', name)
+  if (opts?.perPage !== undefined) params.set('per_page', String(opts.perPage))
+  if (opts?.page !== undefined) params.set('page', String(opts.page))
+
+  const key = `pr-comments:${owner}/${name}:${number}:${params.toString()}`
+  const url = `/api/github/pulls/${number}/comments?${params.toString()}`
+  return cachedProxyFetch<PRComment[]>(key, url, CACHE_TTL_PULLS)
+}
+
+// ---------------------------------------------------------------------------
 // Cache management — exported for manual invalidation
 // ---------------------------------------------------------------------------
 
@@ -889,6 +970,10 @@ export function invalidateRepoCache(owner: string, repo: string): void {
   invalidatePattern(`blame:${owner}/${repo}`)
   invalidatePattern(`commit-detail:${owner}/${repo}`)
   invalidatePattern(`file-commits:${owner}/${repo}`)
+  invalidatePattern(`pulls:${owner}/${repo}`)
+  invalidatePattern(`pr:${owner}/${repo}`)
+  invalidatePattern(`pr-files:${owner}/${repo}`)
+  invalidatePattern(`pr-comments:${owner}/${repo}`)
 }
 
 // Exposed for unit tests only — not part of the public API.

@@ -236,7 +236,11 @@ describe('GitHub client — caching integration', () => {
       expect(cacheMock.invalidatePattern).toHaveBeenCalledWith('blame:facebook/react')
       expect(cacheMock.invalidatePattern).toHaveBeenCalledWith('commit-detail:facebook/react')
       expect(cacheMock.invalidatePattern).toHaveBeenCalledWith('file-commits:facebook/react')
-      expect(cacheMock.invalidatePattern).toHaveBeenCalledTimes(10)
+      expect(cacheMock.invalidatePattern).toHaveBeenCalledWith('pulls:facebook/react')
+      expect(cacheMock.invalidatePattern).toHaveBeenCalledWith('pr:facebook/react')
+      expect(cacheMock.invalidatePattern).toHaveBeenCalledWith('pr-files:facebook/react')
+      expect(cacheMock.invalidatePattern).toHaveBeenCalledWith('pr-comments:facebook/react')
+      expect(cacheMock.invalidatePattern).toHaveBeenCalledTimes(14)
     })
   })
 

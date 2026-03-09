@@ -2,6 +2,7 @@
 
 import type { GitHubRepo, RepoTree, FileNode, GitHubTag, GitHubBranch, GitHubCommit, GitHubComparison } from '@/types/repository'
 import type { BlameData, CommitDetail, CommitFile } from '@/types/git-history'
+import type { PRMetadata, PRFile, PRComment, PRFileStatus } from '@/types/pr-review'
 import { buildRepoApiUrl, buildTreeApiUrl, buildRawContentUrl } from './parser'
 import { githubGraphQL } from './graphql'
 
@@ -547,6 +548,183 @@ export function detectLanguage(filename: string): string | undefined {
   }
   
   return ext ? languageMap[ext] : undefined
+}
+
+// ---------------------------------------------------------------------------
+// Pull Request fetchers
+// ---------------------------------------------------------------------------
+
+interface FetchPullsOptions extends FetchOptions {
+  state?: 'open' | 'closed' | 'all'
+  perPage?: number
+  page?: number
+  sort?: 'created' | 'updated' | 'popularity' | 'long-running'
+  direction?: 'asc' | 'desc'
+}
+
+/**
+ * Fetch a list of pull requests for a repository.
+ */
+export async function fetchPulls(
+  owner: string,
+  name: string,
+  options: FetchPullsOptions = {},
+): Promise<PRMetadata[]> {
+  const headers = buildHeaders(options.token)
+  const params = new URLSearchParams()
+  if (options.state) params.set('state', options.state)
+  if (options.perPage) params.set('per_page', String(options.perPage))
+  if (options.page) params.set('page', String(options.page))
+  if (options.sort) params.set('sort', options.sort)
+  if (options.direction) params.set('direction', options.direction)
+
+  const qs = params.toString()
+  const url = `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/pulls${qs ? `?${qs}` : ''}`
+  const response = await fetch(url, { headers })
+
+  if (!response.ok) {
+    handleGitHubError(response, 'Pull requests')
+  }
+
+  const raw = (await response.json()) as Array<Record<string, unknown>>
+  return raw.map(mapPullRequest)
+}
+
+/**
+ * Fetch a single pull request by number.
+ */
+export async function fetchPullRequest(
+  owner: string,
+  name: string,
+  number: number,
+  options: FetchOptions = {},
+): Promise<PRMetadata> {
+  const headers = buildHeaders(options.token)
+  const url = `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/pulls/${number}`
+  const response = await fetch(url, { headers })
+
+  if (!response.ok) {
+    if (response.status === 404) {
+      throw new Error(`Pull request #${number} not found`)
+    }
+    handleGitHubError(response, 'Pull request')
+  }
+
+  const data = (await response.json()) as Record<string, unknown>
+  return mapPullRequest(data)
+}
+
+/**
+ * Fetch files changed in a pull request.
+ */
+export async function fetchPullRequestFiles(
+  owner: string,
+  name: string,
+  number: number,
+  options: FetchOptions & { perPage?: number; page?: number } = {},
+): Promise<PRFile[]> {
+  const headers = buildHeaders(options.token)
+  const params = new URLSearchParams()
+  if (options.perPage) params.set('per_page', String(options.perPage))
+  if (options.page) params.set('page', String(options.page))
+
+  const qs = params.toString()
+  const url = `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/pulls/${number}/files${qs ? `?${qs}` : ''}`
+  const response = await fetch(url, { headers })
+
+  if (!response.ok) {
+    if (response.status === 404) {
+      throw new Error(`Pull request #${number} not found`)
+    }
+    handleGitHubError(response, 'Pull request files')
+  }
+
+  const raw = (await response.json()) as Array<Record<string, unknown>>
+  return raw.map((file): PRFile => ({
+    filename: file.filename as string,
+    status: file.status as PRFileStatus,
+    additions: file.additions as number,
+    deletions: file.deletions as number,
+    changes: file.changes as number,
+    patch: file.patch as string | undefined,
+    previousFilename: file.previous_filename as string | undefined,
+    contentsUrl: file.contents_url as string,
+  }))
+}
+
+/**
+ * Fetch review comments on a pull request.
+ */
+export async function fetchPullRequestComments(
+  owner: string,
+  name: string,
+  number: number,
+  options: FetchOptions & { perPage?: number; page?: number } = {},
+): Promise<PRComment[]> {
+  const headers = buildHeaders(options.token)
+  const params = new URLSearchParams()
+  if (options.perPage) params.set('per_page', String(options.perPage))
+  if (options.page) params.set('page', String(options.page))
+
+  const qs = params.toString()
+  const url = `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/pulls/${number}/comments${qs ? `?${qs}` : ''}`
+  const response = await fetch(url, { headers })
+
+  if (!response.ok) {
+    if (response.status === 404) {
+      throw new Error(`Pull request #${number} not found`)
+    }
+    handleGitHubError(response, 'Pull request comments')
+  }
+
+  const raw = (await response.json()) as Array<Record<string, unknown>>
+  return raw.map((comment): PRComment => {
+    const user = comment.user as Record<string, string> | null
+    return {
+      id: comment.id as number,
+      body: comment.body as string,
+      author: user?.login ?? 'unknown',
+      authorAvatarUrl: user?.avatar_url ?? null,
+      createdAt: comment.created_at as string,
+      updatedAt: comment.updated_at as string,
+      path: comment.path as string | undefined,
+      line: comment.line as number | undefined,
+      side: comment.side as PRComment['side'] | undefined,
+      inReplyToId: comment.in_reply_to_id as number | undefined,
+    }
+  })
+}
+
+/**
+ * Map a raw GitHub PR object to PRMetadata.
+ */
+function mapPullRequest(data: Record<string, unknown>): PRMetadata {
+  const user = data.user as Record<string, string> | null
+  const head = data.head as Record<string, unknown>
+  const base = data.base as Record<string, unknown>
+  const labels = (data.labels as Array<Record<string, string>>) ?? []
+
+  return {
+    number: data.number as number,
+    title: data.title as string,
+    body: (data.body as string) ?? null,
+    state: data.merged_at ? 'merged' : (data.state as 'open' | 'closed'),
+    author: user?.login ?? 'unknown',
+    authorAvatarUrl: user?.avatar_url ?? null,
+    createdAt: data.created_at as string,
+    updatedAt: data.updated_at as string,
+    mergedAt: (data.merged_at as string) ?? null,
+    headRef: head.ref as string,
+    baseRef: base.ref as string,
+    headSha: head.sha as string,
+    baseSha: base.sha as string,
+    additions: (data.additions as number) ?? 0,
+    deletions: (data.deletions as number) ?? 0,
+    changedFiles: (data.changed_files as number) ?? 0,
+    url: data.html_url as string,
+    isDraft: (data.draft as boolean) ?? false,
+    labels: labels.map((l) => l.name),
+  }
 }
 
 /**
