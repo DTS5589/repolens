@@ -740,7 +740,7 @@ export function scanIssues(
     const compositeIssues = scanCompositeRules(codeIndex)
     rulesEvaluated += COMPOSITE_RULES.length
     for (const issue of compositeIssues) {
-      if (isPartialScan && !filesToScan.has(issue.file)) continue
+      if (!filesToScan.has(issue.file)) continue
       if (!seenIds.has(issue.id)) {
         seenIds.add(issue.id)
         issues.push(issue)
@@ -753,7 +753,7 @@ export function scanIssues(
   const structuralRuleIds = new Set(structuralIssues.map(i => i.ruleId))
   rulesEvaluated += structuralRuleIds.size
   for (const issue of structuralIssues) {
-    if (isPartialScan && !filesToScan.has(issue.file)) continue
+    if (!filesToScan.has(issue.file)) continue
     if (!seenIds.has(issue.id)) {
       seenIds.add(issue.id)
       issues.push(issue)
@@ -766,7 +766,7 @@ export function scanIssues(
     const supplyChainRuleIds = new Set(supplyChainIssues.map(i => i.ruleId))
     rulesEvaluated += supplyChainRuleIds.size
     for (const issue of supplyChainIssues) {
-      if (isPartialScan && !filesToScan.has(issue.file)) continue
+      if (!filesToScan.has(issue.file)) continue
       if (!seenIds.has(issue.id)) {
         seenIds.add(issue.id)
         issues.push(issue)
@@ -1003,7 +1003,7 @@ async function scanIssuesAsyncImpl(
     const compositeIssues = scanCompositeRules(codeIndex)
     rulesEvaluated += COMPOSITE_RULES.length
     for (const issue of compositeIssues) {
-      if (isPartialScan && !filesToScan.has(issue.file)) continue
+      if (!filesToScan.has(issue.file)) continue
       if (!seenIds.has(issue.id)) {
         seenIds.add(issue.id)
         issues.push(issue)
@@ -1019,7 +1019,7 @@ async function scanIssuesAsyncImpl(
   const structuralRuleIds = new Set(structuralIssues.map(i => i.ruleId))
   rulesEvaluated += structuralRuleIds.size
   for (const issue of structuralIssues) {
-    if (isPartialScan && !filesToScan.has(issue.file)) continue
+    if (!filesToScan.has(issue.file)) continue
     if (!seenIds.has(issue.id)) {
       seenIds.add(issue.id)
       issues.push(issue)
@@ -1035,7 +1035,7 @@ async function scanIssuesAsyncImpl(
     const supplyChainRuleIds = new Set(supplyChainIssues.map(i => i.ruleId))
     rulesEvaluated += supplyChainRuleIds.size
     for (const issue of supplyChainIssues) {
-      if (isPartialScan && !filesToScan.has(issue.file)) continue
+      if (!filesToScan.has(issue.file)) continue
       if (!seenIds.has(issue.id)) {
         seenIds.add(issue.id)
         issues.push(issue)
@@ -1051,7 +1051,7 @@ async function scanIssuesAsyncImpl(
     try {
       const treeSitterIssues = await scanWithTreeSitter(filesToScan)
       for (const issue of treeSitterIssues) {
-        if (isPartialScan && !filesToScan.has(issue.file)) continue
+        if (!filesToScan.has(issue.file)) continue
         if (!seenIds.has(issue.id)) {
           seenIds.add(issue.id)
           issues.push(issue)
