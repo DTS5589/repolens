@@ -116,7 +116,7 @@ const IDB_CONTENT_VERSION = 1
  * (dual-write). Consumers don't read from IDB yet — that's Wave 3.
  */
 export class IDBContentStore implements ContentStore {
-  private repoKey: string
+  readonly repoKey: string
   private paths: Set<string> = new Set()
   private dbPromise: Promise<IDBDatabase> | null = null
 

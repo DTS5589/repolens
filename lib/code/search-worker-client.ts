@@ -1,6 +1,7 @@
 import type { CodeIndex, SearchResult } from './code-index'
 import { searchIndex } from './code-index'
-import { serializeCodeIndex } from './scanner/serialization'
+import { serializeCodeIndex, serializeCodeIndexMeta } from './scanner/serialization'
+import { IDBContentStore } from './content-store'
 import type { SearchWorkerResponse } from './search.worker'
 
 let worker: Worker | null = null
@@ -38,10 +39,24 @@ function getWorker(): Worker {
 
 function ensureIndex(w: Worker, codeIndex: CodeIndex): void {
   if (lastIndexRef?.deref() === codeIndex) return
-  w.postMessage({
-    type: 'setIndex',
-    codeIndex: serializeCodeIndex(codeIndex),
-  })
+
+  const isIDB = codeIndex.contentStore instanceof IDBContentStore
+
+  if (isIDB) {
+    // Send metadata-only — worker loads content from IDB directly
+    w.postMessage({
+      type: 'setIndex',
+      codeIndex: serializeCodeIndexMeta(codeIndex),
+      repoKey: (codeIndex.contentStore as IDBContentStore).repoKey,
+    })
+  } else {
+    // InMemory repos: send full content (current behavior)
+    w.postMessage({
+      type: 'setIndex',
+      codeIndex: serializeCodeIndex(codeIndex),
+    })
+  }
+
   lastIndexRef = new WeakRef(codeIndex)
 }
 

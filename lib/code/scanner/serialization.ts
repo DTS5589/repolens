@@ -56,6 +56,8 @@ export interface ScanWorkerRequest {
   codeIndex: SerializedCodeIndex
   analysis: SerializedFullAnalysis | null
   changedFiles?: string[]
+  /** When set, worker loads content from IDB instead of using serialized content. */
+  repoKey?: string
 }
 
 export type ScanWorkerResponse =
@@ -69,6 +71,19 @@ export type ScanWorkerResponse =
 export function serializeCodeIndex(index: CodeIndex): SerializedCodeIndex {
   return {
     files: Array.from(index.files.entries()),
+    totalFiles: index.totalFiles,
+    totalLines: index.totalLines,
+    isIndexing: index.isIndexing,
+  }
+}
+
+/** Serialize CodeIndex with empty content — for workers that load content from IDB. */
+export function serializeCodeIndexMeta(index: CodeIndex): SerializedCodeIndex {
+  return {
+    files: Array.from(index.files.entries()).map(([path, file]) => [
+      path,
+      { ...file, content: '' },
+    ]),
     totalFiles: index.totalFiles,
     totalLines: index.totalLines,
     isIndexing: index.isIndexing,

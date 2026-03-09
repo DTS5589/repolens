@@ -2,10 +2,12 @@
 // Falls back to synchronous scanIssues when Workers are unavailable (SSR, tests).
 
 import type { CodeIndex } from '../code-index'
+import { IDBContentStore } from '../content-store'
 import type { FullAnalysis } from '../parser/types'
 import type { ScanResults } from './types'
 import {
   serializeCodeIndex,
+  serializeCodeIndexMeta,
   serializeFullAnalysis,
   deserializeScanResults,
 } from './serialization'
@@ -66,13 +68,18 @@ export async function scanInWorker(
   }
 
   const id = ++requestId
+  const isIDB = codeIndex.contentStore instanceof IDBContentStore
+
   return new Promise<ScanResults>((resolve, reject) => {
     pending.set(id, { resolve, reject })
     const message: ScanWorkerRequest = {
       id,
-      codeIndex: serializeCodeIndex(codeIndex),
+      codeIndex: isIDB
+        ? serializeCodeIndexMeta(codeIndex)
+        : serializeCodeIndex(codeIndex),
       analysis: analysis ? serializeFullAnalysis(analysis) : null,
       changedFiles,
+      ...(isIDB && { repoKey: (codeIndex.contentStore as IDBContentStore).repoKey }),
     }
     w.postMessage(message)
   })
