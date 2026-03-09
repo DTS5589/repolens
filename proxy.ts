@@ -26,7 +26,7 @@ function addSecurityHeaders(response: NextResponse): void {
     response.headers.set('X-XSS-Protection', '1; mode=block')
 }
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
     const { pathname } = request.nextUrl
 
     // Strip trailing slash for consistent segment parsing (but not for "/")

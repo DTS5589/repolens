@@ -26,7 +26,7 @@ test.describe('App', () => {
 // ---------------------------------------------------------------------------
 // URL rewrite: /{owner}/{repo} → /?repo=...
 //
-// The middleware rewrites paths like /owner/repo to /?repo=https://github.com/owner/repo
+// The proxy rewrites paths like /owner/repo to /?repo=https://github.com/owner/repo
 // so both URL formats load the same repo.
 // ---------------------------------------------------------------------------
 
@@ -36,7 +36,7 @@ test.describe('URL rewrite', () => {
   test('/{owner}/{repo} path loads the repo the same as ?repo= query param', async ({ page }) => {
     test.setTimeout(180_000)
 
-    // Navigate using the path-based URL — middleware internally rewrites
+    // Navigate using the path-based URL — proxy internally rewrites
     // to /?repo=https://github.com/public-apis/public-apis (rewrite, NOT redirect,
     // so browser URL stays as the original path)
     await page.goto('/public-apis/public-apis', { waitUntil: 'networkidle' })

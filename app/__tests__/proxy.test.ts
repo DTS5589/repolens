@@ -39,7 +39,7 @@ vi.mock('next/server', () => {
 })
 
 // Import after mock is set up
-import { middleware } from '../../middleware'
+import { proxy } from '../../proxy'
 import { NextRequest, NextResponse } from 'next/server'
 
 // ---------------------------------------------------------------------------
@@ -56,7 +56,7 @@ type MockResponse = ReturnType<typeof createMockNextResponse>
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('middleware', () => {
+describe('proxy', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
@@ -68,7 +68,7 @@ describe('middleware', () => {
   describe('path-based rewrite (/:owner/:repo)', () => {
     it('rewrites GET /owner/repo to /?repo=https://github.com/owner/repo', () => {
       const req = createRequest('/zebbern/repolens')
-      const res = middleware(req) as unknown as MockResponse
+      const res = proxy(req) as unknown as MockResponse
 
       expect(NextResponse.rewrite).toHaveBeenCalledOnce()
       const rewriteUrl = (NextResponse.rewrite as ReturnType<typeof vi.fn>).mock.calls[0][0] as URL
@@ -78,7 +78,7 @@ describe('middleware', () => {
 
     it('preserves additional query params (e.g. ?view=docs)', () => {
       const req = createRequest('/owner/repo?view=docs')
-      middleware(req)
+      proxy(req)
 
       const rewriteUrl = (NextResponse.rewrite as ReturnType<typeof vi.fn>).mock.calls[0][0] as URL
       expect(rewriteUrl.searchParams.get('repo')).toBe('https://github.com/owner/repo')
@@ -87,7 +87,7 @@ describe('middleware', () => {
 
     it('handles trailing slash: /owner/repo/ rewrites correctly', () => {
       const req = createRequest('/owner/repo/')
-      middleware(req)
+      proxy(req)
 
       expect(NextResponse.rewrite).toHaveBeenCalledOnce()
       const rewriteUrl = (NextResponse.rewrite as ReturnType<typeof vi.fn>).mock.calls[0][0] as URL
@@ -102,7 +102,7 @@ describe('middleware', () => {
   describe('reserved paths (pass-through)', () => {
     it('does not rewrite /api/github/repo', () => {
       const req = createRequest('/api/github/repo')
-      middleware(req)
+      proxy(req)
 
       expect(NextResponse.rewrite).not.toHaveBeenCalled()
       expect(NextResponse.next).toHaveBeenCalledOnce()
@@ -110,7 +110,7 @@ describe('middleware', () => {
 
     it('does not rewrite /_next/static/chunk.js', () => {
       const req = createRequest('/_next/static/chunk.js')
-      middleware(req)
+      proxy(req)
 
       expect(NextResponse.rewrite).not.toHaveBeenCalled()
       expect(NextResponse.next).toHaveBeenCalledOnce()
@@ -118,7 +118,7 @@ describe('middleware', () => {
 
     it('does not rewrite /compare (1 segment, reserved)', () => {
       const req = createRequest('/compare')
-      middleware(req)
+      proxy(req)
 
       expect(NextResponse.rewrite).not.toHaveBeenCalled()
       expect(NextResponse.next).toHaveBeenCalledOnce()
@@ -126,7 +126,7 @@ describe('middleware', () => {
 
     it('does not rewrite /favicon.ico (1 segment, reserved)', () => {
       const req = createRequest('/favicon.ico')
-      middleware(req)
+      proxy(req)
 
       expect(NextResponse.rewrite).not.toHaveBeenCalled()
       expect(NextResponse.next).toHaveBeenCalledOnce()
@@ -134,7 +134,7 @@ describe('middleware', () => {
 
     it('does not rewrite / (root, 0 segments)', () => {
       const req = createRequest('/')
-      middleware(req)
+      proxy(req)
 
       expect(NextResponse.rewrite).not.toHaveBeenCalled()
       expect(NextResponse.next).toHaveBeenCalledOnce()
@@ -142,7 +142,7 @@ describe('middleware', () => {
 
     it('does not rewrite /single-segment (only 1 segment)', () => {
       const req = createRequest('/single-segment')
-      middleware(req)
+      proxy(req)
 
       expect(NextResponse.rewrite).not.toHaveBeenCalled()
       expect(NextResponse.next).toHaveBeenCalledOnce()
@@ -150,7 +150,7 @@ describe('middleware', () => {
 
     it('does not rewrite /a/b/c (3 segments, not owner/repo)', () => {
       const req = createRequest('/a/b/c')
-      middleware(req)
+      proxy(req)
 
       expect(NextResponse.rewrite).not.toHaveBeenCalled()
       expect(NextResponse.next).toHaveBeenCalledOnce()
@@ -158,7 +158,7 @@ describe('middleware', () => {
 
     it('does not rewrite /a/b/c/d (4 segments)', () => {
       const req = createRequest('/a/b/c/d')
-      middleware(req)
+      proxy(req)
 
       expect(NextResponse.rewrite).not.toHaveBeenCalled()
       expect(NextResponse.next).toHaveBeenCalledOnce()
@@ -172,7 +172,7 @@ describe('middleware', () => {
   describe('security headers', () => {
     it('adds security headers on rewritten responses', () => {
       const req = createRequest('/owner/repo')
-      const res = middleware(req) as unknown as MockResponse
+      const res = proxy(req) as unknown as MockResponse
 
       expect(res.headers.get('X-Frame-Options')).toBe('DENY')
       expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff')
@@ -182,7 +182,7 @@ describe('middleware', () => {
 
     it('adds security headers on pass-through responses', () => {
       const req = createRequest('/')
-      const res = middleware(req) as unknown as MockResponse
+      const res = proxy(req) as unknown as MockResponse
 
       expect(res.headers.get('X-Frame-Options')).toBe('DENY')
       expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff')

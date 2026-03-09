@@ -8,7 +8,7 @@
 
 | Category | Technology | Version |
 | -------- | --------- | ------- |
-| Framework | Next.js (App Router) | 15.2.6 |
+| Framework | Next.js (App Router) | 16.1.6 |
 | Language | TypeScript | ^5 |
 | UI Library | React | ^19 |
 | Styling | Tailwind CSS | ^4.2.1 |
@@ -223,7 +223,7 @@ workproject/                    # Next.js application root
 │   └── setup.ts                # Vitest global setup
 ├── e2e/
 │   └── app.spec.ts             # Playwright E2E tests
-├── middleware.ts                # URL rewriting (owner/repo → /?repo=...) + security headers
+├── proxy.ts                    # URL rewriting (owner/repo → /?repo=...) + security headers
 ├── next.config.mjs             # Next.js config (CSP, image optimization, package imports)
 ├── tsconfig.json                # TypeScript config (strict, path alias @/*)
 ├── vitest.config.ts             # Vitest config (jsdom, path alias, coverage)
@@ -321,11 +321,11 @@ The zipball pipeline uses streaming extraction to reduce peak memory. The server
 
 ### URL Rewriting
 
-Middleware rewrites `/:owner/:repo` paths to `/?repo=https://github.com/owner/repo`, enabling clean URLs like `mgithub.com/facebook/react`. Reserved segments (`api`, `_next`, `compare`, etc.) are excluded.
+Proxy (`proxy.ts`) rewrites `/:owner/:repo` paths to `/?repo=https://github.com/owner/repo`, enabling clean URLs like `mgithub.com/facebook/react`. Reserved segments (`api`, `_next`, `compare`, etc.) are excluded.
 
 ### Security Headers
 
-Security headers (`X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`) are applied in middleware. CSP is configured in `next.config.mjs` with `unsafe-inline`/`unsafe-eval` required for Mermaid rendering and Shiki WASM.
+Security headers (`X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`) are applied in the proxy. CSP is configured in `next.config.mjs` with `unsafe-inline`/`unsafe-eval` required for Mermaid rendering and Shiki WASM.
 
 ### ContentStore (Tiered Content Storage)
 

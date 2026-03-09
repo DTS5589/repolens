@@ -41,7 +41,7 @@ export default defineConfig({
         'hooks/**/*.ts',
         'providers/**/*.{ts,tsx}',
         'config/**/*.ts',
-        'middleware.ts',
+        'proxy.ts',
       ],
       exclude: [
         '**/*.test.{ts,tsx}',
