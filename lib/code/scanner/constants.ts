@@ -53,3 +53,10 @@ export const SWIFT = ['.swift']
 export const ALL_CODE = [...JS_TS, ...PY, ...GO, ...RUST, ...JAVA, ...KOTLIN, ...C_CPP, ...CSHARP, ...RUBY, ...PHP, ...SHELL, ...SWIFT]
 
 export const SKIP_VENDORED = /node_modules|vendor|dist|build|\.min\.|\.lock$|package-lock|yarn\.lock|pnpm-lock|__pycache__|\.pyc|target\/debug|target\/release/i
+
+/**
+ * Paths excluded from scanner findings to prevent false positives from test
+ * fixtures, mock data, and test corpus files that intentionally contain
+ * vulnerable-looking patterns.
+ */
+export const SCANNER_EXCLUDE_PATTERNS = /__tests__\/|__mocks__\/|\.test\.tsx?$|\.spec\.tsx?$|test\/fixtures\/|test\/setup|fixtures\/|e2e\//i

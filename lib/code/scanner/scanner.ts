@@ -9,7 +9,7 @@ import type { CodeIndex, IndexedFile } from '../code-index'
 import { buildSearchRegex, getFileLines } from '../code-index'
 import type { FullAnalysis } from '../import-parser'
 import type { ScanRule, CodeIssue, IssueSeverity, HealthGrade, ScanResults } from './types'
-import { SKIP_VENDORED, detectLanguages } from './constants'
+import { SKIP_VENDORED, SCANNER_EXCLUDE_PATTERNS, detectLanguages } from './constants'
 import { SECURITY_RULES } from './rules-security'
 import { SECURITY_LANG_RULES } from './rules-security-lang'
 import { BAD_PRACTICE_RULES, RELIABILITY_RULES } from './rules-quality'
@@ -659,15 +659,18 @@ export function scanIssues(
 
   const isPartialScan = changedFiles !== undefined && changedFiles.length > 0
 
-  // Build the set of files to scan
+  // Build the set of files to scan, excluding test/fixture paths that
+  // produce false positives (test corpus intentionally contains vulnerable patterns).
   const filesToScan = new Map<string, FileEntry>()
   if (isPartialScan) {
     for (const changed of changedFiles!) {
+      if (SCANNER_EXCLUDE_PATTERNS.test(changed)) continue
       const file = codeIndex.files.get(changed)
       if (file) filesToScan.set(changed, file)
     }
   } else {
     for (const [path, file] of codeIndex.files) {
+      if (SCANNER_EXCLUDE_PATTERNS.test(path)) continue
       filesToScan.set(path, file)
     }
   }
@@ -917,15 +920,18 @@ async function scanIssuesAsyncImpl(
 
   const isPartialScan = changedFiles !== undefined && changedFiles.length > 0
 
-  // Build the set of files to scan
+  // Build the set of files to scan, excluding test/fixture paths that
+  // produce false positives (test corpus intentionally contains vulnerable patterns).
   const filesToScan = new Map<string, FileEntry>()
   if (isPartialScan) {
     for (const changed of changedFiles!) {
+      if (SCANNER_EXCLUDE_PATTERNS.test(changed)) continue
       const file = codeIndex.files.get(changed)
       if (file) filesToScan.set(changed, file)
     }
   } else {
     for (const [path, file] of codeIndex.files) {
+      if (SCANNER_EXCLUDE_PATTERNS.test(path)) continue
       filesToScan.set(path, file)
     }
   }
