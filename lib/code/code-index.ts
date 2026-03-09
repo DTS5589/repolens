@@ -1,6 +1,19 @@
 // Code Index - Manages file content indexing for search and AI context
 
 import type { FileNode } from '@/types/repository'
+import { InMemoryContentStore, type ContentStore, type CodeIndexMeta } from './content-store'
+
+/** Clone the content store for immutable CodeIndex updates (Wave 1: InMemoryContentStore only). */
+function cloneContentStore(store: ContentStore | undefined): InMemoryContentStore {
+  if (!store) return new InMemoryContentStore()
+  if (store instanceof InMemoryContentStore) {
+    return new InMemoryContentStore(store.getAllSync())
+  }
+  throw new Error('Cannot clone non-InMemory ContentStore. Phase 3 Wave 2+ requires async content store operations.')
+}
+
+export type { ContentStore, CodeIndexMeta } from './content-store'
+export { InMemoryContentStore } from './content-store'
 
 export interface IndexedFile {
   path: string
@@ -39,6 +52,10 @@ export interface CodeIndex {
   totalFiles: number
   totalLines: number
   isIndexing: boolean
+  /** Phase 3: metadata-only records (no content). Populated alongside `files`. */
+  meta?: Map<string, CodeIndexMeta>
+  /** Phase 3: content storage abstraction. InMemoryContentStore in Wave 1. */
+  contentStore?: ContentStore
 }
 
 /**
@@ -50,6 +67,8 @@ export function createEmptyIndex(): CodeIndex {
     totalFiles: 0,
     totalLines: 0,
     isIndexing: false,
+    meta: new Map(),
+    contentStore: new InMemoryContentStore(),
   }
 }
 
@@ -70,12 +89,21 @@ export function indexFile(index: CodeIndex, path: string, content: string, langu
   
   const newFiles = new Map(index.files)
   newFiles.set(path, indexed)
+
+  // Phase 3: dual-write to meta + contentStore
+  const newMeta = new Map(index.meta ?? new Map())
+  newMeta.set(path, { path, name, language, lineCount })
+
+  const newContentStore = cloneContentStore(index.contentStore)
+  newContentStore.put(path, content)
   
   return {
     ...index,
     files: newFiles,
     totalFiles: newFiles.size,
     totalLines: Array.from(newFiles.values()).reduce((sum, f) => sum + f.lineCount, 0),
+    meta: newMeta,
+    contentStore: newContentStore,
   }
 }
 
@@ -85,12 +113,21 @@ export function indexFile(index: CodeIndex, path: string, content: string, langu
 export function removeFromIndex(index: CodeIndex, path: string): CodeIndex {
   const newFiles = new Map(index.files)
   newFiles.delete(path)
+
+  // Phase 3: dual-delete from meta + contentStore
+  const newMeta = new Map(index.meta ?? new Map())
+  newMeta.delete(path)
+
+  const newContentStore = cloneContentStore(index.contentStore)
+  newContentStore.delete(path)
   
   return {
     ...index,
     files: newFiles,
     totalFiles: newFiles.size,
     totalLines: Array.from(newFiles.values()).reduce((sum, f) => sum + f.lineCount, 0),
+    meta: newMeta,
+    contentStore: newContentStore,
   }
 }
 
@@ -104,11 +141,15 @@ export function batchIndexFiles(
   updates: Array<{ path: string; content: string; language?: string }>,
 ): CodeIndex {
   const newFiles = new Map(index.files)
+  const newMeta = new Map(index.meta ?? new Map())
+  const newContentStore = cloneContentStore(index.contentStore)
 
   for (const { path, content, language } of updates) {
     const lineCount = content.split('\n').length
     const name = path.split('/').pop() || path
     newFiles.set(path, { path, name, content, language, lineCount })
+    newMeta.set(path, { path, name, language, lineCount })
+    newContentStore.put(path, content)
   }
 
   return {
@@ -116,6 +157,8 @@ export function batchIndexFiles(
     files: newFiles,
     totalFiles: newFiles.size,
     totalLines: Array.from(newFiles.values()).reduce((sum, f) => sum + f.lineCount, 0),
+    meta: newMeta,
+    contentStore: newContentStore,
   }
 }
 
