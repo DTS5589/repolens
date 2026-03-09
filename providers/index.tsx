@@ -6,6 +6,7 @@ import { ThemeProvider } from "next-themes"
 import { AppProvider, useApp } from "./app-provider"
 import { APIKeysProvider, useAPIKeys } from "./api-keys-provider"
 import { GitHubTokenProvider, useGitHubToken } from "./github-token-provider"
+import { CommandPalette } from "@/components/features/command-palette/command-palette"
 import { RepositoryProvider, useRepository, useRepositoryData, useRepositoryActions, useRepositoryProgress, type LoadingStage, type RepositoryDataContextType, type RepositoryActionsContextType, type RepositoryProgressContextType } from "./repository-provider"
 import { DocsProvider, useDocs, useDocsChat } from "./docs-provider"
 import { ChangelogProvider, useChangelog, useChangelogChat } from "./changelog-provider"
@@ -27,6 +28,7 @@ export function Providers({ children }: ProvidersProps) {
                   <ChangelogProvider>
                     <AppProvider>
                       {children}
+                      <CommandPalette />
                     </AppProvider>
                   </ChangelogProvider>
                 </DocsProvider>

@@ -75,6 +75,7 @@ export async function POST(req: NextRequest) {
               outputTokens: part.totalUsage.outputTokens ?? 0,
               totalTokens: part.totalUsage.totalTokens ?? 0,
             },
+            model: parsed.data.model,
           }
         }
       },

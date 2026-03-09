@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { apiError } from '@/lib/api/error'
 import { queryOSV } from '@/lib/code/scanner/cve-lookup'
 
+export const runtime = 'edge'
 export const maxDuration = 30
 
 // ---------------------------------------------------------------------------

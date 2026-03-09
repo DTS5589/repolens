@@ -8,6 +8,8 @@ import { apiError } from "@/lib/api/error"
 import { GITHUB_NAME_RE } from "@/lib/github/validation"
 import { applyRateLimit } from "@/lib/api/rate-limit"
 
+export const runtime = 'edge'
+
 const blameBodySchema = z.object({
   owner: z.string().min(1).regex(GITHUB_NAME_RE, 'Invalid owner name'),
   name: z.string().min(1).regex(GITHUB_NAME_RE, 'Invalid repo name'),

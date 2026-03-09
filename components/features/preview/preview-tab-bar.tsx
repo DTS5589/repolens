@@ -1,6 +1,5 @@
 "use client"
 
-import { useEffect, useState } from "react"
 import { ExternalLink, Lock, Maximize2, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -27,11 +26,6 @@ export function PreviewTabBar({
   localPreviewUrl,
   hasApiKey,
 }: PreviewTabBarProps) {
-  const [isMac, setIsMac] = useState(false)
-  useEffect(() => {
-    setIsMac(navigator.platform.toUpperCase().includes('MAC'))
-  }, [])
-
   return (
     <div className="flex h-11 items-center justify-between border-b border-foreground/6 px-4 bg-card">
       <div className="flex items-center h-full gap-0.5 overflow-x-auto scrollbar-hide min-w-0" role="tablist" aria-label="Preview tabs">
@@ -75,11 +69,10 @@ export function PreviewTabBar({
           <button
             onClick={onOpenSearch}
             className="flex items-center gap-2 h-7 px-2.5 rounded-md text-xs text-text-muted hover:text-text-secondary bg-foreground/3 border border-foreground/6 hover:border-foreground/10 transition-colors duration-150 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
-            title={`Search (${isMac ? '⌘' : 'Ctrl+'}K)`}
+            title="Search files"
           >
             <Search className="h-3 w-3" />
             <span className="hidden xl:inline">Search</span>
-            <kbd className="hidden xl:inline text-[10px] text-text-muted/60 bg-foreground/4 px-1 py-0.5 rounded font-mono leading-none">{isMac ? '⌘K' : 'Ctrl+K'}</kbd>
           </button>
         )}
         {localPreviewUrl && (

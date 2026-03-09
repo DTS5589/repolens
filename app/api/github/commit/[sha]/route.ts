@@ -7,6 +7,8 @@ import { fetchCommitDetail } from "@/lib/github/fetcher"
 import { apiError } from "@/lib/api/error"
 import { GITHUB_NAME_RE } from "@/lib/github/validation"
 import { applyRateLimit } from "@/lib/api/rate-limit"
+
+export const runtime = 'edge'
 const SHA_RE = /^[a-f0-9]{4,40}$/i
 
 const commitDetailSchema = z.object({

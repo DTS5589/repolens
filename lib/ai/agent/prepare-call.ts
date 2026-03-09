@@ -1,3 +1,4 @@
+import type { LanguageModelV3 } from '@ai-sdk/provider'
 import { stepCountIs, wrapLanguageModel } from 'ai'
 import { createAIModel, getModelContextWindow } from '@/lib/ai/providers'
 import { codeTools } from '@/lib/ai/tool-definitions'
@@ -52,6 +53,17 @@ function buildAnthropicProviderOptions(mode: CallOptions['mode']) {
 }
 
 /**
+ * Wraps the model with devtools middleware in development mode.
+ * DevTools provides a local web UI at localhost:4983 for inspecting
+ * LLM calls, tool invocations, token usage, and timing.
+ */
+async function wrapWithDevTools(model: LanguageModelV3): Promise<LanguageModelV3> {
+  if (process.env.NODE_ENV !== 'development') return model
+  const { devToolsMiddleware } = await import('@ai-sdk/devtools')
+  return wrapLanguageModel({ model, middleware: devToolsMiddleware() })
+}
+
+/**
  * Build the `prepareCall` function for the ToolLoopAgent.
  * Selects model, system prompt, stopWhen condition, and provider options
  * based on the discriminated `mode` field in `CallOptions`.
@@ -59,15 +71,17 @@ function buildAnthropicProviderOptions(mode: CallOptions['mode']) {
 const loggingMiddleware = createLoggingMiddleware()
 
 export function buildPrepareCall() {
-  return (baseCallArgs: { options: CallOptions } & Record<string, unknown>) => {
+  return async (baseCallArgs: { options: CallOptions } & Record<string, unknown>) => {
     const { options: callOptions } = baseCallArgs
     const { provider, model, apiKey } = callOptions
     const contextWindow = getModelContextWindow(model)
     const toolCount = Object.keys(codeTools).length
-    const wrappedModel = wrapLanguageModel({
-      model: createAIModel(provider, model, apiKey),
-      middleware: loggingMiddleware,
-    })
+    const wrappedModel = await wrapWithDevTools(
+      wrapLanguageModel({
+        model: createAIModel(provider, model, apiKey),
+        middleware: loggingMiddleware,
+      })
+    )
 
     const compactionContext: CompactionContext = {
       maxSteps: 50,

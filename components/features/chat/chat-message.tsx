@@ -31,6 +31,7 @@ import {
 import { memo, useState, useMemo } from "react"
 import type { UIMessage, ToolUIPart as AiToolUIPart, DynamicToolUIPart } from "ai"
 import { isToolUIPart, getToolName } from "ai"
+import { formatTokenCount, formatModelName, estimateCost, formatCost } from "@/lib/ai/token-cost"
 
 // ---------------------------------------------------------------------------
 // Tool call indicator
@@ -408,6 +409,39 @@ function groupMessageParts(parts: MessagePart[]): PartGroup[] {
 }
 
 // ---------------------------------------------------------------------------
+// Per-message token usage badge
+// ---------------------------------------------------------------------------
+
+interface MessageUsageMetadata {
+  usage?: { inputTokens: number; outputTokens: number; totalTokens: number }
+  model?: string
+}
+
+function MessageTokenBadge({ metadata }: { metadata: MessageUsageMetadata }) {
+  const { usage, model } = metadata
+  if (!usage || (usage.inputTokens === 0 && usage.outputTokens === 0)) return null
+
+  const total = usage.inputTokens + usage.outputTokens
+  const cost = model ? estimateCost(model, usage.inputTokens, usage.outputTokens) : null
+
+  return (
+    <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-muted-foreground select-none">
+      {model && <span>{formatModelName(model)}</span>}
+      {model && <span className="opacity-40">·</span>}
+      <span title={`In: ${formatTokenCount(usage.inputTokens)} · Out: ${formatTokenCount(usage.outputTokens)}`}>
+        {formatTokenCount(total)} tokens
+      </span>
+      {cost !== null && (
+        <>
+          <span className="opacity-40">·</span>
+          <span title="Estimated cost">~{formatCost(cost)}</span>
+        </>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Chat message
 // ---------------------------------------------------------------------------
 
@@ -491,6 +525,10 @@ export const ChatMessage = memo(function ChatMessage({ message, className }: Cha
 
           return null
         })}
+
+        {!isUser && (message as { metadata?: MessageUsageMetadata }).metadata?.usage && (
+          <MessageTokenBadge metadata={(message as { metadata?: MessageUsageMetadata }).metadata!} />
+        )}
       </div>
     </div>
   )

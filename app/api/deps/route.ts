@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { apiError } from '@/lib/api/error'
 import type { DepsApiResponse, DownloadPoint, NpmPackageMeta } from '@/lib/deps/types'
 
+export const runtime = 'edge'
 export const maxDuration = 60
 
 // ---------------------------------------------------------------------------

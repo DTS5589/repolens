@@ -85,40 +85,40 @@ describe('buildPrepareCall', () => {
   })
 
   describe('chat mode', () => {
-    it('creates model with correct provider and apiKey', () => {
+    it('creates model with correct provider and apiKey', async () => {
       const prepareCall = buildPrepareCall()
-      prepareCall({ options: BASE_CHAT })
+      await prepareCall({ options: BASE_CHAT })
       expect(createAIModel).toHaveBeenCalledWith('openai', 'gpt-4o', 'sk-test')
     })
 
-    it('returns the created model (wrapped with middleware)', () => {
+    it('returns the created model (wrapped with middleware)', async () => {
       const prepareCall = buildPrepareCall()
-      const result = prepareCall({ options: BASE_CHAT })
+      const result = await prepareCall({ options: BASE_CHAT })
       expect(result.model).toBe(mockWrappedModel)
     })
 
-    it('returns instructions string', () => {
+    it('returns instructions string', async () => {
       const prepareCall = buildPrepareCall()
-      const result = prepareCall({ options: BASE_CHAT })
+      const result = await prepareCall({ options: BASE_CHAT })
       expect(typeof result.instructions).toBe('string')
       expect(result.instructions.length).toBeGreaterThan(0)
     })
 
-    it('returns stopWhen with default stepBudget of 50', () => {
+    it('returns stopWhen with default stepBudget of 50', async () => {
       const prepareCall = buildPrepareCall()
-      prepareCall({ options: BASE_CHAT })
+      await prepareCall({ options: BASE_CHAT })
       expect(mockStepCountIs).toHaveBeenCalledWith(50)
     })
 
-    it('returns stopWhen with custom maxSteps', () => {
+    it('returns stopWhen with custom maxSteps', async () => {
       const prepareCall = buildPrepareCall()
-      prepareCall({ options: { ...BASE_CHAT, maxSteps: 30 } })
+      await prepareCall({ options: { ...BASE_CHAT, maxSteps: 30 } })
       expect(mockStepCountIs).toHaveBeenCalledWith(30)
     })
 
-    it('returns experimental_context with compaction info', () => {
+    it('returns experimental_context with compaction info', async () => {
       const prepareCall = buildPrepareCall()
-      const result = prepareCall({ options: BASE_CHAT })
+      const result = await prepareCall({ options: BASE_CHAT })
       expect(result.experimental_context).toEqual({
         maxSteps: 50,
         model: 'gpt-4o',
@@ -129,49 +129,49 @@ describe('buildPrepareCall', () => {
   })
 
   describe('docs mode', () => {
-    it('creates model with correct provider', () => {
+    it('creates model with correct provider', async () => {
       const prepareCall = buildPrepareCall()
-      prepareCall({ options: BASE_DOCS })
+      await prepareCall({ options: BASE_DOCS })
       expect(createAIModel).toHaveBeenCalledWith('anthropic', 'claude-sonnet-4', 'sk-test')
     })
 
-    it('returns instructions with docs-specific content', () => {
+    it('returns instructions with docs-specific content', async () => {
       const prepareCall = buildPrepareCall()
-      const result = prepareCall({ options: BASE_DOCS })
+      const result = await prepareCall({ options: BASE_DOCS })
       expect(result.instructions).toContain('Architecture')
     })
 
-    it('uses default stepBudget of 40 for docs', () => {
+    it('uses default stepBudget of 40 for docs', async () => {
       const prepareCall = buildPrepareCall()
-      prepareCall({ options: BASE_DOCS })
+      await prepareCall({ options: BASE_DOCS })
       expect(mockStepCountIs).toHaveBeenCalledWith(40)
     })
   })
 
   describe('changelog mode', () => {
-    it('creates model with correct provider', () => {
+    it('creates model with correct provider', async () => {
       const prepareCall = buildPrepareCall()
-      prepareCall({ options: BASE_CHANGELOG })
+      await prepareCall({ options: BASE_CHANGELOG })
       expect(createAIModel).toHaveBeenCalledWith('google', 'gemini-2.5-flash', 'sk-test')
     })
 
-    it('returns instructions with changelog-specific content', () => {
+    it('returns instructions with changelog-specific content', async () => {
       const prepareCall = buildPrepareCall()
-      const result = prepareCall({ options: BASE_CHANGELOG })
+      const result = await prepareCall({ options: BASE_CHANGELOG })
       expect(result.instructions).toContain('Conventional Commits')
     })
 
-    it('uses default stepBudget of 40 for changelog', () => {
+    it('uses default stepBudget of 40 for changelog', async () => {
       const prepareCall = buildPrepareCall()
-      prepareCall({ options: BASE_CHANGELOG })
+      await prepareCall({ options: BASE_CHANGELOG })
       expect(mockStepCountIs).toHaveBeenCalledWith(40)
     })
   })
 
   describe('Anthropic provider options', () => {
-    it('includes providerOptions when provider is anthropic', () => {
+    it('includes providerOptions when provider is anthropic', async () => {
       const prepareCall = buildPrepareCall()
-      const result = prepareCall({
+      const result = await prepareCall({
         options: { ...BASE_DOCS },
       })
       expect(result.providerOptions).toBeDefined()
@@ -179,9 +179,9 @@ describe('buildPrepareCall', () => {
       expect(result.providerOptions!.anthropic.contextManagement).toBeDefined()
     })
 
-    it('providerOptions includes clear_tool_uses and compact edits', () => {
+    it('providerOptions includes clear_tool_uses and compact edits', async () => {
       const prepareCall = buildPrepareCall()
-      const result = prepareCall({
+      const result = await prepareCall({
         options: { ...BASE_DOCS },
       })
       const edits = result.providerOptions!.anthropic.contextManagement.edits
@@ -190,41 +190,41 @@ describe('buildPrepareCall', () => {
       expect(edits[1].type).toBe('compact_20260112')
     })
 
-    it('does NOT include providerOptions for non-Anthropic providers', () => {
+    it('does NOT include providerOptions for non-Anthropic providers', async () => {
       const prepareCall = buildPrepareCall()
-      const result = prepareCall({
+      const result = await prepareCall({
         options: { ...BASE_CHAT, provider: 'openai' },
       })
       expect(result.providerOptions).toBeUndefined()
     })
 
-    it('includes providerOptions for anthropic in chat mode', () => {
+    it('includes providerOptions for anthropic in chat mode', async () => {
       const prepareCall = buildPrepareCall()
-      const result = prepareCall({
+      const result = await prepareCall({
         options: { ...BASE_CHAT, provider: 'anthropic' },
       })
       expect(result.providerOptions).toBeDefined()
     })
 
-    it('includes providerOptions for anthropic in changelog mode', () => {
+    it('includes providerOptions for anthropic in changelog mode', async () => {
       const prepareCall = buildPrepareCall()
-      const result = prepareCall({
+      const result = await prepareCall({
         options: { ...BASE_CHANGELOG, provider: 'anthropic' },
       })
       expect(result.providerOptions).toBeDefined()
     })
 
-    it('google provider has no providerOptions', () => {
+    it('google provider has no providerOptions', async () => {
       const prepareCall = buildPrepareCall()
-      const result = prepareCall({
+      const result = await prepareCall({
         options: { ...BASE_CHANGELOG },
       })
       expect(result.providerOptions).toBeUndefined()
     })
 
-    it('openrouter provider has no providerOptions', () => {
+    it('openrouter provider has no providerOptions', async () => {
       const prepareCall = buildPrepareCall()
-      const result = prepareCall({
+      const result = await prepareCall({
         options: { ...BASE_CHAT, provider: 'openrouter' },
       })
       expect(result.providerOptions).toBeUndefined()

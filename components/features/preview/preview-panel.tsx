@@ -139,20 +139,20 @@ export function PreviewPanel({ className }: { className?: string }) {
     })
   }, [allFlatFiles, codeIndex])
 
-  // Keyboard shortcut: Ctrl/Cmd+K to open search
+  // Keyboard shortcut: Ctrl/Cmd+Shift+F for file search (Ctrl+K is now command palette)
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault()
-        setShowGlobalSearch(prev => !prev)
-      }
-      if (e.key === 'Escape' && showGlobalSearch) {
-        setShowGlobalSearch(false)
-      }
+    const handleOpenFileSearch = () => setShowGlobalSearch(true)
+    const handleSwitchTab = (e: Event) => {
+      const tab = (e as CustomEvent<{ tab: string }>).detail?.tab
+      if (tab) setActiveTab(tab)
     }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [showGlobalSearch])
+    window.addEventListener('open-file-search', handleOpenFileSearch)
+    window.addEventListener('switch-tab', handleSwitchTab)
+    return () => {
+      window.removeEventListener('open-file-search', handleOpenFileSearch)
+      window.removeEventListener('switch-tab', handleSwitchTab)
+    }
+  }, [])
 
   const handleGlobalSearchSelect = useCallback((path: string, line?: number) => {
     setShowGlobalSearch(false)

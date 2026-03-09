@@ -3,6 +3,8 @@ import type { NextRequest } from "next/server"
 import { apiError } from "@/lib/api/error"
 import { applyRateLimit } from "@/lib/api/rate-limit"
 
+export const runtime = 'edge'
+
 const GITHUB_API_BASE = "https://api.github.com"
 
 export async function POST(request: NextRequest) {

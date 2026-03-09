@@ -6,6 +6,8 @@ import { fetchCommits } from "@/lib/github/fetcher"
 import { apiError } from "@/lib/api/error"
 import { GITHUB_NAME_RE } from "@/lib/github/validation"
 import { applyRateLimit } from "@/lib/api/rate-limit"
+
+export const runtime = 'edge'
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}/
 
 const commitsQuerySchema = z.object({
