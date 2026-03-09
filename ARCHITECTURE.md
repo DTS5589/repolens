@@ -44,6 +44,41 @@ graph LR
 9. **Structural index** — On chat/docs requests, `buildStructuralIndex()` extracts exports, imports, and symbol signatures from the `CodeIndex` into a compact JSON string sized to ~15% of the model's context window.
 10. **AI interaction** — The structural index and file tree are sent as context. Tool calls stream back and are executed locally by `executeToolLocally()`.
 
+## ContentStore (Tiered Content Storage)
+
+For small repos (< 50 MB), file content lives in-memory via `InMemoryContentStore` — a zero-overhead `Map<string, string>` wrapper. For larger repos (≥ 50 MB), `IDBContentStore` stores file content in a dedicated IndexedDB database (`repolens-content`), keeping the JS heap lean.
+
+Both stores implement the `ContentStore` interface defined in `lib/code/content-store.ts`. The `CodeIndex` always holds `CodeIndexMeta` records (path, name, language, lineCount) in-memory for fast metadata access regardless of which store backs the content.
+
+### Size-Based Routing
+
+```mermaid
+graph TD
+  A["Repo fetched"] --> B{"size ≥ 50 MB?"}
+  B -->|Yes| C["IDBContentStore"]
+  B -->|No| D["InMemoryContentStore"]
+  C --> E["CodeIndex with CodeIndexMeta only in heap"]
+  D --> E
+  E --> F["Content reads via store.get()"]
+```
+
+- The threshold is configured via `IDB_CONTENT_STORE_THRESHOLD_KB` (50,000 KB) in `config/constants.ts`.
+- `RepositoryProvider` and `indexing-pipeline.ts` both check repo size to choose the store.
+- During indexing, content is written to the chosen store. `CodeIndex.files` holds metadata-only `CodeIndexMeta` entries when IDB is active.
+
+### Worker Optimization
+
+Search and scanner workers use `IDBContentStore` directly for large repos, reading file content from IndexedDB without marshalling through the main thread. This keeps heavy analysis off the main thread while avoiding the memory cost of duplicating content in worker heaps.
+
+### Key Types
+
+| Type | Location | Purpose |
+| ---- | -------- | ------- |
+| `ContentStore` | `lib/code/content-store.ts` | Interface for content storage (get, getSync, getBatch, put, has, delete) |
+| `InMemoryContentStore` | `lib/code/content-store.ts` | Map-backed store for small repos |
+| `IDBContentStore` | `lib/code/content-store.ts` | IndexedDB-backed store for large repos |
+| `CodeIndexMeta` | `lib/code/content-store.ts` | Metadata-only file record (path, name, language, lineCount) |
+
 ## Provider Architecture
 
 The app uses eight nested React Context providers. The nesting order determines dependency availability — inner providers can consume outer providers via hooks.
@@ -436,6 +471,7 @@ graph TD
 
   subgraph LibCode["lib/code"]
     C1["code-index.ts"]
+    C1b["content-store.ts"]
     C2["import-parser.ts"]
     C3["parser/analyzer.ts"]
     C4["scanner/scanner.ts"]
@@ -525,6 +561,7 @@ graph TD
 
   C4 --> C1
   C4 --> C2
+  C1 --> C1b
   D1 --> C2
   D1 --> C1
   G3 --> CA3
@@ -544,7 +581,7 @@ The most distinctive pattern in the codebase. AI tool definitions on the server 
 
 ### IndexedDB Caching with LRU Eviction
 
-Repository data is cached in IndexedDB (`repolens-cache` database, `repos` object store) keyed by `owner/repo`. Cache freshness is determined by tree SHA comparison. LRU eviction keeps at most 5 repos, sorting by last-access timestamp. Cache writes are fire-and-forget (non-critical path).
+Repository data is cached in IndexedDB (`repolens-cache` database, `repos` object store) keyed by `owner/repo`. Cache freshness is determined by tree SHA comparison. LRU eviction keeps at most 5 repos, sorting by last-access timestamp. Cache writes are fire-and-forget (non-critical path). For repos ≥ 50 MB, file content is stored separately in `repolens-content` via `IDBContentStore` to reduce heap memory usage.
 
 ### Provider Composition with Ref-Based Stability
 

@@ -148,6 +148,7 @@ workproject/                    # Next.js application root
 │   │   └── index.ts            # Barrel exports
 │   ├── code/                   # Code analysis engine
 │   │   ├── code-index.ts       # In-memory file index (search, symbol lookup)
+│   │   ├── content-store.ts    # ContentStore abstraction (InMemory + IDB-backed)
 │   │   ├── import-parser.ts    # Dependency graph analysis
 │   │   ├── issue-scanner.ts    # Issue scanning orchestrator
 │   │   ├── parser/             # Language-specific AST parsers
@@ -321,6 +322,10 @@ Middleware rewrites `/:owner/:repo` paths to `/?repo=https://github.com/owner/re
 ### Security Headers
 
 Security headers (`X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`) are applied in middleware. CSP is configured in `next.config.mjs` with `unsafe-inline`/`unsafe-eval` required for Mermaid rendering and Shiki WASM.
+
+### ContentStore (Tiered Content Storage)
+
+Large repositories (≥50 MB) use `IDBContentStore` to keep file content in IndexedDB instead of the JS heap. Smaller repos use `InMemoryContentStore` (zero-overhead `Map` wrapper). Both implement the `ContentStore` interface (`lib/code/content-store.ts`). `CodeIndex` holds `CodeIndexMeta` records (path, name, language, lineCount) for all files regardless of store type. Size-based routing is controlled by `IDB_CONTENT_STORE_THRESHOLD_KB` in `config/constants.ts`. Search and scanner workers use IDB directly for large repos.
 
 ### Scanner Architecture
 
